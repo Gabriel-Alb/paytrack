@@ -1,263 +1,246 @@
 <template>
     <div class="mx-auto w-full max-w-[1500px]">
-        <section class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-                <h1 class="text-[26px] font-semibold tracking-[-0.035em] text-[#18181b] sm:text-[30px]">
-                    Dashboard
-                </h1>
-
-                <p class="mt-1 text-[13px] text-[#71717a]">
-                    Acompanhe os principais indicadores da sua operação.
-                </p>
-            </div>
-
+        <section class="grid grid-cols-2 gap-3 sm:gap-4">
+            <SummaryCard v-for="card in summaryCards" :key="card.title" v-bind="card" />
         </section>
 
-        <section class="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard title="Total emprestado" value="R$ 28.500,00" description="Valor atualmente em circulação"
-                indicator="+8,4%" status="positive" />
-
-            <SummaryCard title="Total recebido" value="R$ 17.920,00" description="Pagamentos recebidos no período"
-                indicator="+12,1%" status="positive" />
-
-            <SummaryCard title="Empréstimos ativos" value="18" description="Contratos atualmente em andamento" />
-
-            <SummaryCard title="Inadimplentes" value="4" description="Clientes com pagamentos em atraso"
-                indicator="Atenção" status="danger" />
-        </section>
-
-        <section class="mt-5 grid gap-5 xl:grid-cols-[1.45fr_0.75fr]">
-            <article class="min-h-[340px] rounded-2xl border border-black/[0.07] bg-white p-5 sm:p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="text-[14px] font-semibold text-[#27272a]">
-                            Recebimentos
-                        </h2>
-
-                        <p class="mt-1 text-[11px] text-[#a1a1aa]">
-                            Desempenho dos últimos meses
-                        </p>
-                    </div>
-
-                    <button type="button"
-                        class="rounded-lg border border-black/[0.08] px-3 py-2 text-[11px] font-medium text-[#71717a]">
-                        Últimos 6 meses
-                    </button>
-                </div>
-
-                <div class="mt-8 flex h-[230px] items-end gap-3 sm:gap-5">
-                    <div v-for="item in monthlyReceipts" :key="item.month"
-                        class="flex h-full flex-1 flex-col justify-end">
-                        <div class="flex flex-1 items-end">
-                            <div class="w-full rounded-t-lg bg-[#dcfce7] transition-all hover:bg-[#bbf7d0]"
-                                :style="{ height: `${item.height}%` }" />
-                        </div>
-
-                        <span class="mt-3 text-center text-[10px] font-medium text-[#a1a1aa]">
-                            {{ item.month }}
-                        </span>
-                    </div>
-                </div>
-            </article>
-
-            <article class="rounded-2xl border border-black/[0.07] bg-white p-5 sm:p-6">
+        <article class="mt-4 rounded-xl border border-black/[0.07] bg-white p-4 sm:mt-5 sm:p-6">
+            <header class="flex items-start justify-between gap-4">
                 <div>
-                    <h2 class="text-[14px] font-semibold text-[#27272a]">
-                        Carteira de clientes
+                    <h2 class="text-[15px] font-semibold tracking-[-0.02em] text-[#27272a] sm:text-base">
+                        Recebimentos
                     </h2>
 
-                    <p class="mt-1 text-[11px] text-[#a1a1aa]">
-                        Distribuição por situação
+                    <p class="mt-1 text-[10px] text-[#8b8b93] sm:text-xs">
+                        Valores recebidos nos últimos sete dias
                     </p>
                 </div>
 
-                <div class="mt-8 space-y-6">
-                    <div v-for="clientStatus in clientStatuses" :key="clientStatus.label">
-                        <div class="mb-2 flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <span :class="[
-                                    'h-2 w-2 rounded-full',
-                                    clientStatus.dotClass,
-                                ]" />
+                <span
+                    class="shrink-0 rounded-md bg-[#edf7ef] px-2 py-1 text-[9px] font-semibold text-[#166534] sm:text-[10px]">
+                    Esta semana
+                </span>
+            </header>
 
-                                <span class="text-[12px] font-medium text-[#52525b]">
-                                    {{ clientStatus.label }}
-                                </span>
+            <div class="mt-6">
+                <div class="relative h-[190px]">
+                    <div aria-hidden="true" class="absolute inset-0 flex flex-col justify-between">
+                        <span v-for="line in 5" :key="line" class="border-t border-dashed border-black/[0.06]" />
+                    </div>
+
+                    <div class="absolute inset-0 flex items-end justify-between gap-2 px-1 sm:gap-5 sm:px-3">
+                        <div v-for="item in receiptChart" :key="item.label"
+                            class="flex h-full min-w-0 flex-1 flex-col justify-end">
+                            <div class="group relative flex flex-1 items-end justify-center">
+                                <div :title="`${item.label}: ${item.value}`" :style="{ height: `${item.percentage}%` }"
+                                    :class="[
+                                        'w-full max-w-[42px] rounded-t-md transition-all duration-300 hover:opacity-80',
+                                        item.highlight
+                                            ? 'bg-[#166534]'
+                                            : 'bg-[#a8d56f]',
+                                    ]" />
                             </div>
 
-                            <span class="text-[12px] font-semibold text-[#27272a]">
-                                {{ clientStatus.value }}
+                            <span class="mt-2 text-center text-[9px] font-medium text-[#8b8b93] sm:text-[10px]">
+                                {{ item.label }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        <section class="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4">
+            <article class="min-w-0 rounded-xl border border-black/[0.07] bg-white p-4 sm:p-5">
+                <header class="flex items-center justify-between gap-2">
+                    <h2 class="truncate text-[13px] font-semibold tracking-[-0.02em] text-[#27272a] sm:text-[15px]">
+                        Resumo da carteira
+                    </h2>
+
+                </header>
+
+                <div class="mt-5 space-y-4">
+                    <div v-for="item in portfolioSummary" :key="item.label">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="truncate text-[9px] font-medium text-[#71717a] sm:text-[11px]">
+                                {{ item.label }}
+                            </span>
+
+                            <span class="shrink-0 text-[9px] font-semibold text-[#3f3f46] sm:text-[11px]">
+                                {{ item.value }}
                             </span>
                         </div>
 
-                        <div class="h-1.5 overflow-hidden rounded-full bg-[#f4f4f5]">
-                            <div :class="[
-                                'h-full rounded-full',
-                                clientStatus.barClass,
-                            ]" :style="{ width: `${clientStatus.percentage}%` }" />
+                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f0f0f1]">
+                            <div :style="{ width: `${item.percentage}%` }"
+                                :class="['h-full rounded-full', item.color]" />
                         </div>
                     </div>
                 </div>
+            </article>
 
-                <div class="mt-8 flex items-center justify-between border-t border-black/[0.06] pt-5">
-                    <span class="text-[11px] text-[#a1a1aa]">
-                        Total de clientes
-                    </span>
+            <article class="min-w-0 rounded-xl border border-black/[0.07] bg-white p-4 sm:p-5">
+                <header class="flex items-center justify-between gap-2">
+                    <h2 class="truncate text-[13px] font-semibold tracking-[-0.02em] text-[#27272a] sm:text-[15px]">
+                        Próximos pagamentos
+                    </h2>
 
-                    <span class="text-[15px] font-semibold text-[#27272a]">
-                        37
-                    </span>
+                </header>
+
+                <div class="mt-4 divide-y divide-black/[0.06]">
+                    <button v-for="payment in upcomingPayments" :key="payment.name" type="button"
+                        class="flex w-full items-center gap-2 py-3 text-left transition-opacity hover:opacity-70">
+                        <div
+                            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eeedff] text-[9px] font-semibold text-[#5b5790]">
+                            {{ payment.initials }}
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-[10px] font-semibold text-[#3f3f46] sm:text-xs">
+                                {{ payment.name }}
+                            </p>
+
+                            <p class="mt-0.5 truncate text-[8px] text-[#a1a1aa] sm:text-[10px]">
+                                {{ payment.date }}
+                            </p>
+                        </div>
+
+                        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-[#a1a1aa]" aria-hidden="true">
+                            <path :d="mdiChevronRight" fill="currentColor" />
+                        </svg>
+                    </button>
                 </div>
             </article>
         </section>
 
-        <section class="mt-5 rounded-2xl border border-black/[0.07] bg-white">
-            <div class="flex items-center justify-between border-b border-black/[0.06] px-5 py-5 sm:px-6">
-                <div>
-                    <h2 class="text-[14px] font-semibold text-[#27272a]">
-                        Pagamentos recentes
-                    </h2>
-
-                    <p class="mt-1 text-[11px] text-[#a1a1aa]">
-                        Últimas movimentações registradas
-                    </p>
-                </div>
-
-                <button type="button" class="text-[11px] font-semibold text-[#166534] hover:text-[#14532d]">
-                    Ver todos
-                </button>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full min-w-[680px] border-collapse">
-                    <thead>
-                        <tr class="border-b border-black/[0.05]">
-                            <th
-                                class="px-6 py-3 text-left text-[10px] font-semibold tracking-[0.06em] text-[#a1a1aa] uppercase">
-                                Cliente
-                            </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-[10px] font-semibold tracking-[0.06em] text-[#a1a1aa] uppercase">
-                                Data
-                            </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-[10px] font-semibold tracking-[0.06em] text-[#a1a1aa] uppercase">
-                                Parcela
-                            </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-[10px] font-semibold tracking-[0.06em] text-[#a1a1aa] uppercase">
-                                Valor
-                            </th>
-
-                            <th
-                                class="px-6 py-3 text-left text-[10px] font-semibold tracking-[0.06em] text-[#a1a1aa] uppercase">
-                                Status
-                            </th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        <tr v-for="payment in recentPayments" :key="payment.id"
-                            class="border-b border-black/[0.04] last:border-b-0 hover:bg-[#fafafa]">
-                            <td class="px-6 py-4">
-                                <p class="text-[12px] font-semibold text-[#3f3f46]">
-                                    {{ payment.client }}
-                                </p>
-                            </td>
-
-                            <td class="px-6 py-4 text-[11px] text-[#71717a]">
-                                {{ payment.date }}
-                            </td>
-
-                            <td class="px-6 py-4 text-[11px] text-[#71717a]">
-                                {{ payment.installment }}
-                            </td>
-
-                            <td class="px-6 py-4 text-[12px] font-semibold text-[#3f3f46]">
-                                {{ payment.value }}
-                            </td>
-
-                            <td class="px-6 py-4">
-                                <span
-                                    class="rounded-md bg-[#f0fdf4] px-2 py-1 text-[10px] font-semibold text-[#15803d]">
-                                    Pago
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
     </div>
 </template>
 
 <script setup>
-import SummaryCard from '@/features/dashboard/components/SummaryCard.vue'
+import {
+    mdiAccountPlusOutline,
+    mdiCalendarClock,
+    mdiCashCheck,
+    mdiCashPlus,
+    mdiChartLine,
+    mdiChevronRight,
+    mdiWalletOutline,
+} from '@mdi/js'
 
-const monthlyReceipts = [
-    { month: 'Mar', height: 42 },
-    { month: 'Abr', height: 58 },
-    { month: 'Mai', height: 51 },
-    { month: 'Jun', height: 72 },
-    { month: 'Jul', height: 65 },
-    { month: 'Ago', height: 87 },
-]
+import SummaryCard from '../components/SummaryCard.vue'
 
-const clientStatuses = [
+const summaryCards = [
     {
-        label: 'Ativos',
-        value: 25,
-        percentage: 68,
-        dotClass: 'bg-[#16a34a]',
-        barClass: 'bg-[#22c55e]',
+        title: 'Carteira ativa',
+        value: 'R$ 48.500,00',
+        description: '32 empréstimos ativos',
+        indicator: '+12,5%',
+        status: 'positive',
     },
     {
-        label: 'Quitados',
-        value: 8,
+        title: 'Recebido no mês',
+        value: 'R$ 18.720,00',
+        description: '74 pagamentos confirmados',
+        indicator: '+8,2%',
+        status: 'positive',
+    },
+]
+
+const receiptChart = [
+    {
+        label: 'Seg',
+        value: 'R$ 1.850,00',
+        percentage: 42,
+    },
+    {
+        label: 'Ter',
+        value: 'R$ 3.200,00',
+        percentage: 68,
+    },
+    {
+        label: 'Qua',
+        value: 'R$ 1.420,00',
+        percentage: 34,
+    },
+    {
+        label: 'Qui',
+        value: 'R$ 3.650,00',
+        percentage: 78,
+        highlight: true,
+    },
+    {
+        label: 'Sex',
+        value: 'R$ 2.100,00',
+        percentage: 49,
+    },
+    {
+        label: 'Sáb',
+        value: 'R$ 4.200,00',
+        percentage: 90,
+        highlight: true,
+    },
+    {
+        label: 'Dom',
+        value: 'R$ 1.280,00',
+        percentage: 29,
+    },
+]
+
+const portfolioSummary = [
+    {
+        label: 'Em dia',
+        value: '68%',
+        percentage: 68,
+        color: 'bg-[#65a30d]',
+    },
+    {
+        label: 'Atrasados',
+        value: '22%',
         percentage: 22,
-        dotClass: 'bg-[#a1a1aa]',
-        barClass: 'bg-[#d4d4d8]',
+        color: 'bg-[#f59e0b]',
     },
     {
         label: 'Inadimplentes',
-        value: 4,
+        value: '10%',
         percentage: 10,
-        dotClass: 'bg-[#dc2626]',
-        barClass: 'bg-[#ef4444]',
+        color: 'bg-[#b91c1c]',
     },
 ]
 
-const recentPayments = [
+const upcomingPayments = [
     {
-        id: 1,
-        client: 'Carlos Almeida',
-        date: '18/08/2026',
-        installment: '12 de 30',
-        value: 'R$ 100,00',
+        initials: 'MC',
+        name: 'Mariana Costa',
+        date: 'Hoje, 18:00',
     },
     {
-        id: 2,
-        client: 'Mariana Santos',
-        date: '18/08/2026',
-        installment: '8 de 20',
-        value: 'R$ 150,00',
+        initials: 'RA',
+        name: 'Rafael Alves',
+        date: 'Amanhã',
     },
     {
-        id: 3,
-        client: 'Roberto Oliveira',
-        date: '17/08/2026',
-        installment: '21 de 35',
-        value: 'R$ 80,00',
+        initials: 'JS',
+        name: 'Juliana Santos',
+        date: '22 de agosto',
+    },
+]
+
+const quickActions = [
+    {
+        label: 'Novo cliente',
+        icon: mdiAccountPlusOutline,
     },
     {
-        id: 4,
-        client: 'Fernanda Costa',
-        date: '17/08/2026',
-        installment: '5 de 15',
-        value: 'R$ 200,00',
+        label: 'Novo empréstimo',
+        icon: mdiCashPlus,
+    },
+    {
+        label: 'Registrar pagamento',
+        icon: mdiCashCheck,
+    },
+    {
+        label: 'Ver relatórios',
+        icon: mdiChartLine,
     },
 ]
 </script>
