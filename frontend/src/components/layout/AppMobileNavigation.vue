@@ -1,7 +1,7 @@
 <template>
     <nav
         aria-label="Navegação principal"
-        class="fixed right-3 bottom-3 left-3 z-30 grid grid-cols-4 rounded-xl border border-black/[0.07] bg-white/95 p-1.5 shadow-[0_10px_30px_rgba(15,23,42,0.14)] backdrop-blur-xl lg:hidden"
+        class="fixed right-3 bottom-3 left-3 z-30 grid grid-cols-4 rounded-md border border-black/[0.07] bg-white/95 p-1.5 backdrop-blur-xl lg:hidden"
     >
         <template
             v-for="item in mobileNavigationItems"

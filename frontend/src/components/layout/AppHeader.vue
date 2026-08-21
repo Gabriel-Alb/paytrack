@@ -32,8 +32,11 @@
 
         <button
             type="button"
-            aria-label="Notificações"
+            aria-label="Abrir notificações"
+            aria-controls="notifications-sidebar"
+            :aria-expanded="isNotificationsOpen"
             class="relative flex h-10 w-10 items-center justify-center rounded-lg border border-black/[0.08] bg-white text-[#52525b] transition-colors hover:bg-[#f4f4f5]"
+            @click="$emit('open-notifications')"
         >
             <svg
                 viewBox="0 0 24 24"
@@ -54,15 +57,24 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-
 import {
     mdiBellOutline,
     mdiMenu,
 } from '@mdi/js'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
-defineEmits(['open-sidebar'])
+defineProps({
+    isNotificationsOpen: {
+        type: Boolean,
+        default: false,
+    },
+})
+
+defineEmits([
+    'open-sidebar',
+    'open-notifications',
+])
 
 const route = useRoute()
 
