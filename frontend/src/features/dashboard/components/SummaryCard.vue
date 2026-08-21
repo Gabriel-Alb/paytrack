@@ -1,26 +1,26 @@
 <template>
     <article
-        class="rounded-2xl border border-black/[0.07] bg-white p-5 transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
-        <div class="flex items-start justify-between gap-4">
-            <div>
-                <p class="text-[12px] font-medium text-[#71717a]">
+        class="min-w-0 rounded-xl border border-black/[0.07] bg-white p-4 transition-shadow hover:shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:p-5"
+    >
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-[11px] font-medium text-[#71717a] sm:text-xs">
                     {{ title }}
                 </p>
 
-                <p class="mt-3 text-[25px] font-semibold tracking-[-0.03em] text-[#18181b]">
+                <p
+                    class="mt-3 truncate text-[20px] font-semibold tracking-[-0.04em] text-[#18181b] sm:text-[24px]"
+                >
                     {{ value }}
                 </p>
             </div>
 
-            <div v-if="indicator" :class="[
-                'rounded-lg px-2 py-1 text-[10px] font-semibold',
-                indicatorClass,
-            ]">
-                {{ indicator }}
-            </div>
         </div>
 
-        <p v-if="description" class="mt-3 text-[11px] leading-5 text-[#a1a1aa]">
+        <p
+            v-if="description"
+            class="mt-2 truncate text-[10px] text-[#a1a1aa] sm:text-[11px]"
+        >
             {{ description }}
         </p>
     </article>
