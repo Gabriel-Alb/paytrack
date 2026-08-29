@@ -9,12 +9,17 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      component: AppLayout,
+      component: () => import('@/layouts/AppLayout.vue'),
       children: [
         {
           path: '',
           name: 'dashboard',
-          component: DashboardView,
+          component: () => import('@/features/dashboard/views/DashboardView.vue'),
+        },
+        {
+          path: 'clients',
+          name: 'clients',
+          component: () => import('@/features/clients/views/ClientsView.vue'),
         },
       ],
     },
