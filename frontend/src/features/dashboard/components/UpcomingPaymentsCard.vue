@@ -10,14 +10,15 @@
 
         <div v-if="items.length" class="mt-4 divide-y divide-black/[0.06]">
             <button v-for="(payment, index) in items" :key="payment.id ?? `${payment.name}-${index}`" type="button"
-                class="group flex w-full items-center gap-2 py-3 text-left outline-none transition-colors hover:bg-black/[0.015] focus-visible:bg-black/[0.025]"
+                class="group relative flex w-full touch-manipulation items-center gap-2 rounded-lg py-3 text-left outline-none transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:z-10 hover:-translate-y-px hover:bg-black/[0.012] hover:shadow-[0_3px_10px_rgba(0,0,0,0.025)] active:translate-y-0 active:bg-black/[0.02] active:shadow-none focus-visible:bg-black/[0.02]"
                 @click="handleClick(payment)">
                 <div
-                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eeedff] text-[9px] font-semibold text-[#5b5790] transition-transform duration-150 group-hover:scale-[1.04] sm:h-9 sm:w-9 sm:text-[10px]">
+                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eeedff] text-[9px] font-semibold text-[#5b5790] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-px group-active:translate-y-0 sm:h-9 sm:w-9 sm:text-[10px]">
                     {{ payment.initials }}
                 </div>
 
-                <div class="min-w-0 flex-1">
+                <div
+                    class="min-w-0 flex-1 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-px group-active:translate-x-0">
                     <p class="truncate text-[10px] font-semibold text-[#3f3f46] sm:text-xs">
                         {{ payment.name }}
                     </p>
@@ -28,7 +29,7 @@
                 </div>
 
                 <svg viewBox="0 0 24 24"
-                    class="h-4 w-4 shrink-0 text-[#a1a1aa] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[#71717a]"
+                    class="h-4 w-4 shrink-0 text-[#a1a1aa] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5 group-active:translate-x-0"
                     aria-hidden="true">
                     <path :d="mdiChevronRight" fill="currentColor" />
                 </svg>
