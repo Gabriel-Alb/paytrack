@@ -21,10 +21,12 @@ export const navigationSections = [
             {
                 label: 'Clientes',
                 icon: mdiAccountGroupOutline,
+                to: '/clients',
             },
             {
                 label: 'Empréstimos',
                 icon: mdiCashMultiple,
+                to: '/loans',
             },
             {
                 label: 'Pagamentos',

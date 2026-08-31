@@ -1,15 +1,7 @@
 <template>
     <div class="mx-auto w-full max-w-[1500px]">
         <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <h1 class="text-xl font-semibold tracking-tight text-[#202124]">
-                    Clientes
-                </h1>
 
-                <p class="mt-1 text-sm text-black/45">
-                    Gerencie os clientes cadastrados no sistema.
-                </p>
-            </div>
 
             <button type="button"
                 class="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#166534] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#14532d] sm:h-10 sm:w-auto"
