@@ -37,10 +37,6 @@
                         <slot name="header">
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2">
-                                    <span v-if="icon" :class="[
-                                        icon,
-                                        'shrink-0 text-[20px] text-[#166534]',
-                                    ]" />
 
                                     <h2 class="truncate text-base font-semibold text-[#202124]">
                                         {{ title }}

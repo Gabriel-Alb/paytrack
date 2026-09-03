@@ -1,3 +1,4 @@
+import '@mdi/font/css/materialdesignicons.css'
 import './assets/styles/main.css'
 
 import { createApp } from 'vue'
