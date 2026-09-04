@@ -1,119 +1,204 @@
 <template>
-    <div ref="containerRef" class="relative">
-        <label class="mb-1.5 block text-sm font-medium text-[#202124]">
-            Cliente
-        </label>
+    <div
+        ref="root"
+        class="relative min-w-0"
+    >
+        <span class="mb-1.5 block text-sm font-medium text-[#202124]">
+            Nome
+        </span>
 
-        <div class="relative">
-            <i
-                class="mdi mdi-magnify pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-lg text-black/35" />
+        <div
+            class="relative flex h-11 min-w-0 w-full items-center overflow-hidden rounded-lg border border-black/10 bg-white transition-[border-color,box-shadow] focus-within:border-[#166534] focus-within:ring-2 focus-within:ring-[#166534]/10"
+        >
+            <input
+                v-model="query"
+                type="text"
+                autocomplete="off"
+                placeholder="Digite o nome do cliente"
+                class="h-full min-w-0 flex-1 bg-transparent px-3 pr-12 text-sm text-[#202124] outline-none placeholder:text-black/30"
+                @focus="openDropdown"
+                @input="handleInput"
+            />
 
-            <input v-model="search" type="text" autocomplete="off" placeholder="Pesquise por nome ou CPF"
-                class="h-11 w-full rounded-lg border border-black/10 bg-white pl-10 pr-10 text-sm text-[#202124] outline-none transition focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10"
-                @focus="isOpen = true" />
-
-            <button v-if="search" type="button"
-                class="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-black/35 transition hover:bg-black/[0.04] hover:text-black/60"
-                @click="clearSelection">
-                <i class="mdi mdi-close text-lg" />
+            <button
+                type="button"
+                class="absolute right-0 top-0 flex h-full w-11 shrink-0 items-center justify-center border-l border-black/[0.06] bg-white text-[#166534] transition-colors hover:bg-[#166534]/[0.05] active:bg-[#166534]/[0.08]"
+                aria-label="Cadastrar novo cliente"
+                title="Cadastrar novo cliente"
+                @click.stop="requestNewClient"
+            >
+                <span
+                    class="mdi mdi-account-plus-outline text-xl"
+                    aria-hidden="true"
+                />
             </button>
         </div>
 
-        <Transition name="client-dropdown">
-            <div v-if="isOpen"
-                class="absolute left-0 right-0 top-[72px] z-30 max-h-64 overflow-y-auto rounded-xl border border-black/[0.08] bg-white p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.12)]">
-                <button v-for="client in filteredClients" :key="client.id" type="button"
-                    class="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-black/[0.035]"
-                    @click="selectClient(client)">
+        <div
+            v-if="dropdownOpen"
+            class="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-black/[0.08] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.10)]"
+        >
+            <div
+                v-if="filteredClients.length"
+                class="max-h-[220px] overflow-y-auto overscroll-contain py-1"
+            >
+                <button
+                    v-for="client in filteredClients"
+                    :key="client.id"
+                    type="button"
+                    class="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/[0.03]"
+                    :class="{
+                        'bg-[#166534]/[0.05]':
+                            String(client.id) === String(modelValue),
+                    }"
+                    @click="selectClient(client)"
+                >
                     <div class="min-w-0">
-                        <p class="truncate text-sm font-medium text-[#202124]">
+                        <p class="truncate text-sm font-medium text-[#27272a]">
                             {{ client.name }}
                         </p>
 
-                        <p class="mt-0.5 text-xs text-black/45">
-                            {{ client.cpf }}
+                        <p
+                            v-if="client.cpf"
+                            class="mt-0.5 truncate text-[11px] text-black/40"
+                        >
+                            CPF: {{ client.cpf }}
                         </p>
                     </div>
 
-                    <i v-if="client.id === modelValue" class="mdi mdi-check text-lg text-[#166534]" />
+                    <span
+                        v-if="String(client.id) === String(modelValue)"
+                        class="mdi mdi-check shrink-0 text-lg text-[#166534]"
+                        aria-hidden="true"
+                    />
                 </button>
-
-                <div v-if="!filteredClients.length" class="px-3 py-6 text-center">
-                    <i class="mdi mdi-account-search-outline text-2xl text-black/25" />
-
-                    <p class="mt-1 text-sm text-black/45">
-                        Nenhum cliente encontrado
-                    </p>
-                </div>
             </div>
-        </Transition>
+
+            <div
+                v-else
+                class="px-4 py-5 text-center"
+            >
+                <p class="text-sm text-black/45">
+                    Nenhum cliente encontrado.
+                </p>
+
+                <button
+                    type="button"
+                    class="mt-2 text-xs font-semibold text-[#166534]"
+                    @click="requestNewClient"
+                >
+                    Cadastrar novo cliente
+                </button>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue'
 
 const props = defineProps({
     modelValue: {
-        type: [Number, String, null],
-        default: null
+        type: [Number, String],
+        default: null,
     },
+
     clients: {
         type: Array,
-        default: () => []
-    }
+        default: () => [],
+    },
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits([
+    'update:modelValue',
+    'request-new-client',
+])
 
-const containerRef = ref(null)
-const isOpen = ref(false)
-const search = ref('')
+const root = ref(null)
+const query = ref('')
+const dropdownOpen = ref(false)
 
 const selectedClient = computed(() =>
-    props.clients.find((client) => client.id === props.modelValue)
+    props.clients.find(
+        (client) =>
+            String(client.id) === String(props.modelValue),
+    ),
 )
 
 const filteredClients = computed(() => {
-    const term = search.value
+    const term = query.value
+        .trim()
         .toLowerCase()
-        .replace(/\D/g, '')
 
-    const rawTerm = search.value.toLowerCase().trim()
-
-    if (!rawTerm) {
+    if (!term) {
         return props.clients
     }
 
     return props.clients.filter((client) => {
-        const nameMatches = client.name.toLowerCase().includes(rawTerm)
+        const name =
+            client.name?.toLowerCase() ?? ''
 
-        const cpfMatches = client.cpf
-            .replace(/\D/g, '')
-            .includes(term)
+        const cpf =
+            client.cpf?.toLowerCase() ?? ''
 
-        return nameMatches || cpfMatches
+        return (
+            name.includes(term) ||
+            cpf.includes(term)
+        )
     })
 })
 
-const selectClient = (client) => {
-    emit('update:modelValue', client.id)
-    search.value = client.name
-    isOpen.value = false
+function openDropdown() {
+    dropdownOpen.value = true
 }
 
-const clearSelection = () => {
-    search.value = ''
-    emit('update:modelValue', null)
-    isOpen.value = true
-}
+function handleInput() {
+    dropdownOpen.value = true
 
-const handleOutsideClick = (event) => {
     if (
-        containerRef.value &&
-        !containerRef.value.contains(event.target)
+        selectedClient.value &&
+        query.value !== selectedClient.value.name
     ) {
-        isOpen.value = false
+        emit('update:modelValue', null)
+    }
+}
+
+function selectClient(client) {
+    query.value = client.name
+
+    emit(
+        'update:modelValue',
+        client.id,
+    )
+
+    dropdownOpen.value = false
+}
+
+function requestNewClient() {
+    dropdownOpen.value = false
+
+    emit('request-new-client')
+}
+
+function handleOutsideClick(event) {
+    if (
+        !dropdownOpen.value ||
+        root.value?.contains(event.target)
+    ) {
+        return
+    }
+
+    dropdownOpen.value = false
+
+    if (selectedClient.value) {
+        query.value =
+            selectedClient.value.name
     }
 }
 
@@ -121,41 +206,30 @@ watch(
     selectedClient,
     (client) => {
         if (client) {
-            search.value = client.name
+            query.value = client.name
+            return
+        }
+
+        if (!props.modelValue) {
+            query.value = ''
         }
     },
-    { immediate: true }
-)
-
-watch(
-    () => props.modelValue,
-    (value) => {
-        if (!value) {
-            search.value = ''
-        }
-    }
+    {
+        immediate: true,
+    },
 )
 
 onMounted(() => {
-    document.addEventListener('mousedown', handleOutsideClick)
+    document.addEventListener(
+        'pointerdown',
+        handleOutsideClick,
+    )
 })
 
 onBeforeUnmount(() => {
-    document.removeEventListener('mousedown', handleOutsideClick)
+    document.removeEventListener(
+        'pointerdown',
+        handleOutsideClick,
+    )
 })
 </script>
-
-<style scoped>
-.client-dropdown-enter-active,
-.client-dropdown-leave-active {
-    transition:
-        opacity 150ms ease,
-        transform 150ms ease;
-}
-
-.client-dropdown-enter-from,
-.client-dropdown-leave-to {
-    opacity: 0;
-    transform: translateY(-4px);
-}
-</style>
