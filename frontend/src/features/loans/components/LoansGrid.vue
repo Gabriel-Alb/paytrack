@@ -43,7 +43,7 @@
         </div>
 
         <div v-if="filteredLoans.length" class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <LoanCard v-for="loan in filteredLoans" :key="loan.id" :loan="loan" />
+            <LoanCard v-for="loan in filteredLoans" :key="loan.id" :loan="loan" @open="openLoan(loan)" />
         </div>
 
         <div v-else
@@ -57,14 +57,18 @@
             </h3>
 
             <p class="mt-1 max-w-sm text-xs leading-5 text-[#8b8b93]">
-                Tente alterar os filtros ou pesquisar utilizando outro cliente.
+                Tente alterar os filtros ou
+                pesquisar utilizando outro cliente.
             </p>
         </div>
     </section>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import {
+    computed,
+    ref,
+} from 'vue'
 
 import LoanCard from '@/features/loans/components/LoanCard.vue'
 
@@ -75,30 +79,49 @@ const props = defineProps({
     },
 })
 
+const emit = defineEmits([
+    'open-loan',
+])
+
 const search = ref('')
 const statusFilter = ref('todos')
 
 const filteredLoans = computed(() => {
-    const normalizedSearch = search.value
-        .trim()
-        .toLowerCase()
+    const normalizedSearch =
+        search.value
+            .trim()
+            .toLowerCase()
 
-    return props.loans.filter((loan) => {
-        const matchesStatus =
-            statusFilter.value === 'todos' ||
-            loan.status === statusFilter.value
+    return props.loans.filter(
+        (loan) => {
+            const matchesStatus =
+                statusFilter.value ===
+                'todos' ||
+                loan.status ===
+                statusFilter.value
 
-        if (!normalizedSearch) {
-            return matchesStatus
-        }
+            if (!normalizedSearch) {
+                return matchesStatus
+            }
 
-        const clientName =
-            loan.clientName?.toLowerCase() ?? ''
+            const clientName =
+                loan.clientName?.toLowerCase() ??
+                ''
 
-        return (
-            matchesStatus &&
-            clientName.includes(normalizedSearch)
-        )
-    })
+            return (
+                matchesStatus &&
+                clientName.includes(
+                    normalizedSearch,
+                )
+            )
+        },
+    )
 })
+
+function openLoan(loan) {
+    emit(
+        'open-loan',
+        loan,
+    )
+}
 </script>
