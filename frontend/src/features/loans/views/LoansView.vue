@@ -1,6 +1,6 @@
 <template>
     <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
-        <LoansGrid :loans="loans">
+        <LoansGrid :loans="loans" @open-loan="openLoanInstallments">
             <template #toolbar-action>
                 <button type="button"
                     class="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-sm shadow-[#166534]/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#14532d] hover:shadow-md hover:shadow-[#166534]/15 active:scale-[0.98] sm:w-auto"
@@ -17,21 +17,33 @@
 
         <ClientFormModal :model-value="isClientModalOpen" :client="null" @update:model-value="setClientModalOpen"
             @save="createClient" @close="returnToLoan" />
+
+        <LoanInstallmentsModal v-model="isInstallmentsModalOpen" :loan="selectedLoan" @close="clearSelectedLoan"
+            @register-payment="
+                registerLoanPayment
+            " />
     </div>
 </template>
 
 <script setup>
 import {
+    computed,
     reactive,
     ref,
 } from 'vue'
 
 import ClientFormModal from '@/features/clients/components/ClientFormModal.vue'
 import LoanFormModal from '@/features/loans/components/LoanFormModal.vue'
+import LoanInstallmentsModal from '@/features/loans/components/LoanInstallmentsModal.vue'
 import LoansGrid from '@/features/loans/components/LoansGrid.vue'
 
 const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)
+
+const isInstallmentsModalOpen =
+    ref(false)
+
+const selectedLoanId = ref(null)
 
 const clients = ref([
     {
@@ -64,34 +76,57 @@ const loans = ref([
         installmentCount: 12,
         installmentValue: 466.67,
         paidInstallments: 7,
+        dailyLateFee: 100,
+        loanDate: '2026-07-25',
+        firstPaymentDate: '2026-08-26',
         status: 'on-time',
         daysLate: 0,
     },
     {
         id: 47,
         clientId: 2,
-        clientName: 'Maria Oliveira Santos',
+        clientName:
+            'Maria Oliveira Santos',
         amount: 2500,
         interest: 10,
         installmentCount: 5,
         installmentValue: 550,
         paidInstallments: 2,
+        loanDate: '2026-09-03',
+        firstPaymentDate: '2026-06-15',
         status: 'attention',
         daysLate: 2,
     },
     {
         id: 46,
         clientId: 3,
-        clientName: 'Carlos Henrique Souza',
+        clientName:
+            'Carlos Henrique Souza',
         amount: 10000,
         interest: 15,
         installmentCount: 10,
         installmentValue: 1150,
         paidInstallments: 3,
+        loanDate: '2026-03-05',
+        firstPaymentDate: '2026-04-05',
         status: 'overdue',
         daysLate: 6,
     },
 ])
+
+const selectedLoan = computed(() => {
+    if (!selectedLoanId.value) {
+        return null
+    }
+
+    return (
+        loans.value.find(
+            (loan) =>
+                loan.id ===
+                selectedLoanId.value,
+        ) ?? null
+    )
+})
 
 const createEmptyDraft = () => ({
     clientId: null,
@@ -127,6 +162,17 @@ function openNewLoan() {
 
 function closeLoanModal() {
     isLoanModalOpen.value = false
+}
+
+function openLoanInstallments(loan) {
+    selectedLoanId.value = loan.id
+
+    isInstallmentsModalOpen.value =
+        true
+}
+
+function clearSelectedLoan() {
+    selectedLoanId.value = null
 }
 
 function openClientModal() {
@@ -183,7 +229,8 @@ function createLoan(loan) {
     const client =
         clients.value.find(
             (item) =>
-                item.id === loan.clientId,
+                item.id ===
+                loan.clientId,
         )
 
     if (!client) {
@@ -223,10 +270,12 @@ function createLoan(loan) {
             loan.installmentCount,
 
         installmentValue:
-            loan.installments?.[0] ?? 0,
+            loan.installments?.[0] ??
+            0,
 
-        installments:
-            [...loan.installments],
+        installments: [
+            ...loan.installments,
+        ],
 
         installmentOverrides: {
             ...(
@@ -236,6 +285,10 @@ function createLoan(loan) {
         },
 
         paidInstallments: 0,
+
+        paidInstallmentNumbers: [],
+
+        payments: [],
 
         dailyLateFee:
             loan.dailyLateFee,
@@ -259,5 +312,78 @@ function createLoan(loan) {
         loanDraft,
         createEmptyDraft(),
     )
+}
+
+function registerLoanPayment({
+    loanId,
+    installmentNumber,
+    paidAt,
+}) {
+    const loan =
+        loans.value.find(
+            (item) =>
+                item.id === loanId,
+        )
+
+    if (!loan) {
+        return
+    }
+
+    const currentPaidNumbers =
+        Array.isArray(
+            loan.paidInstallmentNumbers,
+        )
+            ? [
+                ...loan.paidInstallmentNumbers,
+            ]
+            : Array.from(
+                {
+                    length: Math.min(
+                        Number(
+                            loan.paidInstallments,
+                        ) || 0,
+                        Number(
+                            loan.installmentCount,
+                        ) || 0,
+                    ),
+                },
+                (_, index) =>
+                    index + 1,
+            )
+
+    if (
+        currentPaidNumbers.includes(
+            installmentNumber,
+        )
+    ) {
+        return
+    }
+
+    loan.paidInstallmentNumbers = [
+        ...currentPaidNumbers,
+        installmentNumber,
+    ].sort(
+        (first, second) =>
+            first - second,
+    )
+
+    loan.payments = [
+        ...(loan.payments ?? []),
+        {
+            installmentNumber,
+            paidAt,
+        },
+    ]
+
+    loan.paidInstallments =
+        loan.paidInstallmentNumbers.length
+
+    if (
+        loan.paidInstallments >=
+        loan.installmentCount
+    ) {
+        loan.daysLate = 0
+        loan.status = 'on-time'
+    }
 }
 </script>
