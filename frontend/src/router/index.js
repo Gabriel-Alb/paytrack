@@ -1,8 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import AppLayout from '@/layouts/AppLayout.vue'
-import DashboardView from '@/features/dashboard/views/DashboardView.vue'
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
@@ -19,6 +16,9 @@ const router = createRouter({
         {
           path: 'clients',
           name: 'clients',
+          meta: {
+            title: 'Clientes',
+          },
           component: () => import('@/features/clients/views/ClientsView.vue'),
         },
         {

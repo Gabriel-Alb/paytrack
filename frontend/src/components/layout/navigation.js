@@ -19,7 +19,7 @@ export const navigationSections = [
                 to: '/',
             },
             {
-                label: 'Clientes',
+                label: 'Gestão de clientes',
                 icon: mdiAccountGroupOutline,
                 to: '/clients',
             },

@@ -1,65 +1,35 @@
 <template>
-    <div class="mx-auto w-full max-w-[1500px]">
+    <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
+        <LoansGrid :loans="loans">
+            <template #toolbar-action>
+                <button type="button"
+                    class="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-sm shadow-[#166534]/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#14532d] hover:shadow-md hover:shadow-[#166534]/15 active:scale-[0.98] sm:w-auto"
+                    @click="openNewLoan">
+                    <span class="mdi mdi-plus text-lg" aria-hidden="true" />
 
-        <section class="mt-5 flex items-stretch gap-2 sm:gap-3">
-            <div class="relative min-w-0 flex-1">
-                <i
-                    class="mdi mdi-magnify pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xl text-black/35" />
-
-                <input v-model="search" type="search" placeholder="Buscar por cliente..."
-                    class="h-11 w-full rounded-xl border border-black/[0.08] bg-white pl-11 pr-4 text-sm text-[#202124] outline-none transition placeholder:text-black/35 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
-            </div>
-
-            <button type="button"
-                class="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-3.5 text-sm font-medium text-white transition hover:bg-[#14532d] sm:px-4"
-                @click="openNewLoan">
-                <i class="mdi mdi-plus text-xl" />
-
-                <span class="hidden sm:inline">
                     Novo empréstimo
-                </span>
-            </button>
-        </section>
-
-        <section class="mt-4">
-            <div v-if="filteredLoans.length" class="space-y-3">
-                <LoanDesktopTable :loans="filteredLoans" />
-
-                <div class="space-y-3 lg:hidden">
-                    <LoanMobileCard v-for="loan in filteredLoans" :key="loan.id" :loan="loan" />
-                </div>
-            </div>
-
-            <div v-else class="rounded-xl border border-dashed border-black/10 bg-white px-5 py-14 text-center">
-                <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-black/[0.035]">
-                    <i class="mdi mdi-cash-search text-2xl text-black/30" />
-                </div>
-
-                <h2 class="mt-3 text-sm font-medium text-[#202124]">
-                    Nenhum empréstimo encontrado
-                </h2>
-
-                <p class="mt-1 text-sm text-black/40">
-                    Tente pesquisar por outro cliente.
-                </p>
-            </div>
-        </section>
+                </button>
+            </template>
+        </LoansGrid>
 
         <LoanFormModal :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
             @save="createLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
 
-        <QuickClientFormModal :open="isClientModalOpen" @close="returnToLoan" @save="createClient" />
+        <ClientFormModal :model-value="isClientModalOpen" :client="null" @update:model-value="setClientModalOpen"
+            @save="createClient" @close="returnToLoan" />
     </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
-import LoanDesktopTable from '../components/LoanDesktopTable.vue'
-import LoanFormModal from '../components/LoanFormModal.vue'
-import LoanMobileCard from '../components/LoanMobileCard.vue'
-import QuickClientFormModal from '../components/QuickClientFormModal.vue'
+import {
+    reactive,
+    ref,
+} from 'vue'
 
-const search = ref('')
+import ClientFormModal from '@/features/clients/components/ClientFormModal.vue'
+import LoanFormModal from '@/features/loans/components/LoanFormModal.vue'
+import LoansGrid from '@/features/loans/components/LoansGrid.vue'
+
 const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)
 
@@ -67,18 +37,21 @@ const clients = ref([
     {
         id: 1,
         name: 'João da Silva',
-        cpf: '123.456.789-00'
+        cpf: '123.456.789-00',
+        status: 'ativo',
     },
     {
         id: 2,
         name: 'Maria Oliveira Santos',
-        cpf: '987.654.321-00'
+        cpf: '987.654.321-00',
+        status: 'quitado',
     },
     {
         id: 3,
         name: 'Carlos Henrique Souza',
-        cpf: '456.789.123-00'
-    }
+        cpf: '456.789.123-00',
+        status: 'negativado',
+    },
 ])
 
 const loans = ref([
@@ -92,7 +65,7 @@ const loans = ref([
         installmentValue: 466.67,
         paidInstallments: 7,
         status: 'on-time',
-        daysLate: 0
+        daysLate: 0,
     },
     {
         id: 47,
@@ -104,7 +77,7 @@ const loans = ref([
         installmentValue: 550,
         paidInstallments: 2,
         status: 'attention',
-        daysLate: 2
+        daysLate: 2,
     },
     {
         id: 46,
@@ -116,8 +89,8 @@ const loans = ref([
         installmentValue: 1150,
         paidInstallments: 3,
         status: 'overdue',
-        daysLate: 6
-    }
+        daysLate: 6,
+    },
 ])
 
 const createEmptyDraft = () => ({
@@ -126,93 +99,165 @@ const createEmptyDraft = () => ({
     interest: null,
     installmentCount: 1,
     installments: [],
+    installmentOverrides: {},
     dailyLateFee: null,
     loanDate: '',
-    firstPaymentDate: ''
+    firstPaymentDate: '',
 })
 
-const loanDraft = reactive(createEmptyDraft())
+const loanDraft = reactive(
+    createEmptyDraft(),
+)
 
-const filteredLoans = computed(() => {
-    const term = search.value.toLowerCase().trim()
-
-    if (!term) {
-        return loans.value
-    }
-
-    return loans.value.filter((loan) =>
-        loan.clientName.toLowerCase().includes(term)
+function updateLoanDraft(draft) {
+    Object.assign(
+        loanDraft,
+        draft,
     )
-})
-
-const updateLoanDraft = (draft) => {
-    Object.assign(loanDraft, draft)
 }
 
-const openNewLoan = () => {
-    Object.assign(loanDraft, createEmptyDraft())
+function openNewLoan() {
+    Object.assign(
+        loanDraft,
+        createEmptyDraft(),
+    )
+
     isLoanModalOpen.value = true
 }
 
-const closeLoanModal = () => {
+function closeLoanModal() {
     isLoanModalOpen.value = false
 }
 
-const openClientModal = () => {
+function openClientModal() {
     isLoanModalOpen.value = false
     isClientModalOpen.value = true
 }
 
-const returnToLoan = () => {
-    isClientModalOpen.value = false
-    isLoanModalOpen.value = true
-}
-
-const createClient = (client) => {
-    const newClient = {
-        id: Date.now(),
-        ...client
+function setClientModalOpen(value) {
+    if (value) {
+        isClientModalOpen.value = true
+        return
     }
 
-    clients.value.push(newClient)
+    returnToLoan()
+}
 
-    loanDraft.clientId = newClient.id
+function returnToLoan() {
+    if (!isClientModalOpen.value) {
+        return
+    }
 
     isClientModalOpen.value = false
     isLoanModalOpen.value = true
 }
 
-const createLoan = (loan) => {
-    const client = clients.value.find(
-        (item) => item.id === loan.clientId
+function createClient(form) {
+    const nextId =
+        Math.max(
+            ...clients.value.map(
+                (client) => client.id,
+            ),
+            0,
+        ) + 1
+
+    const newClient = {
+        id: nextId,
+        ...form,
+        status: 'sem_contrato',
+        loans: [],
+    }
+
+    clients.value.push(
+        newClient,
     )
+
+    loanDraft.clientId =
+        newClient.id
+
+    isClientModalOpen.value = false
+    isLoanModalOpen.value = true
+}
+
+function createLoan(loan) {
+    const client =
+        clients.value.find(
+            (item) =>
+                item.id === loan.clientId,
+        )
 
     if (!client) {
         return
     }
 
-    const firstInstallment = loan.installments[0] ?? 0
+    const nextId =
+        Math.max(
+            ...loans.value.map(
+                (item) => item.id,
+            ),
+            0,
+        ) + 1
 
     loans.value.unshift({
-        id: Math.max(...loans.value.map((item) => item.id), 0) + 1,
-        clientId: client.id,
-        clientName: client.name,
-        amount: loan.amount,
-        interest: loan.interest,
-        totalWithInterest: loan.totalWithInterest,
-        installmentCount: loan.installmentCount,
-        installmentValue: firstInstallment,
-        installments: loan.installments,
+        id: nextId,
+
+        clientId:
+            client.id,
+
+        clientName:
+            client.name,
+
+        amount:
+            loan.amount,
+
+        interest:
+            loan.interest,
+
+        totalWithInterest:
+            loan.totalWithInterest,
+
+        profit:
+            loan.profit,
+
+        installmentCount:
+            loan.installmentCount,
+
+        installmentValue:
+            loan.installments?.[0] ?? 0,
+
+        installments:
+            [...loan.installments],
+
+        installmentOverrides: {
+            ...(
+                loan.installmentOverrides ??
+                {}
+            ),
+        },
+
         paidInstallments: 0,
-        dailyLateFee: loan.dailyLateFee,
-        loanDate: loan.loanDate,
-        firstPaymentDate: loan.firstPaymentDate,
+
+        dailyLateFee:
+            loan.dailyLateFee,
+
+        loanDate:
+            loan.loanDate,
+
+        firstPaymentDate:
+            loan.firstPaymentDate,
+
         status: 'on-time',
-        daysLate: 0
+
+        daysLate: 0,
     })
+
+    client.status = 'ativo'
 
     isLoanModalOpen.value = false
 
-    Object.assign(loanDraft, createEmptyDraft())
+    Object.assign(
+        loanDraft,
+        createEmptyDraft(),
+    )
 }
 </script>
