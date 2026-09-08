@@ -1,6 +1,6 @@
 <template>
   <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-8">
-    <ClientsGrid :clients="clients" @filter="filters = $event" @edit="openEditModal" @history="openHistoryModal" @status="openStatusModal">
+    <ClientsGrid :clients="clients" :status="route.query.status || 'todos'" @filter="filters = $event" @edit="openEditModal" @history="openHistoryModal" @status="openStatusModal">
       <template #toolbar-action>
         <button type="button"
           class="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-sm shadow-[#166534]/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#14532d] hover:shadow-md hover:shadow-[#166534]/15 active:scale-[0.98] sm:w-auto"
@@ -26,7 +26,8 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ClientFormModal from '@/features/clients/components/ClientFormModal.vue'
 import ClientHistoryModal from '@/features/clients/components/ClientHistoryModal.vue'
 import ClientStatusModal from '@/features/clients/components/ClientStatusModal.vue'
@@ -35,7 +36,9 @@ import { clientsApi } from '@/services/paytrack'
 import { perform } from '@/services/api'
 import { usePagedList } from '@/composables/usePagedList'
 
-const filters = ref({})
+const route = useRoute()
+const filters = ref({ status:route.query.status })
+watch(() => route.query.status, status => { filters.value = { status } })
 const { items: clients, target, reload } = usePagedList(clientsApi.list, computed(() => filters.value))
 const formModalOpen = ref(false)
 const historyModalOpen = ref(false)

@@ -69,6 +69,7 @@ import {
     computed,
     ref,
     watch,
+    onBeforeUnmount,
 } from 'vue'
 
 import LoanCard from '@/features/loans/components/LoanCard.vue'
@@ -90,6 +91,7 @@ const statusFilter = ref('todos')
 
 const filteredLoans = computed(() => props.loans)
 let filterTimer
+onBeforeUnmount(() => clearTimeout(filterTimer))
 watch([search, statusFilter], () => {
   clearTimeout(filterTimer)
   filterTimer = setTimeout(() => emit('filter', { search:search.value, status:statusFilter.value }), 200)

@@ -509,6 +509,7 @@
 </template>
 
 <script setup>
+import { toCents, fromCents, currentDate } from '@/services/paytrack'
 import {
     computed,
     defineComponent,
@@ -589,7 +590,7 @@ const props = defineProps({
 
     registeredBy: {
         type: String,
-        default: 'Administrador',
+        default: 'Não identificado',
     },
 })
 
@@ -602,7 +603,7 @@ const emit = defineEmits([
 const paymentSelections = ref({})
 const expandedInstallment = ref(null)
 
-const today = getToday()
+const today = ref(currentDate())
 
 const modalDescription = computed(() => {
     if (!props.loan) {
@@ -623,126 +624,64 @@ const dailyLateFee = computed(() => {
     return Number(props.loan?.dailyLateFee) || 0
 })
 
-const installments = computed(() => {
-    if (!props.loan) {
-        return []
-    }
-
-    return Array.from(
-        {
-            length: totalInstallments.value,
-        },
-        (_, index) => {
-            const number = index + 1
-
-            const customValue =
-                props.loan.installments?.[index]
-
-            const value =
-                Number(customValue) ||
-                Number(props.loan.installmentValue) ||
-                0
-
-            const dueDate = buildDailyDueDate(
-                props.loan.firstPaymentDate,
-                index,
-            )
-
-            const currentLateDays = calculateLateDays(
-                dueDate,
-                today,
-            )
-
-            return {
-                number,
-                value,
-                dueDate,
-
-                currentLateDays,
-
-                currentLateFee:
-                    currentLateDays *
-                    dailyLateFee.value,
-
-                isOverdue:
-                    currentLateDays > 0,
-            }
-        },
-    )
-})
+const installments = computed(() =>
+  (props.loan?.installmentRows ?? []).map((item) => ({ ...item, value: Number(item.value) })),
+)
 
 const paidInstallmentsCount = computed(() => {
-    return Object.keys(
-        paymentSelections.value,
-    ).length
+  return Object.keys(paymentSelections.value).length
 })
 
-const amountPaid = computed(() => {
-    return installments.value.reduce(
-        (total, installment) => {
-            const payment =
-                getPayment(
-                    installment.number,
-                )
-
-            if (
-                !payment ||
-                !payment.paidAt
-            ) {
-                return total
-            }
-
-            return (
-                total +
-                installment.value +
-                getLateFeeReceivedAmount(
-                    installment.number,
-                )
-            )
-        },
+function partialPaid(installment) {
+  return installment.status === 'paid' ? 0 : installment.paid_amount
+}
+const amountPaid = computed(() =>
+  Number(
+    fromCents(
+      installments.value.reduce((total, item) => {
+        const payment = getPayment(item.number)
+        return (
+          total +
+          (payment?.paidAt
+            ? item.amount + toCents(getLateFeeReceivedAmount(item.number))
+            : partialPaid(item) + (item.status === 'paid' ? 0 : item.late_fee_paid_amount))
+        )
+      }, 0),
+    ),
+  ),
+)
+const outstandingLateFeeDebt = computed(() =>
+  Number(
+    fromCents(
+      installments.value.reduce(
+        (total, item) =>
+          total +
+          (isPaid(item.number)
+            ? toCents(getOutstandingLateFee(item.number))
+            : Math.max(
+                0,
+                item.late_fee_amount - (item.status === 'paid' ? 0 : item.late_fee_paid_amount),
+              )),
         0,
-    )
-})
-
-const outstandingLateFeeDebt = computed(() => {
-    return Object.keys(
-        paymentSelections.value,
-    ).reduce(
-        (total, number) =>
-            total +
-            getOutstandingLateFee(
-                Number(number),
-            ),
+      ),
+    ),
+  ),
+)
+const remainingInstallmentsValue = computed(() =>
+  Number(
+    fromCents(
+      installments.value.reduce(
+        (total, item) => total + (isPaid(item.number) ? 0 : item.amount - partialPaid(item)),
         0,
-    )
-})
-
-const remainingInstallmentsValue = computed(() => {
-    return installments.value.reduce(
-        (total, installment) => {
-            if (
-                isPaid(
-                    installment.number,
-                )
-            ) {
-                return total
-            }
-
-            return (
-                total +
-                installment.value
-            )
-        },
-        0,
-    )
-})
-
-const outstandingBalance = computed(() => {
-    return (
-        remainingInstallmentsValue.value +
-        outstandingLateFeeDebt.value
-    )
-})
+      ),
+    ),
+  ),
+)
+const outstandingBalance = computed(() =>
+  Number(
+    fromCents(toCents(remainingInstallmentsValue.value) + toCents(outstandingLateFeeDebt.value)),
+  ),
+)
 
 const hasIncompletePayments = computed(() => {
     return Object.values(
@@ -933,10 +872,7 @@ function getOutstandingLateFee(number) {
             number,
         )
 
-    return Math.max(
-        expected - received,
-        0,
-    )
+    return Number(fromCents(Math.max(toCents(expected) - toCents(received), 0)))
 }
 
 function hasPendingLateFee(number) {
@@ -948,12 +884,7 @@ function hasPendingLateFee(number) {
 }
 
 function getPaymentTotal(installment) {
-    return (
-        installment.value +
-        getLateFeeReceivedAmount(
-            installment.number,
-        )
-    )
+    return Number(fromCents(installment.amount + toCents(getLateFeeReceivedAmount(installment.number))))
 }
 
 function togglePayment(installment) {
@@ -1013,8 +944,7 @@ function updatePaymentDate(
             : 0
 
     const lateFeeAmount =
-        lateDays *
-        dailyLateFee.value
+        Number(fromCents(lateDays * toCents(dailyLateFee.value)))
 
     paymentSelections.value = {
         ...paymentSelections.value,
@@ -1072,6 +1002,7 @@ function updateCustomLateFee(
     number,
     value,
 ) {
+    if (value !== '' && !/^\d+(\.\d{0,2})?$/.test(String(value))) return
     const payment =
         getPayment(number)
 
@@ -1127,173 +1058,23 @@ function removePayment(number) {
 }
 
 function initializeSelections() {
-    expandedInstallment.value =
-        null
-
-    if (!props.loan) {
-        paymentSelections.value =
-            {}
-
-        return
-    }
-
-    const nextPayments = {}
-
-    if (
-        Array.isArray(
-            props.loan.payments,
-        ) &&
-        props.loan.payments.length
-    ) {
-        props.loan.payments.forEach(
-            (payment) => {
-                const number =
-                    Number(
-                        payment.installmentNumber,
-                    )
-
-                if (!number) {
-                    return
-                }
-
-                const installment =
-                    installments.value.find(
-                        (item) =>
-                            item.number ===
-                            number,
-                    )
-
-                const lateDays =
-                    payment.paidAt &&
-                        installment?.dueDate
-                        ? calculateLateDays(
-                            installment.dueDate,
-                            payment.paidAt,
-                        )
-                        : 0
-
-                const lateFeeAmount =
-                    lateDays *
-                    dailyLateFee.value
-
-                const receivedAmount =
-                    Number(
-                        payment.lateFeeReceivedAmount,
-                    )
-
-                let lateFeeOption = null
-                let customLateFeeValue = ''
-
-                if (lateDays <= 0) {
-                    lateFeeOption = 'full'
-                } else if (
-                    Number.isFinite(
-                        receivedAmount,
-                    )
-                ) {
-                    if (
-                        receivedAmount <= 0
-                    ) {
-                        lateFeeOption =
-                            'none'
-                    } else if (
-                        receivedAmount >=
-                        lateFeeAmount
-                    ) {
-                        lateFeeOption =
-                            'full'
-                    } else {
-                        lateFeeOption =
-                            'custom'
-
-                        customLateFeeValue =
-                            receivedAmount
-                    }
-                } else if (
-                    payment.lateFeePaid ===
-                    true
-                ) {
-                    lateFeeOption = 'full'
-                } else if (
-                    payment.lateFeePaid ===
-                    false
-                ) {
-                    lateFeeOption = 'none'
-                }
-
-                nextPayments[number] = {
-                    installmentNumber:
-                        number,
-
-                    paidAt:
-                        payment.paidAt ??
-                        '',
-
-                    registeredBy:
-                        payment.registeredBy ||
-                        props.registeredBy,
-
-                    lateDays,
-
-                    lateFeeAmount,
-
-                    lateFeeOption,
-
-                    customLateFeeValue,
-                }
-            },
-        )
-
-        paymentSelections.value =
-            nextPayments
-
-        return
-    }
-
-    const paidCount = Math.min(
-        Number(
-            props.loan.paidInstallments,
-        ) || 0,
-        totalInstallments.value,
-    )
-
-    for (
-        let index = 0;
-        index < paidCount;
-        index += 1
-    ) {
-        const number = index + 1
-
-        const installment =
-            installments.value.find(
-                (item) =>
-                    item.number ===
-                    number,
-            )
-
-        nextPayments[number] = {
-            installmentNumber:
-                number,
-
-            paidAt:
-                installment?.dueDate ??
-                '',
-
-            registeredBy:
-                props.registeredBy,
-
-            lateDays: 0,
-
-            lateFeeAmount: 0,
-
-            lateFeeOption: 'full',
-
-            customLateFeeValue: '',
-        }
-    }
-
-    paymentSelections.value =
-        nextPayments
+  today.value = currentDate()
+  expandedInstallment.value = null
+  paymentSelections.value = Object.fromEntries(
+    (props.loan?.payments ?? []).map((payment) => {
+      const fee = Number(payment.lateFeeAmount)
+      const received = Number(payment.lateFeeReceivedAmount)
+      const option = received >= fee ? 'full' : received > 0 ? 'custom' : 'none'
+      return [
+        payment.installmentNumber,
+        {
+          ...payment,
+          lateFeeOption: option,
+          customLateFeeValue: option === 'custom' ? received : '',
+        },
+      ]
+    }),
+  )
 }
 
 function confirm() {
@@ -1376,13 +1157,6 @@ function confirm() {
             outstandingBalance.value,
     })
 
-    expandedInstallment.value =
-        null
-
-    emit(
-        'update:modelValue',
-        false,
-    )
 }
 
 function cancel() {
@@ -1439,27 +1213,6 @@ function calculateLateDays(
     )
 }
 
-function buildDailyDueDate(
-    firstPaymentDate,
-    dayOffset,
-) {
-    const date =
-        parseISODate(
-            firstPaymentDate,
-        )
-
-    if (!date) {
-        return ''
-    }
-
-    date.setDate(
-        date.getDate() +
-        dayOffset,
-    )
-
-    return formatISODate(date)
-}
-
 function parseISODate(value) {
     if (!value) {
         return null
@@ -1485,32 +1238,6 @@ function parseISODate(value) {
         year,
         month - 1,
         day,
-    )
-}
-
-function formatISODate(date) {
-    return [
-        date.getFullYear(),
-
-        String(
-            date.getMonth() + 1,
-        ).padStart(
-            2,
-            '0',
-        ),
-
-        String(
-            date.getDate(),
-        ).padStart(
-            2,
-            '0',
-        ),
-    ].join('-')
-}
-
-function getToday() {
-    return formatISODate(
-        new Date(),
     )
 }
 

@@ -8,6 +8,7 @@
 
                 <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
                     <LoanClientSelect v-model="form.clientId" :clients="clients"
+                        @select-client="selectedClient = $event"
                         @request-new-client="requestNewClient" />
 
                     <label class="min-w-0">
@@ -175,6 +176,7 @@
 import {
     computed,
     reactive,
+    ref,
     watch,
 } from 'vue'
 
@@ -222,13 +224,7 @@ const form = reactive({
     firstPaymentDate: '',
 })
 
-const selectedClient = computed(() =>
-    props.clients.find(
-        (client) =>
-            String(client.id) ===
-            String(form.clientId),
-    ),
-)
+const selectedClient = ref(null)
 
 const totalWithInterest = computed(() =>
     calculateLoanTotal(
@@ -237,7 +233,10 @@ const totalWithInterest = computed(() =>
     ),
 )
 
-const profit = computed(() => fromCents(Math.max(toCents(totalWithInterest.value) - toCents(form.amount), 0)))
+const profit = computed(() => {
+    try { return fromCents(Math.max(toCents(totalWithInterest.value) - toCents(form.amount), 0)) }
+    catch { return '0.00' }
+})
 
 function formatInputValue(value) {
     return Number(value || 0).toFixed(2)

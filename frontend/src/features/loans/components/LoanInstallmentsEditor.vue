@@ -77,7 +77,7 @@ const props = defineProps({
     },
 
     total: {
-        type: Number,
+        type: [Number, String],
         default: 0,
     },
 
@@ -95,11 +95,11 @@ const emit = defineEmits([
 const installments = ref([])
 
 const currentTotal = computed(() =>
-    installments.value.reduce(
+    fromCents(installments.value.reduce(
         (sum, installment) =>
-            sum + Number(installment || 0),
+            sum + toCents(installment || 0),
         0,
-    ),
+    )),
 )
 
 const installmentColumns = computed(() => {
@@ -322,6 +322,7 @@ function updateInstallment(
     index,
     value,
 ) {
+    if (value !== '' && !/^\d+(\.\d{0,2})?$/.test(String(value))) return
     const totalCents =
         toCents(props.total)
 

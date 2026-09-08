@@ -106,7 +106,7 @@ defineEmits(['close'])
 const route = useRoute()
 
 const isActive = (item) => {
-    return item.to === route.path
+    return item.to === route.fullPath
 }
 
 const getItemClasses = (item) => [

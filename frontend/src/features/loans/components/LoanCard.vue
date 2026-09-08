@@ -43,9 +43,7 @@
 
                     <p class="mt-1 truncate text-[13px] font-medium text-[#3f3f46]">
                         {{
-                            formatCurrency(
-                                loan.installmentValue,
-                            )
+                            installmentLabel
                         }}
                     </p>
                 </div>
@@ -121,6 +119,8 @@ const statusLabel = computed(() => {
         'on-time': 'Em dia',
         attention: 'Pequeno atraso',
         overdue: 'Atrasado',
+        paid: 'Quitado',
+        cancelled: 'Cancelado',
     }
 
     return (
@@ -144,6 +144,10 @@ const statusClasses = computed(() => {
         'bg-[#52525b] text-white'
     )
 })
+
+const installmentLabel = computed(() => props.loan.installmentValue === props.loan.maxInstallmentValue
+    ? formatCurrency(props.loan.installmentValue)
+    : `${formatCurrency(props.loan.installmentValue)} – ${formatCurrency(props.loan.maxInstallmentValue)}`)
 
 const paidInstallmentsLabel =
     computed(() => {

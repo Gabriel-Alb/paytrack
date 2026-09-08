@@ -165,9 +165,9 @@ const normalizedItems = computed(() => {
                 item?.key ??
                 `${date.getTime()}-${index}`,
 
-            label: formatWeekday(date),
+            label: item.label ?? formatWeekday(date),
 
-            fullLabel: formatFullDate(date),
+            fullLabel: item.fullLabel ?? formatFullDate(date),
 
             value: Number.isFinite(value)
                 ? Math.max(0, value)

@@ -153,11 +153,12 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 
 import BaseInfoCard from '@/components/base/BaseInfoCard.vue'
 
 const props = defineProps({
+    status: { type:String, default:'todos' },
     clients: {
         type: Array,
         default: () => [],
@@ -167,10 +168,12 @@ const props = defineProps({
 const emit = defineEmits(['edit', 'history', 'status', 'filter'])
 
 const search = ref('')
-const statusFilter = ref('todos')
+const statusFilter = ref(props.status)
+watch(() => props.status, status => { statusFilter.value = status; search.value = '' })
 
 const filteredClients = computed(() => props.clients)
 let filterTimer
+onBeforeUnmount(() => clearTimeout(filterTimer))
 watch([search, statusFilter], () => {
   clearTimeout(filterTimer)
   filterTimer = setTimeout(() => emit('filter', { search:search.value, status:statusFilter.value }), 200)
