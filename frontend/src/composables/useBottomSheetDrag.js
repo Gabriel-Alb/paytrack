@@ -1,6 +1,9 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 
-export function useBottomSheetDrag() {
+// Passing a callback preserves the sheetStyle/window-listener API with immediate
+// dismissal at 110px. Without it, callers control pointer events and animation.
+export function useBottomSheetDrag(onClose) {
+  const immediateClose = typeof onClose === 'function'
   const dragY = ref(0)
   const dragging = ref(false)
   const dismissing = ref(false)
@@ -39,6 +42,12 @@ export function useBottomSheetDrag() {
   }
 
   function releasePointer() {
+    if (immediateClose) {
+      window.removeEventListener('pointermove', moveDrag)
+      window.removeEventListener('pointerup', endDrag)
+      return
+    }
+
     if (!dragTarget || pointerId === null) {
       return
     }
@@ -79,10 +88,17 @@ export function useBottomSheetDrag() {
     dragging.value = true
     closeHandler = onClose
 
+    dragStartY = event.clientY
+
+    if (immediateClose) {
+      window.addEventListener('pointermove', moveDrag)
+      window.addEventListener('pointerup', endDrag)
+      return
+    }
+
     pointerId = event.pointerId
     dragTarget = event.currentTarget
 
-    dragStartY = event.clientY
     lastY = event.clientY
     lastTime = performance.now()
     velocity = 0
@@ -95,8 +111,14 @@ export function useBottomSheetDrag() {
       return
     }
 
-    const now = performance.now()
     const deltaY = event.clientY - dragStartY
+
+    if (immediateClose) {
+      dragY.value = Math.max(0, deltaY)
+      return
+    }
+
+    const now = performance.now()
 
     const elapsed = now - lastTime
 
@@ -118,6 +140,20 @@ export function useBottomSheetDrag() {
 
   function endDrag(event) {
     if (!dragging.value) {
+      return
+    }
+
+    if (immediateClose) {
+      dragging.value = false
+      releasePointer()
+
+      const shouldClose = dragY.value >= 110
+      dragY.value = 0
+
+      if (shouldClose) {
+        onClose()
+      }
+
       return
     }
 
@@ -191,6 +227,16 @@ export function useBottomSheetDrag() {
 
     releasePointer()
   })
+
+  if (immediateClose) {
+    return {
+      sheetStyle: computed(() => ({
+        transform: `translateY(${dragY.value}px)`,
+        transition: dragging.value ? 'none' : 'transform 220ms ease',
+      })),
+      startDrag,
+    }
+  }
 
   return {
     dragY,

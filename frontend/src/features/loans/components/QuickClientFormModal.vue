@@ -117,7 +117,7 @@
 
 <script setup>
 import { reactive } from 'vue'
-import { useBottomSheetDrag } from '../composables/useBottomSheetDrag'
+import { useBottomSheetDrag } from '@/composables/useBottomSheetDrag'
 
 defineProps({
     open: {
