@@ -4,7 +4,6 @@ import {
     mdiCashMultiple,
     mdiChartBoxOutline,
     mdiCheckCircleOutline,
-    mdiCreditCardOutline,
     mdiHomeOutline,
     mdiViewDashboardOutline,
 } from '@mdi/js'

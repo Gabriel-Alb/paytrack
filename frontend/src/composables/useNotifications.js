@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 
-export const NOTIFICATION_FILTERS = [
+const NOTIFICATION_FILTERS = [
   {
     label: 'Todas',
     value: 'all',

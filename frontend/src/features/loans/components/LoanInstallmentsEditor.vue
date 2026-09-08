@@ -23,39 +23,8 @@
         </div>
 
         <div v-if="installments.length" class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div class="flex min-w-0 flex-col gap-2">
-                <label v-for="item in installmentColumns[0]" :key="item.index"
-                    class="flex items-center gap-3 rounded-lg border border-black/[0.06] bg-white px-3 py-2.5">
-                    <span
-                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#166534]/[0.07] text-xs font-semibold text-[#166534]">
-                        {{ item.index + 1 }}
-                    </span>
-
-                    <div class="min-w-0 flex-1">
-                        <span class="mb-0.5 block text-[11px] text-black/40">
-                            Parcela {{ item.index + 1 }}
-                        </span>
-
-                        <div class="flex items-center">
-                            <span class="mr-1 text-sm text-black/40">
-                                R$
-                            </span>
-
-                            <input :value="formatInputValue(item.value)" type="number" min="0" step="0.01"
-                                class="min-w-0 flex-1 bg-transparent text-sm font-medium text-[#202124] outline-none"
-                                @change="
-                                    updateInstallment(
-                                        item.index,
-                                        $event.target.value,
-                                    )
-                                    " />
-                        </div>
-                    </div>
-                </label>
-            </div>
-
-            <div class="flex min-w-0 flex-col gap-2">
-                <label v-for="item in installmentColumns[1]" :key="item.index"
+            <div v-for="(column, columnIndex) in installmentColumns" :key="columnIndex" class="flex min-w-0 flex-col gap-2">
+                <label v-for="item in column" :key="item.index"
                     class="flex items-center gap-3 rounded-lg border border-black/[0.06] bg-white px-3 py-2.5">
                     <span
                         class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#166534]/[0.07] text-xs font-semibold text-[#166534]">

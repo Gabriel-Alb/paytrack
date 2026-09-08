@@ -1195,14 +1195,6 @@ const realizedProfit = computed(() =>
     ),
 )
 
-const pendingProfit = computed(() =>
-    Math.max(
-        expectedProfit.value -
-        realizedProfit.value,
-        0,
-    ),
-)
-
 const paidRecords = computed(() =>
     periodRecords.value.filter(
         (payment) =>
@@ -1235,20 +1227,6 @@ const pendingRecords = computed(() =>
                 second.daysLate -
                 first.daysLate,
         ),
-)
-
-const receivedRecords = computed(() =>
-    periodRecords.value.filter(
-        (payment) =>
-            payment.received > 0,
-    ),
-)
-
-const totalLateFees = computed(() =>
-    sum(
-        periodRecords.value,
-        'lateFee',
-    ),
 )
 
 const largestDelay = computed(() =>
@@ -1284,17 +1262,6 @@ const profitRate = computed(() => {
     ) * 100
 })
 
-const averageReceipt = computed(() => {
-    if (!receivedRecords.value.length) {
-        return 0
-    }
-
-    return (
-        totalReceived.value /
-        receivedRecords.value.length
-    )
-})
-
 const financialCards = computed(() => [
     {
         key: 'expected',
@@ -1302,12 +1269,7 @@ const financialCards = computed(() => [
         value: formatCurrency(
             totalExpected.value,
         ),
-        icon: 'mdi-cash-clock',
-        iconBackground: 'bg-[#f2f4f1]',
-        iconColor: 'text-[#4e6847]',
         valueClass: 'text-[#27272a]',
-        detail: '',
-        detailClass: '',
     },
     {
         key: 'received',
@@ -1315,12 +1277,7 @@ const financialCards = computed(() => [
         value: formatCurrency(
             totalReceived.value,
         ),
-        icon: 'mdi-cash-check',
-        iconBackground: 'bg-[#edf7ef]',
-        iconColor: 'text-[#166534]',
         valueClass: 'text-[#166534]',
-        detail: `${formatPercentage(receiptRate.value)} do valor previsto`,
-        detailClass: 'text-[#166534]/70',
     },
     {
         key: 'pending',
@@ -1328,21 +1285,10 @@ const financialCards = computed(() => [
         value: formatCurrency(
             totalPending.value,
         ),
-        icon: 'mdi-cash-remove',
-        iconBackground:
-            totalPending.value > 0
-                ? 'bg-[#fef2f2]'
-                : 'bg-[#edf7ef]',
-        iconColor:
-            totalPending.value > 0
-                ? 'text-[#b91c1c]'
-                : 'text-[#166534]',
         valueClass:
             totalPending.value > 0
                 ? 'text-[#b91c1c]'
                 : 'text-[#166534]',
-        detail: '',
-        detailClass: '',
     },
     {
         key: 'expected-profit',
@@ -1350,12 +1296,7 @@ const financialCards = computed(() => [
         value: formatCurrency(
             expectedProfit.value,
         ),
-        icon: 'mdi-chart-line',
-        iconBackground: 'bg-[#f4f3ec]',
-        iconColor: 'text-[#7c6f35]',
         valueClass: 'text-[#27272a]',
-        detail: '',
-        detailClass: '',
     },
     {
         key: 'realized-profit',
@@ -1363,12 +1304,7 @@ const financialCards = computed(() => [
         value: formatCurrency(
             realizedProfit.value,
         ),
-        icon: 'mdi-finance',
-        iconBackground: 'bg-[#edf7ef]',
-        iconColor: 'text-[#166534]',
         valueClass: 'text-[#166534]',
-        detail: `${formatPercentage(profitRate.value)} do lucro previsto`,
-        detailClass: 'text-[#166534]/70',
     },
 ])
 
@@ -1377,8 +1313,6 @@ const paymentIndicators = computed(() => [
         key: 'expected',
         label: 'Pagamentos previstos',
         value: periodRecords.value.length,
-        icon: 'mdi-calendar-clock-outline',
-        iconClass: 'text-black/40',
         percentage: null,
         percentageClass: '',
     },
@@ -1386,8 +1320,6 @@ const paymentIndicators = computed(() => [
         key: 'paid',
         label: 'Pagamentos realizados',
         value: paidRecords.value.length,
-        icon: 'mdi-check-circle-outline',
-        iconClass: 'text-[#166534]',
         percentage: getPercentage(
             paidRecords.value.length,
             periodRecords.value.length,
@@ -1398,8 +1330,6 @@ const paymentIndicators = computed(() => [
         key: 'partial',
         label: 'Pagamentos parciais',
         value: partialRecords.value.length,
-        icon: 'mdi-circle-half-full',
-        iconClass: 'text-[#d18a28]',
         percentage: getPercentage(
             partialRecords.value.length,
             periodRecords.value.length,
@@ -1410,8 +1340,6 @@ const paymentIndicators = computed(() => [
         key: 'unpaid',
         label: 'Não pagos',
         value: unpaidRecords.value.length,
-        icon: 'mdi-alert-circle-outline',
-        iconClass: 'text-[#c24141]',
         percentage: getPercentage(
             unpaidRecords.value.length,
             periodRecords.value.length,

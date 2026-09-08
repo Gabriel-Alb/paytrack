@@ -90,7 +90,6 @@ import { RouterLink, useRoute } from 'vue-router'
 
 import {
     mdiClose,
-    mdiLogout,
 } from '@mdi/js'
 
 import { navigationSections } from './navigation'

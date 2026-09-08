@@ -27,9 +27,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
+defineProps({
     title: {
         type: String,
         required: true,
@@ -54,16 +52,5 @@ const props = defineProps({
         type: String,
         default: 'neutral',
     },
-})
-
-const indicatorClass = computed(() => {
-    const classes = {
-        positive: 'bg-[#f0fdf4] text-[#15803d]',
-        warning: 'bg-[#fffbeb] text-[#b45309]',
-        danger: 'bg-[#fef2f2] text-[#b91c1c]',
-        neutral: 'bg-[#f4f4f5] text-[#71717a]',
-    }
-
-    return classes[props.status] || classes.neutral
 })
 </script>
