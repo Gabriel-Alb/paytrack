@@ -1,6 +1,6 @@
 <template>
     <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
-        <LoansGrid :loans="loans" @open-loan="openLoanInstallments">
+        <LoansGrid :loans="loans" @filter="filters = $event" @open-loan="openLoanInstallments">
             <template #toolbar-action>
                 <button type="button"
                     class="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-sm shadow-[#166534]/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#14532d] hover:shadow-md hover:shadow-[#166534]/15 active:scale-[0.98] sm:w-auto"
@@ -12,6 +12,8 @@
             </template>
         </LoansGrid>
 
+        <div ref="target" aria-hidden="true" />
+
         <LoanFormModal :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
             @save="createLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
 
@@ -19,371 +21,72 @@
             @save="createClient" @close="returnToLoan" />
 
         <LoanInstallmentsModal v-model="isInstallmentsModalOpen" :loan="selectedLoan" @close="clearSelectedLoan"
-            @register-payment="
-                registerLoanPayment
-            " />
+            @confirm-payments="registerLoanPayment" />
     </div>
 </template>
 
 <script setup>
-import {
-    computed,
-    reactive,
-    ref,
-} from 'vue'
-
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import ClientFormModal from '@/features/clients/components/ClientFormModal.vue'
 import LoanFormModal from '@/features/loans/components/LoanFormModal.vue'
 import LoanInstallmentsModal from '@/features/loans/components/LoanInstallmentsModal.vue'
 import LoansGrid from '@/features/loans/components/LoansGrid.vue'
+import { clientsApi, loansApi } from '@/services/paytrack'
+import { perform } from '@/services/api'
+import { usePagedList } from '@/composables/usePagedList'
 
+const route = useRoute()
+const filters = ref({})
+const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => filters.value))
+const clients = ref([])
 const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)
-
-const isInstallmentsModalOpen =
-    ref(false)
-
-const selectedLoanId = ref(null)
-
-const clients = ref([
-    {
-        id: 1,
-        name: 'João da Silva',
-        cpf: '123.456.789-00',
-        status: 'ativo',
-    },
-    {
-        id: 2,
-        name: 'Maria Oliveira Santos',
-        cpf: '987.654.321-00',
-        status: 'quitado',
-    },
-    {
-        id: 3,
-        name: 'Carlos Henrique Souza',
-        cpf: '456.789.123-00',
-        status: 'negativado',
-    },
-])
-
-const loans = ref([
-    {
-        id: 48,
-        clientId: 1,
-        clientName: 'João da Silva',
-        amount: 5000,
-        interest: 12,
-        installmentCount: 12,
-        installmentValue: 466.67,
-        paidInstallments: 7,
-        dailyLateFee: 100,
-        loanDate: '2026-07-25',
-        firstPaymentDate: '2026-08-26',
-        status: 'on-time',
-        daysLate: 0,
-    },
-    {
-        id: 47,
-        clientId: 2,
-        clientName:
-            'Maria Oliveira Santos',
-        amount: 2500,
-        interest: 10,
-        installmentCount: 5,
-        installmentValue: 550,
-        paidInstallments: 2,
-        loanDate: '2026-09-03',
-        firstPaymentDate: '2026-06-15',
-        status: 'attention',
-        daysLate: 2,
-    },
-    {
-        id: 46,
-        clientId: 3,
-        clientName:
-            'Carlos Henrique Souza',
-        amount: 10000,
-        interest: 15,
-        installmentCount: 10,
-        installmentValue: 1150,
-        paidInstallments: 3,
-        loanDate: '2026-03-05',
-        firstPaymentDate: '2026-04-05',
-        status: 'overdue',
-        daysLate: 6,
-    },
-])
-
-const selectedLoan = computed(() => {
-    if (!selectedLoanId.value) {
-        return null
-    }
-
-    return (
-        loans.value.find(
-            (loan) =>
-                loan.id ===
-                selectedLoanId.value,
-        ) ?? null
-    )
-})
-
-const createEmptyDraft = () => ({
-    clientId: null,
-    amount: null,
-    interest: null,
-    installmentCount: 1,
-    installments: [],
-    installmentOverrides: {},
-    dailyLateFee: null,
-    loanDate: '',
-    firstPaymentDate: '',
-})
-
-const loanDraft = reactive(
-    createEmptyDraft(),
-)
-
-function updateLoanDraft(draft) {
-    Object.assign(
-        loanDraft,
-        draft,
-    )
-}
-
+const isInstallmentsModalOpen = ref(false)
+const selectedLoan = ref(null)
+const createEmptyDraft = () => ({ clientId:null, amount:null, interest:null, installmentCount:1,
+  installments:[], installmentOverrides:{}, dailyLateFee:null, loanDate:'', firstPaymentDate:'' })
+const loanDraft = reactive(createEmptyDraft())
+function updateLoanDraft(draft) { Object.assign(loanDraft, draft) }
 function openNewLoan() {
-    Object.assign(
-        loanDraft,
-        createEmptyDraft(),
-    )
-
-    isLoanModalOpen.value = true
+  Object.assign(loanDraft, createEmptyDraft())
+  isLoanModalOpen.value = true
 }
-
-function closeLoanModal() {
-    isLoanModalOpen.value = false
-}
-
+function closeLoanModal() { isLoanModalOpen.value = false }
 function openLoanInstallments(loan) {
-    selectedLoanId.value = loan.id
-
-    isInstallmentsModalOpen.value =
-        true
+  perform(async () => { selectedLoan.value = await loansApi.get(loan.id); isInstallmentsModalOpen.value = true })
 }
-
-function clearSelectedLoan() {
-    selectedLoanId.value = null
-}
-
-function openClientModal() {
-    isLoanModalOpen.value = false
-    isClientModalOpen.value = true
-}
-
-function setClientModalOpen(value) {
-    if (value) {
-        isClientModalOpen.value = true
-        return
-    }
-
-    returnToLoan()
-}
-
+function clearSelectedLoan() { selectedLoan.value = null }
+function openClientModal() { isLoanModalOpen.value = false; isClientModalOpen.value = true }
+function setClientModalOpen(value) { if (value) isClientModalOpen.value = true; else returnToLoan() }
 function returnToLoan() {
-    if (!isClientModalOpen.value) {
-        return
-    }
-
-    isClientModalOpen.value = false
-    isLoanModalOpen.value = true
+  if (!isClientModalOpen.value) return
+  isClientModalOpen.value = false
+  isLoanModalOpen.value = true
 }
-
 function createClient(form) {
-    const nextId =
-        Math.max(
-            ...clients.value.map(
-                (client) => client.id,
-            ),
-            0,
-        ) + 1
-
-    const newClient = {
-        id: nextId,
-        ...form,
-        status: 'sem_contrato',
-        loans: [],
-    }
-
-    clients.value.push(
-        newClient,
-    )
-
-    loanDraft.clientId =
-        newClient.id
-
+  perform(async () => {
+    const client = await clientsApi.save(null, form)
+    clients.value = [client]
+    loanDraft.clientId = client.id
     isClientModalOpen.value = false
     isLoanModalOpen.value = true
+  })
 }
-
-function createLoan(loan) {
-    const client =
-        clients.value.find(
-            (item) =>
-                item.id ===
-                loan.clientId,
-        )
-
-    if (!client) {
-        return
-    }
-
-    const nextId =
-        Math.max(
-            ...loans.value.map(
-                (item) => item.id,
-            ),
-            0,
-        ) + 1
-
-    loans.value.unshift({
-        id: nextId,
-
-        clientId:
-            client.id,
-
-        clientName:
-            client.name,
-
-        amount:
-            loan.amount,
-
-        interest:
-            loan.interest,
-
-        totalWithInterest:
-            loan.totalWithInterest,
-
-        profit:
-            loan.profit,
-
-        installmentCount:
-            loan.installmentCount,
-
-        installmentValue:
-            loan.installments?.[0] ??
-            0,
-
-        installments: [
-            ...loan.installments,
-        ],
-
-        installmentOverrides: {
-            ...(
-                loan.installmentOverrides ??
-                {}
-            ),
-        },
-
-        paidInstallments: 0,
-
-        paidInstallmentNumbers: [],
-
-        payments: [],
-
-        dailyLateFee:
-            loan.dailyLateFee,
-
-        loanDate:
-            loan.loanDate,
-
-        firstPaymentDate:
-            loan.firstPaymentDate,
-
-        status: 'on-time',
-
-        daysLate: 0,
-    })
-
-    client.status = 'ativo'
-
+function createLoan(form) {
+  perform(async () => {
+    await loansApi.create(form)
     isLoanModalOpen.value = false
-
-    Object.assign(
-        loanDraft,
-        createEmptyDraft(),
-    )
+    Object.assign(loanDraft, createEmptyDraft())
+    await reload()
+  })
 }
-
-function registerLoanPayment({
-    loanId,
-    installmentNumber,
-    paidAt,
-}) {
-    const loan =
-        loans.value.find(
-            (item) =>
-                item.id === loanId,
-        )
-
-    if (!loan) {
-        return
-    }
-
-    const currentPaidNumbers =
-        Array.isArray(
-            loan.paidInstallmentNumbers,
-        )
-            ? [
-                ...loan.paidInstallmentNumbers,
-            ]
-            : Array.from(
-                {
-                    length: Math.min(
-                        Number(
-                            loan.paidInstallments,
-                        ) || 0,
-                        Number(
-                            loan.installmentCount,
-                        ) || 0,
-                    ),
-                },
-                (_, index) =>
-                    index + 1,
-            )
-
-    if (
-        currentPaidNumbers.includes(
-            installmentNumber,
-        )
-    ) {
-        return
-    }
-
-    loan.paidInstallmentNumbers = [
-        ...currentPaidNumbers,
-        installmentNumber,
-    ].sort(
-        (first, second) =>
-            first - second,
-    )
-
-    loan.payments = [
-        ...(loan.payments ?? []),
-        {
-            installmentNumber,
-            paidAt,
-        },
-    ]
-
-    loan.paidInstallments =
-        loan.paidInstallmentNumbers.length
-
-    if (
-        loan.paidInstallments >=
-        loan.installmentCount
-    ) {
-        loan.daysLate = 0
-        loan.status = 'on-time'
-    }
+function registerLoanPayment({ loanId, payments }) {
+  perform(async () => {
+    selectedLoan.value = await loansApi.confirm(loanId, selectedLoan.value.revision, payments)
+    isInstallmentsModalOpen.value = false
+    await reload()
+  })
 }
+watch(() => route.query.loan, (id) => { if (id) openLoanInstallments({ id }) }, { immediate:true })
 </script>

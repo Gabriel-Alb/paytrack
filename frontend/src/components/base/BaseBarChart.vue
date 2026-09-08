@@ -209,18 +209,10 @@ const scaleMax = computed(() => {
     return highestValue.value * 1.12
 })
 
-const minimumWidth = computed(() => {
-    if (normalizedItems.value.length <= 7) {
-        return '100%'
-    }
-
-    return `${normalizedItems.value.length * 64}px`
-})
-
 const chartStyle = computed(() => ({
     '--chart-height': `${props.height}px`,
     '--chart-columns': normalizedItems.value.length,
-    minWidth: minimumWidth.value,
+    minWidth: '100%',
 }))
 
 const formatWeekday = (date) => {

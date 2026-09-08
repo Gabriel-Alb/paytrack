@@ -102,6 +102,8 @@ import {
     ref,
     watch,
 } from 'vue'
+import { clientsApi } from '@/services/paytrack'
+import { apiError } from '@/services/api'
 
 const props = defineProps({
     modelValue: {
@@ -124,35 +126,27 @@ const root = ref(null)
 const query = ref('')
 const dropdownOpen = ref(false)
 
+const availableClients = ref([])
 const selectedClient = computed(() =>
-    props.clients.find(
+    [...props.clients, ...availableClients.value].find(
         (client) =>
             String(client.id) === String(props.modelValue),
     ),
 )
 
-const filteredClients = computed(() => {
-    const term = query.value
-        .trim()
-        .toLowerCase()
-
-    if (!term) {
-        return props.clients
-    }
-
-    return props.clients.filter((client) => {
-        const name =
-            client.name?.toLowerCase() ?? ''
-
-        const cpf =
-            client.cpf?.toLowerCase() ?? ''
-
-        return (
-            name.includes(term) ||
-            cpf.includes(term)
-        )
-    })
-})
+const filteredClients = computed(() => availableClients.value)
+let requestVersion = 0
+let searchTimer
+async function searchClients() {
+  const version = ++requestVersion
+  try {
+    const result = await clientsApi.list({ search:query.value, limit:50 })
+    if (version === requestVersion) availableClients.value = result.items
+  } catch (error) { if (version === requestVersion) apiError.value = error.message }
+}
+watch(query, () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchClients, 200) })
+onMounted(searchClients)
+onBeforeUnmount(() => { requestVersion++; clearTimeout(searchTimer) })
 
 function openDropdown() {
     dropdownOpen.value = true

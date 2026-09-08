@@ -17,14 +17,25 @@ const router = createRouter({
           path: 'clients',
           name: 'clients',
           meta: {
-            title: 'Clientes',
+            title: 'Gestão de clientes',
           },
           component: () => import('@/features/clients/views/ClientsView.vue'),
         },
         {
           path: 'loans',
           name: 'loans',
+          meta: {
+            title: 'Empréstimos',
+          },
           component: () => import('@/features/loans/views/LoansView.vue'),
+        },
+                {
+          path: 'reports',
+          name: 'reports',
+          meta: {
+            title: 'Relatórios',
+          },
+          component: () => import('@/features/reports/views/ReportsView.vue'),
         },
       ],
     },

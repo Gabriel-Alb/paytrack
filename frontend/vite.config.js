@@ -6,6 +6,9 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  server: {
+    proxy: { '/api': 'http://127.0.0.1:3000' },
+  },
   plugins: [
     vue(),
     vueDevTools(),

@@ -4,7 +4,6 @@ import {
     mdiCashMultiple,
     mdiChartBoxOutline,
     mdiCheckCircleOutline,
-    mdiCreditCardOutline,
     mdiHomeOutline,
     mdiViewDashboardOutline,
 } from '@mdi/js'
@@ -28,10 +27,7 @@ export const navigationSections = [
                 icon: mdiCashMultiple,
                 to: '/loans',
             },
-            {
-                label: 'Pagamentos',
-                icon: mdiCreditCardOutline,
-            },
+
         ],
     },
     {
@@ -67,8 +63,5 @@ export const mobileNavigationItems = [
         label: 'Empréstimos',
         icon: mdiCashMultiple,
     },
-    {
-        label: 'Pagamentos',
-        icon: mdiCreditCardOutline,
-    },
+
 ]
