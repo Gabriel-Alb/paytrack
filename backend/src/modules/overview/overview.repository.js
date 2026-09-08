@@ -1,0 +1,142 @@
+import { database } from "../../config/database.js";
+
+export function portfolioAt(date) {
+  return database()
+    .prepare(
+      `SELECT COALESCE(SUM(MAX(0,l.total_amount-COALESCE(p.received,0))),0) AS amount
+    FROM loans l LEFT JOIN (SELECT i.loan_id,SUM(p.amount) AS received FROM payments p
+      JOIN installments i ON i.id=p.installment_id WHERE p.voided_at IS NULL AND p.payment_date<=@date GROUP BY i.loan_id) p ON p.loan_id=l.id
+    WHERE l.loan_date<=@date AND l.status<>'cancelled'`,
+    )
+    .get({ date }).amount;
+}
+
+export function receipts(start, end) {
+  return database()
+    .prepare(
+      `SELECT COALESCE(SUM(amount+late_fee_amount),0) AS amount,COUNT(*) AS count
+    FROM payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ?`,
+    )
+    .get(start, end);
+}
+
+export function receiptDays(start, end) {
+  return database()
+    .prepare(
+      `SELECT payment_date AS date,SUM(amount+late_fee_amount) AS value
+    FROM payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ? GROUP BY payment_date ORDER BY payment_date`,
+    )
+    .all(start, end);
+}
+
+export function portfolioStatus(date, attention) {
+  return database()
+    .prepare(
+      `WITH balances AS (SELECT l.id,
+    MAX(CASE WHEN i.paid_amount<i.amount THEN MAX(0,julianday(@date)-julianday(i.due_date)) ELSE 0 END) AS days,
+    SUM(CASE WHEN f.status<>'waived' THEN MAX(0,f.amount-f.paid_amount) ELSE 0 END) AS fees
+    FROM loans l JOIN installments i ON i.loan_id=l.id LEFT JOIN late_fees f ON f.installment_id=i.id
+    WHERE l.status IN ('active','overdue') GROUP BY l.id)
+    SELECT COUNT(*) AS total,COALESCE(SUM(days=0 AND COALESCE(fees,0)=0),0) AS regular,
+      COALESCE(SUM(days<=@attention AND (days>0 OR fees>0)),0) AS attention,
+      COALESCE(SUM(days>@attention),0) AS overdue FROM balances`,
+    )
+    .get({ date, attention });
+}
+
+export function upcoming(date) {
+  return database()
+    .prepare(
+      `SELECT i.id,l.id AS loan_id,c.name,i.due_date FROM installments i
+    JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
+    WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date>=?
+    ORDER BY i.due_date,i.id LIMIT 3`,
+    )
+    .all(date);
+}
+
+const reportRows = `WITH allocation AS (
+  SELECT i.*, l.client_id, l.interest_amount, l.total_amount,
+    COALESCE(SUM(i.amount) OVER (PARTITION BY i.loan_id ORDER BY i.installment_number ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS before_amount
+  FROM installments i JOIN loans l ON l.id=i.loan_id WHERE l.status<>'cancelled'
+), financial AS (
+  SELECT i.*, money_share(i.before_amount+i.amount,i.interest_amount,i.total_amount)-money_share(i.before_amount,i.interest_amount,i.total_amount) AS interest_share,
+    CASE WHEN f.status='waived' THEN 0 ELSE COALESCE(f.amount,0) END AS fee,
+    COALESCE(f.paid_amount,0) AS fee_paid,
+    (SELECT MAX(payment_date) FROM payments p WHERE p.installment_id=i.id AND p.voided_at IS NULL) AS payment_date
+  FROM allocation i LEFT JOIN late_fees f ON f.installment_id=i.id WHERE i.due_date BETWEEN @start AND @end
+), rows AS (
+  SELECT i.id,c.name AS client,i.loan_id AS contractId,i.due_date AS date,i.payment_date AS paymentDate,
+    i.amount+i.fee AS expected,i.paid_amount+i.fee_paid AS received,
+    MAX(0,i.amount+i.fee-i.paid_amount-i.fee_paid) AS pending,
+    i.interest_share+i.fee AS expectedProfit,
+    money_share(i.paid_amount,i.interest_share,i.amount)+i.fee_paid AS realizedProfit,
+    CASE WHEN i.paid_amount>=i.amount AND i.fee_paid>=i.fee THEN 'paid'
+      WHEN i.paid_amount+i.fee_paid>0 THEN 'partial' ELSE 'unpaid' END AS status,
+    CASE WHEN i.paid_amount<i.amount OR i.fee_paid<i.fee THEN MAX(0,CAST(julianday(@today)-julianday(i.due_date) AS INTEGER)) ELSE 0 END AS daysLate,
+    i.fee AS lateFee FROM financial i JOIN clients c ON c.id=i.client_id
+  )`;
+
+export function report(query, date) {
+  const params = { start: query.start, end: query.end, today: date };
+  const summary = database()
+    .prepare(
+      `${reportRows} SELECT COUNT(*) AS count,COALESCE(SUM(expected),0) AS expected,
+    COALESCE(SUM(received),0) AS received,COALESCE(SUM(pending),0) AS pending,
+    COALESCE(SUM(expectedProfit),0) AS expectedProfit,COALESCE(SUM(realizedProfit),0) AS realizedProfit,
+    COALESCE(SUM(status='paid'),0) AS paid,COALESCE(SUM(status='partial'),0) AS partial,COALESCE(SUM(status='unpaid'),0) AS unpaid,
+    COUNT(DISTINCT CASE WHEN pending>0 THEN contractId END) AS pendingContracts FROM rows`,
+    )
+    .get(params);
+  const pending = database()
+    .prepare(
+      `${reportRows} SELECT * FROM rows WHERE pending>0 ORDER BY daysLate DESC,id LIMIT 10`,
+    )
+    .all(params);
+  const where = `WHERE (@status='all' OR status=@status) AND (client LIKE @search OR CAST(contractId AS TEXT) LIKE @search
+    OR date LIKE @search OR COALESCE(paymentDate,'') LIKE @search)`;
+  const filtered = {
+    ...params,
+    status: query.status,
+    search: `%${query.search}%`,
+  };
+  const total = database()
+    .prepare(`${reportRows} SELECT COUNT(*) AS total FROM rows ${where}`)
+    .get(filtered).total;
+  const sorts = {
+    client: "client COLLATE NOCASE",
+    contractId: "contractId",
+    date: "date",
+    expected: "expected",
+    received: "received",
+    pending: "pending",
+    paymentDate: "paymentDate",
+    status: "CASE status WHEN 'paid' THEN 1 WHEN 'partial' THEN 2 ELSE 3 END",
+  };
+  const sort = sorts[query.sort];
+  const direction = query.direction === "desc" ? "DESC" : "ASC";
+  const items = database()
+    .prepare(
+      `${reportRows} SELECT * FROM rows ${where} ORDER BY ${sort} ${direction},id LIMIT @limit OFFSET @offset`,
+    )
+    .all({ ...filtered, limit: query.limit, offset: query.offset });
+  return { summary, pending, items, total };
+}
+
+export function notifications(date) {
+  return database()
+    .prepare(
+      `SELECT * FROM (
+    SELECT 'payment-'||p.id AS id,'payment' AS type,c.name AS customer,p.amount+p.late_fee_amount AS amount,
+      i.installment_number||'/'||l.installment_count AS installment,p.created_at AS datetime,0 AS days_late
+    FROM payments p JOIN installments i ON i.id=p.installment_id JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
+    WHERE p.voided_at IS NULL
+    UNION ALL
+    SELECT 'overdue-'||i.id,'overdue',c.name,i.amount-i.paid_amount,i.installment_number||'/'||l.installment_count,
+      i.due_date||'T12:00:00Z',CAST(julianday(@date)-julianday(i.due_date) AS INTEGER)
+    FROM installments i JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
+    WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date<@date
+  ) ORDER BY datetime DESC LIMIT 50`,
+    )
+    .all({ date });
+}

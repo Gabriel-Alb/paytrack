@@ -62,6 +62,7 @@
 </template>
 
 <script setup>
+import { toCents, fromCents } from '@/services/paytrack'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
@@ -118,21 +119,6 @@ const installmentColumns = computed(() => {
         items.slice(middle),
     ]
 })
-
-function toCents(value) {
-    return Math.max(
-        Math.round(
-            (Number(value) || 0) * 100,
-        ),
-        0,
-    )
-}
-
-function fromCents(value) {
-    return Number(
-        (value / 100).toFixed(2),
-    )
-}
 
 function normalizeCount(value) {
     const count =

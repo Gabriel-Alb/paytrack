@@ -1,6 +1,8 @@
-export const calculateLoanTotal = (amount, interest) => {
-  const normalizedAmount = Number(amount) || 0
-  const normalizedInterest = Number(interest) || 0
+import { toCents, fromCents, interestAmount } from '../../../../../shared/money.js'
 
-  return normalizedAmount + (normalizedAmount * normalizedInterest) / 100
+export const calculateLoanTotal = (amount, interest) => {
+  try {
+    const principal = toCents(amount)
+    return fromCents(principal + interestAmount(principal, interest || 0))
+  } catch { return '0.00' }
 }

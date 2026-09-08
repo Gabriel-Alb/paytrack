@@ -106,7 +106,7 @@
                 <div class="mt-5 flex items-center justify-between gap-4 border-t border-black/[0.06] pt-4">
                     <div class="min-w-0">
                         <p class="text-[11px] text-[#a1a1aa]">
-                            {{ loanLabel(client.loans?.length ?? 0) }}
+                            {{ loanLabel(client.loan_count ?? 0) }}
                         </p>
                     </div>
 
@@ -153,7 +153,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import BaseInfoCard from '@/components/base/BaseInfoCard.vue'
 
@@ -164,38 +164,21 @@ const props = defineProps({
     },
 })
 
-defineEmits(['edit', 'history', 'status'])
+const emit = defineEmits(['edit', 'history', 'status', 'filter'])
 
 const search = ref('')
 const statusFilter = ref('todos')
 
-const filteredClients = computed(() => {
-    const normalizedSearch = search.value.trim().toLowerCase()
-
-    return props.clients.filter((client) => {
-        const matchesStatus =
-            statusFilter.value === 'todos' ||
-            client.status === statusFilter.value
-
-        if (!normalizedSearch) {
-            return matchesStatus
-        }
-
-        const name = client.name?.toLowerCase() ?? ''
-        const cpf = client.cpf?.toLowerCase() ?? ''
-
-        return (
-            matchesStatus &&
-            (
-                name.includes(normalizedSearch) ||
-                cpf.includes(normalizedSearch)
-            )
-        )
-    })
+const filteredClients = computed(() => props.clients)
+let filterTimer
+watch([search, statusFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => emit('filter', { search:search.value, status:statusFilter.value }), 200)
 })
 
 function statusLabel(status) {
     const labels = {
+        sem_contrato: 'Sem contrato',
         ativo: 'Ativo',
         quitado: 'Quitado',
         negativado: 'Negativado',

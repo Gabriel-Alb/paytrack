@@ -183,6 +183,7 @@ import BaseModal from '@/components/base/BaseModal.vue'
 import LoanClientSelect from './LoanClientSelect.vue'
 import LoanInstallmentsEditor from './LoanInstallmentsEditor.vue'
 
+import { toCents, fromCents } from '@/services/paytrack'
 import { calculateLoanTotal } from '../utils/loanCalculations'
 
 const props = defineProps({
@@ -236,15 +237,7 @@ const totalWithInterest = computed(() =>
     ),
 )
 
-const profit = computed(() => {
-    const amount =
-        Number(form.amount) || 0
-
-    return Math.max(
-        totalWithInterest.value - amount,
-        0,
-    )
-})
+const profit = computed(() => fromCents(Math.max(toCents(totalWithInterest.value) - toCents(form.amount), 0)))
 
 function formatInputValue(value) {
     return Number(value || 0).toFixed(2)

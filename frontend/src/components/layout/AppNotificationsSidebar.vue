@@ -39,7 +39,9 @@ import NotificationFilters from './notifications/NotificationFilters.vue'
 import NotificationGroup from './notifications/NotificationGroup.vue'
 import NotificationSidebarHeader from './notifications/NotificationSidebarHeader.vue'
 
-import { notifications } from '../../mocks/notificationMock.js'
+import { getNotifications } from '@/services/paytrack'
+import { perform } from '@/services/api'
+const notifications = ref([])
 import { useNotifications } from '../../composables/useNotifications.js'
 
 const props = defineProps({
@@ -96,6 +98,7 @@ watch(
     (isOpen) => {
         if (isOpen) {
             enableSidebar()
+            perform(async () => { notifications.value = await getNotifications() })
             return
         }
 

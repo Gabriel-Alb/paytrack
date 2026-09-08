@@ -1,0 +1,21 @@
+import * as service from "./clients.service.js";
+import {
+  clientSchema,
+  clientPatchSchema,
+  clientListSchema,
+} from "./clients.validator.js";
+import { idSchema } from "../../shared/utils/validation.js";
+
+export const list = (req, res) =>
+  res.json(service.listClients(clientListSchema.parse(req.query)));
+export const get = (req, res) =>
+  res.json(service.getClient(idSchema.parse(req.params.id)));
+export const create = (req, res) =>
+  res.status(201).json(service.createClient(clientSchema.parse(req.body)));
+export const update = (req, res) =>
+  res.json(
+    service.updateClient(
+      idSchema.parse(req.params.id),
+      clientPatchSchema.parse(req.body),
+    ),
+  );

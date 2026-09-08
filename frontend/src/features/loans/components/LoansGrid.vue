@@ -68,6 +68,7 @@
 import {
     computed,
     ref,
+    watch,
 } from 'vue'
 
 import LoanCard from '@/features/loans/components/LoanCard.vue'
@@ -81,41 +82,17 @@ const props = defineProps({
 
 const emit = defineEmits([
     'open-loan',
+    'filter',
 ])
 
 const search = ref('')
 const statusFilter = ref('todos')
 
-const filteredLoans = computed(() => {
-    const normalizedSearch =
-        search.value
-            .trim()
-            .toLowerCase()
-
-    return props.loans.filter(
-        (loan) => {
-            const matchesStatus =
-                statusFilter.value ===
-                'todos' ||
-                loan.status ===
-                statusFilter.value
-
-            if (!normalizedSearch) {
-                return matchesStatus
-            }
-
-            const clientName =
-                loan.clientName?.toLowerCase() ??
-                ''
-
-            return (
-                matchesStatus &&
-                clientName.includes(
-                    normalizedSearch,
-                )
-            )
-        },
-    )
+const filteredLoans = computed(() => props.loans)
+let filterTimer
+watch([search, statusFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => emit('filter', { search:search.value, status:statusFilter.value }), 200)
 })
 
 function openLoan(loan) {
