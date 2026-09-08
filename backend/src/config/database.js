@@ -20,10 +20,13 @@ export function openDatabase(path = env.DATABASE_PATH) {
     db.pragma("journal_mode = WAL");
     db.pragma("busy_timeout = 5000");
     db.function("money_share", { deterministic: true }, proportionalAmount);
-    migrate(db, schema);
-    db.exec(schema);
-    if (db.pragma("foreign_key_check").length)
-      throw new Error("Banco contém referências inválidas.");
+    db.transaction(() => {
+      migrate(db, schema);
+      db.exec(schema);
+      if (db.pragma("foreign_key_check").length)
+        throw new Error("Banco contém referências inválidas.");
+      db.pragma("user_version = 1");
+    }).immediate();
     connection = db;
     return db;
   } catch (error) {

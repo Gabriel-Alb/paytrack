@@ -1,6 +1,7 @@
 import { database } from "../../config/database.js";
 
 const select = `SELECT l.*, c.name AS client_name, c.cpf AS client_cpf,
+  MIN(i.amount) AS min_installment_amount, MAX(i.amount) AS max_installment_amount,
   COUNT(CASE WHEN i.status='paid' THEN 1 END) AS paid_installments,
   COALESCE(SUM(i.paid_amount),0) AS paid_amount,
   COALESCE(SUM(CASE WHEN f.status<>'waived' THEN MAX(0,f.amount-f.paid_amount) ELSE 0 END),0) AS fee_remaining,

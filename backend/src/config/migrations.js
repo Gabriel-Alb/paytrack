@@ -25,6 +25,9 @@ export function migrate(db, schema) {
         SELECT installment_id, 0, paid_amount, substr(COALESCE(paid_at, updated_at), 1, 10),
           'Saldo de multa anterior à migração' FROM late_fees WHERE paid_amount > 0`);
     }
+    else if (!paymentColumns.includes("voided_at")) {
+      db.exec("ALTER TABLE payments ADD COLUMN voided_at TEXT");
+    }
     if (
       !db
         .pragma("table_info(clients)")

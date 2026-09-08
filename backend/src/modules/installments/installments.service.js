@@ -3,9 +3,6 @@ import { env } from "../../config/env.js";
 import { today } from "../../shared/utils/dates.js";
 import * as repository from "./installments.repository.js";
 
-let refreshedDatabase;
-let refreshedDate;
-
 export function refreshClient(id = null, date = today()) {
   for (const client of repository.clientBalances(
     id,
@@ -27,8 +24,6 @@ export function refreshClient(id = null, date = today()) {
 
 export function refreshFinancialState(loanId = null, date = today()) {
   const db = database();
-  if (loanId === null && refreshedDatabase === db && refreshedDate === date)
-    return;
   db.transaction(() => {
     repository.reconcileInstallments(date, loanId);
     repository.reconcileFees(date, loanId);
@@ -45,8 +40,4 @@ export function refreshFinancialState(loanId = null, date = today()) {
     if (loanId === null) refreshClient(null, date);
     else if (balances[0]) refreshClient(balances[0].client_id, date);
   })();
-  if (loanId === null) {
-    refreshedDatabase = db;
-    refreshedDate = date;
-  }
 }
