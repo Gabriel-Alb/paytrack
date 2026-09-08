@@ -19,6 +19,8 @@ export function usePagedList(fetchPage,query) {
       controller?.abort()
       page=0
       items.value=[]
+      total.value=0
+      metadata.value=null
     }
     const current=generation
     controller=new AbortController()
@@ -32,6 +34,7 @@ export function usePagedList(fetchPage,query) {
       page++
     } catch (error) {
       if (current===generation && error.name!=='AbortError') apiError.value=error.message
+      return
     } finally {
       if (current===generation) loading.value=false
     }
