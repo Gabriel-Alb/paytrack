@@ -146,16 +146,9 @@ const selectedIndexes = ref([])
 
 const normalizedItems = computed(() => {
     const items = props.items.slice(-7)
-    const today = new Date()
 
     return items.map((item, index) => {
         const value = Number(item?.value)
-        const daysAgo = items.length - 1 - index
-
-        const date = new Date(today)
-
-        date.setHours(0, 0, 0, 0)
-        date.setDate(today.getDate() - daysAgo)
 
         return {
             ...item,
@@ -163,11 +156,9 @@ const normalizedItems = computed(() => {
             key:
                 item?.id ??
                 item?.key ??
-                `${date.getTime()}-${index}`,
+                index,
 
-            label: item.label ?? formatWeekday(date),
-
-            fullLabel: item.fullLabel ?? formatFullDate(date),
+            fullLabel: item.fullLabel ?? item.label,
 
             value: Number.isFinite(value)
                 ? Math.max(0, value)
@@ -214,26 +205,6 @@ const chartStyle = computed(() => ({
     '--chart-columns': normalizedItems.value.length,
     minWidth: '100%',
 }))
-
-const formatWeekday = (date) => {
-    const value = new Intl.DateTimeFormat('pt-BR', {
-        weekday: 'short',
-    })
-        .format(date)
-        .replace('.', '')
-
-    return value.charAt(0).toUpperCase() + value.slice(1)
-}
-
-const formatFullDate = (date) => {
-    const value = new Intl.DateTimeFormat('pt-BR', {
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-    }).format(date)
-
-    return value.charAt(0).toUpperCase() + value.slice(1)
-}
 
 const getBarHeight = (value) => {
     if (value <= 0) {

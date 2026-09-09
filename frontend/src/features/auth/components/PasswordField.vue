@@ -1,21 +1,60 @@
 <template>
   <div>
-    <label :for="id" class="mb-2 block text-sm font-medium text-[#3f3f46]">{{ label }}</label>
+    <label :for="id" :class="hideLabel ? 'sr-only' : 'mb-2 block text-sm font-medium text-[#3f3f46]'">
+      {{ label }}
+    </label>
+
     <div class="relative">
-      <input :id="id" v-model="value" :type="visible ? 'text' : 'password'" :autocomplete="autocomplete" required
-        :aria-describedby="hint ? `${id}-hint` : undefined"
-        class="h-12 w-full min-w-0 rounded-lg border border-black/15 bg-white px-3 pr-24 text-base outline-none focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/15" />
-      <button type="button" :aria-label="`${visible ? 'Ocultar' : 'Mostrar'} ${label.toLowerCase()}`" :aria-pressed="visible"
-        class="absolute inset-y-0 right-0 rounded-r-lg px-3 text-xs font-medium text-[#166534] focus-visible:outline-2" @click="visible = !visible">
-        {{ visible ? 'Ocultar' : 'Mostrar' }}
+      <input :id="id" v-model="value" :type="visible ? 'text' : 'password'" :autocomplete="autocomplete"
+        :placeholder="placeholder" required :aria-describedby="hint ? `${id}-hint` : undefined"
+        class="h-10 w-full rounded-xl border border-black/[0.10] bg-[#fafafa] px-3.5 pr-10 text-[13px] text-[#18181b] outline-none transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-black/35 hover:border-black/[0.16] focus:border-[#166534]/70 focus:bg-white focus:ring-4 focus:ring-[#166534]/[0.07] lg:h-[46px] lg:px-4 lg:pr-11 lg:text-sm" />
+
+      <button type="button" :aria-label="`${visible ? 'Ocultar' : 'Mostrar'} ${label.toLowerCase()}`"
+        :aria-pressed="visible"
+        class="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-xl text-black/35 transition-colors duration-200 hover:text-[#166534] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#166534]/20 lg:w-11"
+        @click="visible = !visible">
+        <span class="mdi text-[17px] lg:text-[18px]" :class="visible ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+          aria-hidden="true" />
       </button>
     </div>
-    <p v-if="hint" :id="`${id}-hint`" class="mt-2 text-xs leading-5 text-[#71717a]">{{ hint }}</p>
+
+    <p v-if="hint" :id="`${id}-hint`" class="mt-2 text-xs leading-5 text-[#71717a]">
+      {{ hint }}
+    </p>
   </div>
 </template>
+
 <script setup>
 import { ref } from 'vue'
-defineProps({id:{type:String,required:true},label:{type:String,default:'Senha'},autocomplete:{type:String,default:'new-password'},hint:{type:String,default:''}})
-const value = defineModel({type:String,default:''})
+
+defineProps({
+  id: {
+    type: String,
+    required: true,
+  },
+  label: {
+    type: String,
+    default: 'Senha',
+  },
+  autocomplete: {
+    type: String,
+    default: 'new-password',
+  },
+  hint: {
+    type: String,
+    default: '',
+  },
+  placeholder: {
+    type: String,
+    default: '',
+  },
+  hideLabel: Boolean,
+})
+
+const value = defineModel({
+  type: String,
+  default: '',
+})
+
 const visible = ref(false)
 </script>

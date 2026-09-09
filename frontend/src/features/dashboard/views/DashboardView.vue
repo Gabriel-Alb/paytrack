@@ -56,9 +56,16 @@ const summaryCards = computed(() => [
 ])
 const receiptChart = computed(() =>
   (dashboard.value?.receipt_chart ?? []).map((item) => ({
+    id: item.date,
     label: new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' }).format(
       new Date(item.date),
     ),
+    fullLabel: new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date(item.date)),
     value: Number(fromCents(item.value)),
   })),
 )
