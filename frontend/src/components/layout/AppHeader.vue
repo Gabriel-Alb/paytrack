@@ -49,9 +49,6 @@
                 />
             </svg>
 
-            <span
-                class="absolute top-[7px] right-[7px] h-2 w-2 rounded-full border-2 border-white bg-[#b91c1c]"
-            />
         </button>
     </header>
 </template>
