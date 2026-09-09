@@ -18,7 +18,7 @@ const clientData = {
 };
 beforeEach(async () => {
   openDatabase(':memory:');
-  const password=randomBytes(24).toString('base64url');
+  const password=randomBytes(15).toString('base64url');
   await createMaster({name:'Test Master',email:'master@example.test',cpf:'12345678909',password});
   api=request.agent(app);
   const csrf=(await api.get('/api/auth/csrf')).body.csrfToken;

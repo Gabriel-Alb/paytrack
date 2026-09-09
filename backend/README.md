@@ -36,7 +36,7 @@ Após isso, abra `/login`. Pessoas novas usam `/request-access`; o master avalia
 | Master | `GET /api/users?status=pending&page=1`, `GET /api/users/:id`, `PATCH /api/users/:id/access` |
 
 O PATCH administrativo aceita apenas `{ "action": "approve" }`, `reject`, `block` ou `unblock`.
-Não há rota de criação pública de master nem alteração de role. Duplicidades no pré-cadastro respondem com o mesmo `202` genérico para reduzir enumeração; nenhum segundo registro é criado.
+Não há rota de criação pública de master nem alteração de role. Solicitações gravadas respondem `202`. Duplicidades no pré-cadastro respondem `409 ACCESS_REQUEST_CONFLICT`, sem identificar qual campo conflitou; nenhum segundo registro é criado.
 
 ## Organização
 
@@ -85,3 +85,9 @@ npm run lint
 ```
 
 Testes cobrem documentos duplicados, valores e parcelas, pagamentos, multa, status, concorrência, estorno, relatórios, seed, migração e rollback por falhas injetadas no SQLite. O frontend tem `npm run lint` e `npm run build` próprios.
+
+## Desenvolvimento na rede local
+
+Execute `npm run dev` no frontend e backend. O Vite escuta em `0.0.0.0`; abra `http://IP-DA-MAQUINA:5173` no celular e mantenha `VITE_API_URL` vazio para usar `/api` pelo proxy. O backend pode continuar em `HOST=127.0.0.1`. Em `NODE_ENV=development`, CORS e Origin/Referer aceitam localhost e os IPv4 privados das interfaces da máquina, usando o protocolo e a porta de `FRONTEND_ORIGIN`. Reinicie o backend se o IP mudar. Em produção, somente a origem HTTPS exata configurada é aceita.
+
+O Controle de Acesso consulta os usuários pendentes persistidos e recebe atualizações por `GET /api/users/events` (SSE, exclusivo do master). Solicitação e decisão confirmadas atualizam a lista aberta; reconexões e uma verificação a cada 15 segundos também sincronizam alterações de outro processo.

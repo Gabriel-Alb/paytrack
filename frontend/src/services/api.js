@@ -4,6 +4,11 @@ export const apiError = ref('')
 export const apiNotice = ref('')
 export const pendingOperation = ref(false)
 const baseUrl = import.meta.env?.VITE_API_URL || '/api'
+export const watchAccessChanges = (refresh) => {
+  const events = new EventSource(`${baseUrl}/users/events`, { withCredentials: true })
+  events.onmessage = refresh
+  return () => events.close()
+}
 let csrfToken = ''
 let csrfPromise
 let onUnauthorized = () => {}

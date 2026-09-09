@@ -12,20 +12,24 @@
   </section>
 </template>
 <script setup>
-import { ref,watch } from 'vue'
-import { request } from '@/services/api'
+import { ref,watch,onMounted,onBeforeUnmount } from 'vue'
+import { request,watchAccessChanges } from '@/services/api'
 import AccessReviewModal from '../components/AccessReviewModal.vue'
 const status=ref('pending'),items=ref([]),total=ref(0),page=ref(1),selected=ref(null),loading=ref(false),error=ref(''),feedback=ref('')
 let sequence=0
-async function load() {
+async function load(background=false) {
   const id=++sequence
-  loading.value=true;error.value=''
+  if (!background) loading.value=true
+  error.value=''
   try {const result=await request(`/users?status=${status.value}&page=${page.value}`);if(id===sequence){items.value=result.items;total.value=result.total}}
   catch(failure){if(id===sequence)error.value=failure.message}
   finally{if(id===sequence)loading.value=false}
 }
 function updated(){feedback.value='Acesso atualizado com sucesso.';load()}
 watch(status,()=>{page.value=1;load()})
-watch(page,load)
+watch(page,()=>load())
+let stopWatching
+onMounted(()=>{stopWatching=watchAccessChanges(()=>load(true))})
+onBeforeUnmount(()=>{sequence++;stopWatching?.()})
 load()
 </script>

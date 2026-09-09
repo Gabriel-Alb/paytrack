@@ -46,7 +46,7 @@
       <PasswordField
         id="new-password"
         v-model="form.password"
-        hint="De 15 a 128 caracteres. Use uma frase longa e exclusiva."
+        hint="De 6 a 20 caracteres. Use uma senha exclusiva."
         class="[&_input]:h-10 [&_input]:rounded-lg [&_input]:text-[13px] [&_label]:mb-1 [&_label]:text-xs [&_p]:mt-1 [&_p]:text-[11px] [&_p]:leading-4"
       />
 
@@ -92,6 +92,7 @@ import { RouterLink } from 'vue-router'
 import { request } from '@/services/api'
 import AuthShell from '../components/AuthShell.vue'
 import PasswordField from '../components/PasswordField.vue'
+import { validPassword, PASSWORD_MESSAGE } from '../../../../../shared/password.js'
 
 const form = reactive({
   name: '',
@@ -156,8 +157,8 @@ async function submit() {
     return
   }
 
-  if ([...form.password].length < 15 || [...form.password].length > 128) {
-    error.value = 'A senha deve ter entre 15 e 128 caracteres.'
+  if (!validPassword(form.password)) {
+    error.value = PASSWORD_MESSAGE
     return
   }
 

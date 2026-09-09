@@ -4,6 +4,7 @@ import * as repo from './auth.repository.js';
 import { authConfig } from '../../config/auth.js';
 import { AppError, requireRecord } from '../../shared/errors/AppError.js';
 import { requestSchema } from './auth.validator.js';
+import { accessEvents } from './auth.events.js';
 
 export const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 export const hashPassword = (password) => argon2.hash(password, {type: argon2.argon2id,...authConfig.password});
@@ -44,9 +45,10 @@ export async function requestAccess(data) {
       repo.audit('access_requested',null,id);
     });
   } catch (error) {
-    // Identical response for duplicates, including document collisions.
     if (error.code!=='SQLITE_CONSTRAINT_UNIQUE') throw error;
+    throw new AppError(409,'ACCESS_REQUEST_CONFLICT','Não foi possível registrar a solicitação: e-mail ou documento já cadastrado. Confira seus dados ou entre em contato com o administrador.');
   }
+  accessEvents.emit('changed');
 }
 export async function createMaster(input) {
   const data = requestSchema.parse(input);
@@ -106,7 +108,7 @@ export function reviewUser(id) {
   return {...safeUser(user),cpf:user.cpf,rg:user.rg,cnh:user.cnh,createdAt:user.created_at};
 }
 export function changeAccess(actor,id,action) {
-  return repo.atomic(() => {
+  const result = repo.atomic(() => {
     const user = requireRecord(repo.byId(id),'Usuário');
     const expected = {approve:'pending',reject:'pending',block:'active',unblock:'blocked'}[action];
     if (user.access_status!==expected) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
@@ -117,6 +119,8 @@ export function changeAccess(actor,id,action) {
     repo.audit('sessions_revoked',actor.id,id);
     return safeUser(repo.byId(id));
   });
+  accessEvents.emit('changed');
+  return result;
 }
 export const listUsers = repo.listUsers;
 export const pendingNotifications = repo.pendingNotifications;

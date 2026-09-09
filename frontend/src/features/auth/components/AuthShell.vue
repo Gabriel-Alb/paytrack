@@ -29,7 +29,7 @@
 
           <div class="max-w-[520px] pb-2">
             <p class="text-[34px] font-semibold leading-[1.08] tracking-[-0.045em] text-white xl:text-[42px]">
-              Controle de empréstimos.
+              Gestão de empréstimos.
             </p>
 
             <p class="mt-4 max-w-[420px] text-sm leading-6 text-white/70 xl:text-[15px]">

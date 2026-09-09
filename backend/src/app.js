@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { env } from "./config/env.js";
+import { isAllowedOrigin } from './config/origins.js';
 import { clientsRoutes } from "./modules/clients/clients.routes.js";
 import { loansRoutes } from "./modules/loans/loans.routes.js";
 import { installmentsRoutes } from "./modules/installments/installments.routes.js";
@@ -22,7 +23,7 @@ app.use((req,res,next) => {
     return next(new AppError(400,'HTTPS_REQUIRED','HTTPS obrigatório.'));
   next();
 });
-app.use(cors({ origin: env.FRONTEND_ORIGIN,credentials:true,methods:['GET','POST','PUT','PATCH','DELETE'],allowedHeaders:['Content-Type','X-CSRF-Token'] }));
+app.use(cors({ origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),credentials:true,methods:['GET','POST','PUT','PATCH','DELETE'],allowedHeaders:['Content-Type','X-CSRF-Token'] }));
 app.use(express.json({ limit: "128kb" }));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use('/api',loadSession);
