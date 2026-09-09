@@ -18,6 +18,61 @@ const legacySchema=legacyUsers+current.slice(current.indexOf('CREATE TABLE IF NO
 const financialTables=['clients','loans','installments','payments','late_fees'];
 const snapshot=(db)=>financialTables.map((table)=>db.prepare(`SELECT * FROM ${table}`).all());
 
+test('migration v3 amplia auditoria sem inventar autores, preserva histórico e reabre sem alterações',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'paytrack-action-migration-')),path=join(directory,'audit.db');
+  try {
+    const old=new Database(path);
+    const previous=current.replace(/^\s+(actor_name|entity_type|entity_id|details) .*\r?\n/gm,'')
+      .replace(/^CREATE INDEX IF NOT EXISTS idx_auth_audit_entity .*\r?\n/m,'');
+    old.exec(previous);
+    old.exec(`PRAGMA user_version=3;
+      INSERT INTO users(id,name,email,password_hash,role,access_status) VALUES(1,'Master','master@example.test','hash','master','active');
+      INSERT INTO auth_audit_logs(event,actor_id,subject_id,created_at) VALUES('login_success',1,1,1);
+      INSERT INTO clients(name,cpf,created_by) VALUES('Cliente legado','52998224725',1);`);
+    const finances=snapshot(old),logs=old.prepare('SELECT * FROM auth_audit_logs').all();old.close();
+    let db=openDatabase(path);
+    assert.deepEqual(snapshot(db),finances);
+    assert.deepEqual(db.prepare('SELECT id,event,actor_id,subject_id,created_at FROM auth_audit_logs').all(),logs);
+    assert.deepEqual(db.prepare('SELECT actor_name,entity_type,entity_id,details FROM auth_audit_logs').get(),{actor_name:null,entity_type:null,entity_id:null,details:null});
+    db.prepare(`INSERT INTO auth_audit_logs(event,actor_id,actor_name,entity_type,entity_id,details,created_at)
+      VALUES('client_created',1,'Nome histórico','client',1,?,2)`).run(JSON.stringify({customer:'Cliente legado'}));
+    const history=db.prepare('SELECT * FROM auth_audit_logs').all();closeDatabase();db=openDatabase(path);
+    assert.deepEqual(db.prepare('SELECT * FROM auth_audit_logs').all(),history);
+    assert.equal(db.pragma('user_version',{simple:true}),4);assert.deepEqual(db.pragma('foreign_key_check'),[]);
+  } finally {closeDatabase();rmSync(directory,{recursive:true,force:true})}
+});
+
+test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e proteções do master',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'paytrack-roles-migration-')),path=join(directory,'roles.db');
+  try {
+    const old=new Database(path);
+    old.exec(current.replaceAll("'master', 'admin', 'user'","'master', 'user'").replaceAll("'master','admin','user'","'master','user'"));
+    old.exec(`PRAGMA user_version=2;
+      INSERT INTO users(id,name,email,cpf,rg,password_hash,role,access_status) VALUES
+        (1,'Master','master@example.test','11144477735','123X','existing-hash','master','active'),
+        (2,'Pessoa','person@example.test','52998224725','456X','existing-hash','user','pending');
+      INSERT INTO auth_sessions(user_id,token_hash,csrf_token,created_at,expires_at,last_seen_at) VALUES(1,'existing-token-hash','existing-csrf',1,9999999999999,1);
+      INSERT INTO auth_audit_logs(event,actor_id,subject_id,created_at) VALUES('access_requested',1,2,1);
+      INSERT INTO clients(name,cpf,created_by) VALUES('Cliente','12345678909',1);`);
+    const users=old.prepare('SELECT * FROM users ORDER BY id').all(),finances=snapshot(old);
+    const sessions=old.prepare('SELECT * FROM auth_sessions').all(),logs=old.prepare('SELECT * FROM auth_audit_logs').all();
+    old.close();
+    let db=openDatabase(path);
+    assert.deepEqual(db.prepare('SELECT * FROM users ORDER BY id').all(),users);
+    assert.deepEqual(snapshot(db),finances);assert.deepEqual(db.prepare('SELECT * FROM auth_sessions').all(),sessions);
+    assert.deepEqual(db.prepare('SELECT * FROM auth_audit_logs').all(),logs);
+    assert.equal(db.pragma('foreign_keys',{simple:true}),1);assert.deepEqual(db.pragma('foreign_key_check'),[]);
+    db.exec("UPDATE users SET role='admin',access_status='active',approved_by=1 WHERE id=2");
+    assert.throws(()=>db.exec("UPDATE users SET role='invalid' WHERE id=2"));
+    assert.throws(()=>db.exec("UPDATE users SET role='admin' WHERE id=1"));
+    assert.throws(()=>db.exec("UPDATE users SET access_status='blocked' WHERE id=1"));
+    assert.throws(()=>db.exec('DELETE FROM users WHERE id=1'));
+    closeDatabase();db=openDatabase(path);
+    assert.equal(db.prepare('SELECT role FROM users WHERE id=2').get().role,'admin');
+    assert.equal(db.pragma('user_version',{simple:true}),4);assert.deepEqual(db.pragma('foreign_key_check'),[]);
+  } finally {closeDatabase();rmSync(directory,{recursive:true,force:true})}
+});
+
 test('migration auth sobre legado preserva usuários, finanças e FKs, normaliza e é idempotente',async()=>{
   const directory=mkdtempSync(join(tmpdir(),'paytrack-auth-migration-'));
   const path=join(directory,'legacy.db');
@@ -49,7 +104,7 @@ test('migration auth sobre legado preserva usuários, finanças e FKs, normaliza
     const users=migrated.prepare('SELECT * FROM users').all();closeDatabase();
     migrated=openDatabase(path);
     assert.deepEqual(migrated.prepare('SELECT * FROM users').all(),users);
-    assert.deepEqual(snapshot(migrated),before);assert.equal(migrated.pragma('user_version',{simple:true}),2);
+    assert.deepEqual(snapshot(migrated),before);assert.equal(migrated.pragma('user_version',{simple:true}),4);
   } finally {closeDatabase();rmSync(directory,{recursive:true,force:true})}
 });
 for(const field of ['cpf','rg','cnh','email'])test(`duplicidade normalizada de ${field} aborta toda migration sem mudanças parciais`,()=>{

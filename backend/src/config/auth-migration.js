@@ -36,3 +36,27 @@ export function migrateAuth(db) {
   if (db.prepare("SELECT 1 FROM users WHERE role NOT IN ('master','user')").get())
     throw new Error('Migração de autenticação: role legado inválido; revisar offline.');
 }
+
+// Replaces only the role column inside the initialization transaction, preserving
+// user IDs, foreign keys and the existing master. schema.sql restores its triggers.
+export function migrateRoles(db) {
+  if (!db.pragma('table_info(users)').length) return;
+  db.exec(`CREATE TEMP TABLE migrating_user_roles AS SELECT id,role FROM users;
+    DROP TRIGGER IF EXISTS users_role_insert;
+    DROP TRIGGER IF EXISTS users_role_update;
+    DROP TRIGGER IF EXISTS protect_last_master_update;
+    DROP TRIGGER IF EXISTS protect_last_master_delete;
+    ALTER TABLE users DROP COLUMN role;
+    ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'
+      CHECK(role IN ('master','admin','user'));
+    UPDATE users SET role=(SELECT role FROM migrating_user_roles WHERE id=users.id);
+    DROP TABLE migrating_user_roles;`);
+}
+
+export function migrateActionAudit(db) {
+  const columns = db.pragma('table_info(auth_audit_logs)').map(({name}) => name);
+  if (!columns.length) return;
+  for (const [name,type] of Object.entries({actor_name:'TEXT',entity_type:'TEXT',entity_id:'INTEGER',details:'TEXT CHECK(details IS NULL OR json_valid(details))'})) {
+    if (!columns.includes(name)) db.exec(`ALTER TABLE auth_audit_logs ADD COLUMN ${name} ${type}`);
+  }
+}

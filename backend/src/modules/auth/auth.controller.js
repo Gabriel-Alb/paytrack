@@ -25,7 +25,8 @@ export async function login(req,res) {
   setCookie(res,result.token,true);
   res.json({user:result.user,csrfToken:result.csrfToken});
 }
-export const me = (req,res) => res.json({user:service.safeUser(req.user)});
+export const me = (req,res) => res.json({user:service.profileUser(req.user)});
+export const updateProfile = (req,res) => res.json({user:service.updateProfile(req.user,req.body)});
 export function logout(req,res) {
   service.logout(req.authSession,req.user,req.path==='/logout-all');
   clearCookie(res);
@@ -42,7 +43,7 @@ export function watchUsers(req,res) {
   res.flushHeaders();
   const refresh = () => {
     loadSession(req,res,() => {});
-    if (req.user?.role !== 'master') { res.end(); return; }
+    if (!['master','admin'].includes(req.user?.role)) { res.end(); return; }
     res.write('data: refresh\n\n');
   };
   accessEvents.on('changed',refresh);
@@ -52,4 +53,4 @@ export function watchUsers(req,res) {
   refresh();
 }
 export const reviewUser = (req,res) => res.json(service.reviewUser(idSchema.parse(req.params.id)));
-export const changeAccess = (req,res) => res.json(service.changeAccess(req.user,idSchema.parse(req.params.id),validator.accessSchema.parse(req.body).action));
+export const changeAccess = (req,res) => res.json(service.changeAccess(req.user,idSchema.parse(req.params.id),req.body));

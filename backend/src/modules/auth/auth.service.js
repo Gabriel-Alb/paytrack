@@ -3,7 +3,7 @@ import argon2 from 'argon2';
 import * as repo from './auth.repository.js';
 import { authConfig } from '../../config/auth.js';
 import { AppError, requireRecord } from '../../shared/errors/AppError.js';
-import { requestSchema } from './auth.validator.js';
+import { requestSchema, profileSchema, accessSchema } from './auth.validator.js';
 import { accessEvents } from './auth.events.js';
 
 export const hashToken = (token) => createHash('sha256').update(token).digest('hex');
@@ -17,6 +17,23 @@ export async function verifyPassword(hash,password) {
   catch { await argon2.verify(await dummy(),password); return false; }
 }
 export const safeUser = (user) => ({id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status});
+export const profileUser = (user) => ({...safeUser(user),cpf:user.cpf,rg:user.rg});
+export function updateProfile(user,input) {
+  const {email} = profileSchema.parse(input);
+  let result;
+  try {
+    result = repo.atomic(() => {
+      repo.saveEmail(user.id,email);
+      repo.audit('profile_updated',user.id,user.id);
+      return profileUser(repo.byId(user.id));
+    });
+  } catch (error) {
+    if (error.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error;
+    throw new AppError(409,'EMAIL_CONFLICT','Este e-mail já está cadastrado.');
+  }
+  accessEvents.emit('changed');
+  return result;
+}
 const invalidCredentials = () => new AppError(401,'INVALID_CREDENTIALS','E-mail ou senha inválidos.');
 export function newSession(userId=null) {
   const token = randomBytes(32).toString('base64url');
@@ -107,13 +124,16 @@ export function reviewUser(id) {
   const user = requireRecord(repo.byId(id),'Usuário');
   return {...safeUser(user),cpf:user.cpf,rg:user.rg,cnh:user.cnh,createdAt:user.created_at};
 }
-export function changeAccess(actor,id,action) {
+export function changeAccess(actor,id,input) {
+  if (!['master','admin'].includes(actor.role)) throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
+  const {action,role} = accessSchema.parse(input);
   const result = repo.atomic(() => {
     const user = requireRecord(repo.byId(id),'Usuário');
     const expected = {approve:'pending',reject:'pending',block:'active',unblock:'blocked'}[action];
     if (user.access_status!==expected) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
     if (user.id===actor.id) throw new AppError(409,'SELF_ACCESS_CHANGE','Não é possível alterar o próprio acesso.');
-    repo.setAccess(id,action,actor.id);
+    if (user.role==='master' && actor.role!=='master') throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
+    repo.setAccess(id,action,actor.id,role);
     repo.revokeAll(id);
     repo.audit({approve:'access_approved',reject:'access_rejected',block:'user_blocked',unblock:'user_unblocked'}[action],actor.id,id);
     repo.audit('sessions_revoked',actor.id,id);

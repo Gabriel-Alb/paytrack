@@ -12,7 +12,7 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         {path:'account',name:'account',meta:{title:'Minha conta'},component:()=>import('@/features/auth/views/AccountView.vue')},
-        {path:'users',name:'users',meta:{title:'Controle de acesso',master:true},component:()=>import('@/features/auth/views/UsersView.vue')},
+        {path:'users',name:'users',meta:{title:'Controle de acesso',admin:true},component:()=>import('@/features/auth/views/UsersView.vue')},
         {
           path: '',
           name: 'dashboard',
@@ -52,7 +52,7 @@ router.beforeEach(async (to) => {
   const user = await restoreAuth()
   if (!user && !to.meta.public) return {name:'login'}
   if (user && to.meta.public) return {name:'dashboard'}
-  if (to.meta.master && user?.role!=='master') return {name:'dashboard'}
+  if (to.meta.admin && !['master','admin'].includes(user?.role)) return {name:'dashboard'}
 })
 onSessionExpired(() => {
   if (router.currentRoute.value.matched.length && !router.currentRoute.value.meta.public)
