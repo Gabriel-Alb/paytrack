@@ -2,6 +2,8 @@ import * as service from './auth.service.js';
 import * as validator from './auth.validator.js';
 import { idSchema } from '../../shared/utils/validation.js';
 import { authConfig, cookieOptions } from '../../config/auth.js';
+import { accessEvents } from './auth.events.js';
+import { loadSession } from './auth.middleware.js';
 
 function setCookie(res,token,authenticated) {
   res.cookie(authConfig.cookieName,token,{...cookieOptions,maxAge:authenticated ? authConfig.absoluteMs : authConfig.anonymousMs});
@@ -15,7 +17,7 @@ export function csrf(req,res) {
 }
 export async function requestAccess(req,res) {
   await service.requestAccess(validator.requestSchema.parse(req.body));
-  res.status(202).json({message:'Solicitação recebida. Se os dados estiverem disponíveis, seu acesso seguirá para avaliação.'});
+  res.status(202).json({message:'Solicitação registrada. Aguarde a avaliação do administrador.'});
 }
 export async function login(req,res) {
   const result=await service.login(validator.loginSchema.parse(req.body),req.authSession);
@@ -35,5 +37,19 @@ export async function changePassword(req,res) {
   res.json({message:'Senha alterada. Entre novamente.'});
 }
 export const listUsers = (req,res) => res.json(service.listUsers(validator.usersQuerySchema.parse(req.query)));
+export function watchUsers(req,res) {
+  res.set({'Content-Type':'text/event-stream','X-Accel-Buffering':'no'});
+  res.flushHeaders();
+  const refresh = () => {
+    loadSession(req,res,() => {});
+    if (req.user?.role !== 'master') { res.end(); return; }
+    res.write('data: refresh\n\n');
+  };
+  accessEvents.on('changed',refresh);
+  // Recheck the session and refresh after reconnects or changes by another process.
+  const heartbeat = setInterval(refresh,15000);
+  res.on('close',() => { clearInterval(heartbeat);accessEvents.off('changed',refresh); });
+  refresh();
+}
 export const reviewUser = (req,res) => res.json(service.reviewUser(idSchema.parse(req.params.id)));
 export const changeAccess = (req,res) => res.json(service.changeAccess(req.user,idSchema.parse(req.params.id),validator.accessSchema.parse(req.body).action));

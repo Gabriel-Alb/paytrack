@@ -16,5 +16,6 @@ authRoutes.post('/change-password',...passwordLimits,controller.changePassword);
 export const usersRoutes=Router();
 usersRoutes.use(requireRole('master'));
 usersRoutes.get('/',controller.listUsers);
+usersRoutes.get('/events',controller.watchUsers);
 usersRoutes.get('/:id',controller.reviewUser);
 usersRoutes.patch('/:id/access',controller.changeAccess);

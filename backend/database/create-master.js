@@ -41,7 +41,7 @@ try {
     for (const [field,label] of Object.entries({name:'Nome',email:'E-mail',cpf:'CPF',rg:'RG (opcional)',cnh:'CNH (opcional)'}))
       form[field]=await input.question(`${label}: `);
   } finally { input.close(); }
-  form.password=await hiddenPassword('Senha (15–128 caracteres, sem eco): ');
+  form.password=await hiddenPassword('Senha (6–20 caracteres, sem eco): ');
   let confirmation=await hiddenPassword('Confirme a senha: ');
   if (form.password!==confirmation) throw new Error('As senhas não coincidem.');
   confirmation='';
@@ -49,7 +49,7 @@ try {
   process.stdout.write('Master criado com acesso ativo.\n');
 } catch (error) {
   const message=error.code==='MASTER_EXISTS' ? 'Já existe um master.' :
-    error.name==='ZodError' ? 'Dados inválidos. Verifique e-mail, documentos e senha de 15–128 caracteres.' :
+    error.name==='ZodError' ? 'Dados inválidos. Verifique e-mail, documentos e senha de 6–20 caracteres.' :
     error.code?.startsWith('SQLITE') ? 'Não foi possível criar: verifique duplicidade de dados e o banco.' :
     ['Cancelado.','As senhas não coincidem.','Já existe um master. Nenhum usuário foi criado.','Use npm run auth:create-master em um terminal interativo, sem argumentos.'].includes(error.message) ? error.message : 'Não foi possível criar o master. Verifique a configuração.';
   process.stderr.write(`${message}\n`);

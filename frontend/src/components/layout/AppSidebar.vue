@@ -2,7 +2,7 @@
     <Transition enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0"
         leave-active-class="transition-opacity duration-200" leave-to-class="opacity-0">
         <button v-if="isOpen" type="button" aria-label="Fechar menu"
-            class="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] lg:hidden" @click="$emit('close')" />
+            class="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] lg:hidden" @click="closeSidebar" />
     </Transition>
 
     <aside :class="[
@@ -11,7 +11,7 @@
     ]">
         <div
             class="flex h-[68px] shrink-0 items-center justify-between border-b border-black/[0.05] px-5 lg:h-[76px] lg:px-6">
-            <RouterLink to="/" class="flex items-center gap-3" @click="$emit('close')">
+            <RouterLink to="/" class="flex items-center gap-3" @click="closeSidebar">
                 <div
                     class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#166534] text-sm font-bold text-white">
                     P
@@ -30,7 +30,7 @@
 
             <button type="button" aria-label="Fechar menu"
                 class="flex h-9 w-9 items-center justify-center rounded-lg text-[#71717a] transition-colors hover:bg-[#f4f4f5] lg:hidden"
-                @click="$emit('close')">
+                @click="closeSidebar">
                 <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true">
                     <path :d="mdiClose" fill="currentColor" />
                 </svg>
@@ -45,7 +45,7 @@
                 </p>
 
                 <template v-for="item in section.items" :key="item.label">
-                    <RouterLink v-if="item.to" :to="item.to" :class="getItemClasses(item)" @click="$emit('close')">
+                    <RouterLink v-if="item.to" :to="item.to" :class="getItemClasses(item)" @click="closeSidebar">
                         <svg viewBox="0 0 24 24" class="h-[19px] w-[19px] shrink-0" aria-hidden="true">
                             <path :d="item.icon" fill="currentColor" />
                         </svg>
@@ -64,13 +64,52 @@
             </section>
         </nav>
 
-        <div class="border-t border-black/[0.06] p-4">
-            <RouterLink v-if="user?.role === 'master'" to="/users" class="mb-2 block rounded-lg px-2 py-3 text-sm font-medium text-[#166534]" @click="$emit('close')">Controle de acesso</RouterLink>
-            <RouterLink to="/account" class="mb-2 block rounded-lg px-2 py-3 text-sm text-[#52525b]" @click="$emit('close')">Minha conta</RouterLink>
-            <div class="flex items-center gap-3 px-2 py-2">
+        <div ref="userMenuRef" class="relative border-t border-black/[0.06] p-3">
+            <Transition enter-active-class="transition duration-150 ease-out" enter-from-class="translate-y-1 opacity-0"
+                enter-to-class="translate-y-0 opacity-100" leave-active-class="transition duration-100 ease-in"
+                leave-from-class="translate-y-0 opacity-100" leave-to-class="translate-y-1 opacity-0">
+                <div v-if="isUserMenuOpen"
+                    class="absolute right-3 bottom-full left-3 mb-2 overflow-hidden rounded-xl border border-black/[0.08] bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.10)]">
+                    <RouterLink to="/account"
+                        class="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#52525b] transition-colors hover:bg-[#f7f7f8] hover:text-[#27272a]"
+                        @click="handleMenuNavigation">
+                        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] shrink-0 text-[#71717a]" aria-hidden="true">
+                            <path :d="mdiAccountOutline" fill="currentColor" />
+                        </svg>
+
+                        <span>Minha conta</span>
+                    </RouterLink>
+
+                    <RouterLink v-if="user?.role === 'master'" to="/users"
+                        class="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#52525b] transition-colors hover:bg-[#f7f7f8] hover:text-[#27272a]"
+                        @click="handleMenuNavigation">
+                        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] shrink-0 text-[#71717a]" aria-hidden="true">
+                            <path :d="mdiAccountKeyOutline" fill="currentColor" />
+                        </svg>
+
+                        <span>Controle de acesso</span>
+                    </RouterLink>
+
+                    <div class="my-1 border-t border-black/[0.06]" />
+
+                    <button type="button" :disabled="pendingOperation"
+                        class="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#dc2626] transition-colors hover:bg-[#fef2f2] disabled:pointer-events-none disabled:opacity-50"
+                        @click="signOut">
+                        <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] shrink-0" aria-hidden="true">
+                            <path :d="mdiLogout" fill="currentColor" />
+                        </svg>
+
+                        <span>Sair </span>
+                    </button>
+                </div>
+            </Transition>
+
+            <button type="button" :aria-expanded="isUserMenuOpen"
+                class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[#f7f7f8]"
+                @click="toggleUserMenu">
                 <div
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f0fdf4] text-xs font-semibold text-[#166534]">
-                    {{ user?.name?.slice(0, 1).toUpperCase() }}
+                    {{ userInitial }}
                 </div>
 
                 <div class="min-w-0 flex-1">
@@ -82,20 +121,31 @@
                         {{ user?.role === 'master' ? 'Administrador' : 'Usuário' }}
                     </p>
                 </div>
-            </div>
-            <button type="button" :disabled="pendingOperation" class="mt-2 min-h-11 w-full rounded-lg border border-black/10 text-sm font-medium text-[#52525b] disabled:opacity-50" @click="signOut">Sair do sistema</button>
+
+                <svg viewBox="0 0 24 24"
+                    class="h-[18px] w-[18px] shrink-0 text-[#a1a1aa] transition-transform duration-200"
+                    :class="isUserMenuOpen && 'rotate-180'" aria-hidden="true">
+                    <path :d="mdiChevronUp" fill="currentColor" />
+                </svg>
+            </button>
         </div>
     </aside>
 </template>
 
 <script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
-import { perform,pendingOperation } from '@/services/api'
 
 import {
+    mdiAccountKeyOutline,
+    mdiAccountOutline,
+    mdiChevronUp,
     mdiClose,
+    mdiLogout,
 } from '@mdi/js'
+
+import { useAuth } from '@/composables/useAuth'
+import { perform, pendingOperation } from '@/services/api'
 
 import { navigationSections } from './navigation'
 
@@ -106,12 +156,51 @@ defineProps({
     },
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
 
 const route = useRoute()
 const router = useRouter()
-const {user,logout} = useAuth()
-const signOut = () => perform(async () => { await logout(); await router.replace('/login') })
+
+const { user, logout } = useAuth()
+
+const userMenuRef = ref(null)
+const isUserMenuOpen = ref(false)
+
+const userInitial = computed(() => {
+    return user.value?.name?.slice(0, 1).toUpperCase() ?? ''
+})
+
+const toggleUserMenu = () => {
+    isUserMenuOpen.value = !isUserMenuOpen.value
+}
+
+const closeUserMenu = () => {
+    isUserMenuOpen.value = false
+}
+
+const closeSidebar = () => {
+    closeUserMenu()
+    emit('close')
+}
+
+const handleMenuNavigation = () => {
+    closeSidebar()
+}
+
+const handleClickOutside = (event) => {
+    if (!userMenuRef.value?.contains(event.target)) {
+        closeUserMenu()
+    }
+}
+
+const signOut = () => {
+    closeUserMenu()
+
+    return perform(async () => {
+        await logout()
+        await router.replace('/login')
+    })
+}
 
 const isActive = (item) => {
     return item.to === route.fullPath
@@ -123,4 +212,12 @@ const getItemClasses = (item) => [
         ? 'bg-[#edf7ef] font-semibold text-[#166534]'
         : 'font-medium text-[#71717a] hover:bg-[#f7f7f8] hover:text-[#3f3f46]',
 ]
+
+onMounted(() => {
+    document.addEventListener('click', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+    document.removeEventListener('click', handleClickOutside)
+})
 </script>

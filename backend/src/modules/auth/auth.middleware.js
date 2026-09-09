@@ -1,4 +1,4 @@
-import { env } from '../../config/env.js';
+import { isAllowedOrigin } from '../../config/origins.js';
 import { authConfig } from '../../config/auth.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import * as service from './auth.service.js';
@@ -25,7 +25,7 @@ export function trustedOrigin(req,_res,next) {
   if (!origin && req.headers.referer) {
     try { origin = new URL(req.headers.referer).origin; } catch { origin = 'invalid'; }
   }
-  if (origin && origin!==env.FRONTEND_ORIGIN)
+  if (origin && !isAllowedOrigin(origin))
     return next(new AppError(403,'ORIGIN_REJECTED','Origem não autorizada.'));
   if (!['GET','HEAD','OPTIONS'].includes(req.method) && !origin)
     return next(new AppError(403,'ORIGIN_REJECTED','Origem não autorizada.'));

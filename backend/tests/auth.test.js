@@ -11,12 +11,14 @@ import { createMaster,hashPassword,hashToken,verifyPassword } from '../src/modul
 import { passwordSchema } from '../src/modules/auth/auth.validator.js';
 import * as repo from '../src/modules/auth/auth.repository.js';
 import { errorHandler } from '../src/shared/middleware/errors.js';
+import { networkInterfaces } from 'node:os';
+import { accessEvents } from '../src/modules/auth/auth.events.js';
 
 let password,master;
 const data = () => ({name:'Pessoa teste',email:'person@example.test',cpf:'529.982.247-25',rg:'12.345-x',cnh:'12345678901',password});
 beforeEach(async()=>{
   openDatabase(':memory:');
-  password=randomBytes(24).toString('base64url');
+  password=randomBytes(15).toString('base64url');
   master=await createMaster({name:'Master teste',email:'master@example.test',cpf:'11144477735',password});
 });
 afterEach(()=>{mock.restoreAll();closeDatabase()});
@@ -54,8 +56,77 @@ test('pré-cadastro normaliza documentos/e-mail, persiste Argon2id e não autent
   assert.equal(database().prepare('SELECT count(*) n FROM auth_sessions WHERE user_id IS NOT NULL').get().n,0);
   assert.equal(database().prepare("SELECT count(*) n FROM auth_audit_logs WHERE event='access_requested'").get().n,1);
 });
+
+for (const length of [5,6,20,21]) test(`senha de ${length} caracteres em cadastro, login, troca e master`,async()=>{
+  const secret='x'.repeat(length),valid=length>=6 && length<=20;
+  const {agent}=await browser();
+  await agent.post('/api/auth/request-access').send({...data(),password:secret}).expect(valid ? 202 : 400);
+  await agent.post('/api/auth/login').send({email:data().email,password:secret}).expect(valid ? 403 : 400);
+  const admin=await signIn();
+  await admin.agent.post('/api/auth/change-password').send({currentPassword:password,newPassword:secret}).expect(valid ? 200 : 400);
+  await assert.rejects(createMaster({...data(),password:secret}),valid ? {code:'MASTER_EXISTS'} : {name:'ZodError'});
+});
+
+test('solicitação pela API aparece na lista do master e emite evento após commit; aprovação/rejeição atualizam as listas',async()=>{
+  const admin=await signIn(),visitor=await browser();
+  const before=(await admin.agent.get('/api/users?status=pending').expect(200)).body;
+  assert.equal(before.total,0);
+  const server=app.listen(0,'127.0.0.1');
+  await new Promise((resolve)=>server.once('listening',resolve));
+  const abort=new AbortController();
+  try {
+    const stream=await fetch(`http://127.0.0.1:${server.address().port}/api/users/events`,{
+      headers:{Cookie:admin.result.headers['set-cookie'][0].split(';')[0],Origin:env.FRONTEND_ORIGIN},signal:abort.signal,
+    });
+    assert.equal(stream.status,200);assert.match(stream.headers.get('content-type'),/text\/event-stream/);
+    const reader=stream.body.getReader();
+    assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
+    for (const action of ['approve','reject']) {
+      const input=action==='approve' ? data() : {...data(),email:'other@example.test',cpf:'12345678909',rg:'',cnh:''};
+      await visitor.agent.post('/api/auth/request-access').send(input).expect(202);
+      const notification=await reader.read();
+      assert.match(new TextDecoder().decode(notification.value),/data: refresh/);
+      const list=(await admin.agent.get('/api/users?status=pending').expect(200)).body;
+      assert.equal(list.total,1);assert.equal(list.items[0].email,input.email);
+      const saved=repo.byEmail(input.email);
+      assert.equal(saved.access_status,'pending');
+      await admin.agent.patch(`/api/users/${saved.id}/access`).send({action}).expect(200);
+      assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
+      assert.equal((await admin.agent.get('/api/users?status=pending').expect(200)).body.total,0);
+      const status=action==='approve' ? 'active' : 'rejected';
+      assert.ok((await admin.agent.get(`/api/users?status=${status}`).expect(200)).body.items.some(({id})=>id===saved.id));
+      await signIn(input.email,password,action==='approve' ? 200 : 403);
+    }
+    await admin.agent.post('/api/auth/logout').expect(200);
+    accessEvents.emit('changed');
+    assert.equal((await reader.read()).done,true);
+  } finally {
+    abort.abort();server.closeAllConnections();
+    await new Promise((resolve)=>server.close(resolve));
+  }
+  assert.equal(accessEvents.listenerCount('changed'),0);
+});
+
+test('origens locais usam a mesma política no CORS, preflight, Referer e escritas com CSRF',async()=>{
+  const hosts=['localhost','127.0.0.1',...Object.values(networkInterfaces()).flat().filter((entry)=>entry.family==='IPv4' && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address)).map(({address})=>address)];
+  for (const host of new Set(hosts)) {
+    const origin=new URL(env.FRONTEND_ORIGIN);origin.hostname=host;
+    const agent=request.agent(app);
+    const preflight=await agent.options('/api/auth/login').set('Origin',origin.origin).set('Access-Control-Request-Method','POST').expect(204);
+    assert.equal(preflight.headers['access-control-allow-origin'],origin.origin);
+    const csrf=await agent.get('/api/auth/csrf').set('Origin',origin.origin).expect(200);
+    assert.equal(csrf.headers['access-control-allow-origin'],origin.origin);
+    const login=await agent.post('/api/auth/login').set('Origin',origin.origin).set('X-CSRF-Token',csrf.body.csrfToken).send({email:'master@example.test',password}).expect(200);
+    await agent.get('/api/users').set('Referer',`${origin.origin}/users`).expect(200);
+    await agent.post('/api/auth/logout').set('Origin',origin.origin).set('X-CSRF-Token',login.body.csrfToken).expect(200);
+  }
+  for (const origin of ['http://localhost:9999','http://192.168.255.254:5173','http://localhost.evil.example:5173','null']) {
+    const denied=await request(app).get('/api/auth/csrf').set('Origin',origin).expect(403);
+    assert.equal(denied.headers['access-control-allow-origin'],undefined);
+  }
+});
 test('Argon2id usa salts diferentes por senha e verifica sem truncamento',async()=>{
-  const long='😀'.repeat(128);
+  const long='😀'.repeat(10);
   const first=await hashPassword(long),second=await hashPassword(long);
   assert.ok(first!==second);assert.ok(first.split('$')[4]!==second.split('$')[4]);
   assert.ok(Buffer.from(first.split('$')[4],'base64').length>=16);
@@ -67,10 +138,10 @@ for (const field of ['role','access_status','approved_by','password_hash'])
     await agent.post('/api/auth/request-access').send({...data(),[field]:field==='role'?'master':'active'}).expect(400);
     assert.equal(count(),1);
   });
-test('valida CPF, email, tipo, comprimento e payload; permite 128 pontos Unicode e espaços',async()=>{
-  assert.equal(passwordSchema.parse('😀'.repeat(128)),'😀'.repeat(128));
-  assert.equal(passwordSchema.parse('uma frase longa com espaços'), 'uma frase longa com espaços');
-  assert.throws(()=>passwordSchema.parse('x'.repeat(129)));
+test('valida CPF, email, tipo, comprimento e payload; permite espaços e Unicode',async()=>{
+  assert.equal(passwordSchema.parse('😀'.repeat(10)),'😀'.repeat(10));
+  assert.equal(passwordSchema.parse('frase com espaços'), 'frase com espaços');
+  assert.throws(()=>passwordSchema.parse('x'.repeat(21)));
   for(const change of [{cpf:'11111111111'},{email:'bad'},{password:'curta'},{password:15}]) {
     const {agent}=await browser();
     await agent.post('/api/auth/request-access').send({...data(),...change}).expect(400);
@@ -79,12 +150,13 @@ test('valida CPF, email, tipo, comprimento e payload; permite 128 pontos Unicode
   await agent.post('/api/auth/login').send({email:'a'.repeat(140000),password}).expect(400);
 });
 for(const key of ['email','cpf','rg','cnh'])
-  test(`duplicidade de ${key} mantém unicidade sem enumerar dados`,async()=>{
+  test(`duplicidade de ${key} informa falha sem identificar o campo em conflito`,async()=>{
     const {agent}=await browser();
-    const first=await agent.post('/api/auth/request-access').send(data()).expect(202);
+    await agent.post('/api/auth/request-access').send(data()).expect(202);
     const second={...data(),email:'other@example.test',cpf:'12345678909',rg:'54321X',cnh:'10987654321',[key]:key==='email'?'PERSON@EXAMPLE.TEST':data()[key]};
-    const result=await agent.post('/api/auth/request-access').send(second).expect(202);
-    assert.deepEqual(result.body,first.body);assert.equal(count(),2);
+    const result=await agent.post('/api/auth/request-access').send(second).expect(409);
+    assert.equal(result.body.error.code,'ACCESS_REQUEST_CONFLICT');assert.equal(count(),2);
+    assert.equal(repo.byEmail('other@example.test'),undefined);
   });
 for(const status of ['pending','rejected','blocked'])
   test(`${status} não recebe sessão, estado só é revelado após senha correta`,async()=>{
@@ -123,26 +195,26 @@ test('senha incorreta, inexistente e email de SQL injection não autenticam',asy
   assert.equal(count(),2);
 });
 test('rate limit por conta soma IPs e sobrevive a novos agentes',async()=>{
-  for(let n=0;n<env.AUTH_LOGIN_ACCOUNT_LIMIT;n++) await signIn('missing@example.test','wrong',401);
-  const {result}=await signIn('MISSING@EXAMPLE.TEST','wrong',429);
+  for(let n=0;n<env.AUTH_LOGIN_ACCOUNT_LIMIT;n++) await signIn('missing@example.test','errada',401);
+  const {result}=await signIn('MISSING@EXAMPLE.TEST','errada',429);
   assert.equal(result.body.error.code,'TOO_MANY_ATTEMPTS');
   assert.equal(result.headers['x-ratelimit-remaining'],undefined);
 });
 test('rate limit por IP bloqueia emails variados e não confia em X-Forwarded-For',async()=>{
   const {agent}=await browser();
   for(let n=0;n<env.AUTH_LOGIN_IP_LIMIT;n++)
-    await agent.post('/api/auth/login').set('X-Forwarded-For',`198.51.100.${n+1}`).send({email:`test${n}@example.test`,password:'wrong'}).expect(401);
-  await agent.post('/api/auth/login').send({email:'new@example.test',password:'wrong'}).expect(429);
+    await agent.post('/api/auth/login').set('X-Forwarded-For',`198.51.100.${n+1}`).send({email:`test${n}@example.test`,password:'errada'}).expect(401);
+  await agent.post('/api/auth/login').send({email:'new@example.test',password:'errada'}).expect(429);
 });
 test('limita solicitação de acesso',async()=>{
   const {agent}=await browser();
-  for(let n=0;n<env.AUTH_REQUEST_IP_LIMIT;n++) await agent.post('/api/auth/request-access').send({...data(),email:`test${n}@example.test`}).expect(202);
+  for(let n=0;n<env.AUTH_REQUEST_IP_LIMIT;n++) await agent.post('/api/auth/request-access').send({...data(),email:`test${n}@example.test`}).expect(n===0 ? 202 : 409);
   await agent.post('/api/auth/request-access').send({...data(),email:'new@example.test'}).expect(429);
   database().exec('UPDATE auth_rate_limits SET reset_at=1');
-  await agent.post('/api/auth/request-access').send({...data(),email:'new@example.test'}).expect(202);
+  await agent.post('/api/auth/request-access').send({...data(),email:'new@example.test'}).expect(409);
 });
 test('login pode ser tentado novamente após janela, sem bloqueio permanente',async()=>{
-  for(let n=0;n<env.AUTH_LOGIN_ACCOUNT_LIMIT;n++)await signIn('master@example.test','wrong',401);
+  for(let n=0;n<env.AUTH_LOGIN_ACCOUNT_LIMIT;n++)await signIn('master@example.test','errada',401);
   await signIn('master@example.test',password,429);
   database().exec('UPDATE auth_rate_limits SET reset_at=1');
   await signIn();
@@ -172,6 +244,7 @@ test('usuário comum não lista, avalia, aprova a si mesmo nem altera role',asyn
   const person=await user('active');
   const {agent}=await signIn(person.email);
   await agent.get('/api/users').expect(403);
+  await agent.get('/api/users/events').expect(403);
   await agent.get(`/api/users/${person.id}`).expect(403);
   await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role:'master'}).expect(403);
   assert.equal(repo.byId(person.id).role,'user');
@@ -214,7 +287,7 @@ test('falha de auditoria desfaz bloqueio e revogação na mesma transação, sem
 });
 test('CSRF ausente, inválido, Unicode e de outra sessão são recusados; Origin e CORS restritos',async()=>{
   const first=await signIn(),other=await browser();
-  for(const csrf of ['', 'wrong','é'.repeat(43),other.csrf])
+  for(const csrf of ['', 'errada','é'.repeat(43),other.csrf])
     await first.agent.post('/api/auth/logout').set('X-CSRF-Token',csrf).expect(403);
   await first.agent.post('/api/auth/logout').set('Origin','https://evil.example').expect(403);
   await first.agent.post('/api/auth/logout').unset('Origin').expect(403);
@@ -227,7 +300,7 @@ for(const [method,path] of [
   ['put','/clients/1'],['patch','/clients/1'],['post','/loans'],['get','/loans/1'],['patch','/loans/1/installments'],
   ['get','/loans/1/installments'],['put','/loans/1/payment-confirmation'],['post','/installments/1/payments'],
   ['post','/installments/1/payment-preview'],['get','/late-fees/1'],['post','/late-fees/1/payments'],
-  ['get','/dashboard/summary'],['get','/reports'],['get','/notifications'],['get','/users'],['get','/payments'],
+  ['get','/dashboard/summary'],['get','/reports'],['get','/notifications'],['get','/users'],['get','/users/events'],['get','/payments'],
 ]) test(`anônimo não acessa ${method} ${path}`,async()=>{
   await request(app)[method](`/api${path}`).expect(401);
 });
@@ -238,8 +311,8 @@ for(const status of ['pending','rejected','blocked'])test(`status ${status} inva
 });
 test('trocar senha exige senha atual, revoga todas as sessões e nova senha funciona',async()=>{
   const first=await signIn(),second=await signIn();
-  const next=randomBytes(24).toString('base64url');
-  await first.agent.post('/api/auth/change-password').send({currentPassword:'wrong',newPassword:next}).expect(401);
+  const next=randomBytes(15).toString('base64url');
+  await first.agent.post('/api/auth/change-password').send({currentPassword:'errada',newPassword:next}).expect(401);
   await first.agent.post('/api/auth/change-password').send({currentPassword:password,newPassword:next}).expect(200);
   await first.agent.get('/api/auth/me').expect(401);await second.agent.get('/api/auth/me').expect(401);
   await signIn('master@example.test',password,401);
@@ -267,6 +340,13 @@ test('auditoria e erros não registram documentos, hashes, tokens ou senha',asyn
 test('produção exige HTTPS, configuração explícita e cookie __Host- com todas as flags',()=>{
   const code=`const {app}=await import('./src/app.js'); const {openDatabase}=await import('./src/config/database.js');
     openDatabase(':memory:'); const request=(await import('supertest')).default;
+    const assert=(await import('node:assert/strict')).default;
+    for (const origin of ['http://localhost:5173','http://192.168.1.10:5173','https://evil.example']) {
+      const rejected=await request(app).get('/api/auth/csrf').set('X-Forwarded-Proto','https').set('Origin',origin);
+      assert.equal(rejected.status,403);assert.equal(rejected.headers['access-control-allow-origin'],undefined);
+    }
+    const cors=await request(app).options('/api/auth/login').set('X-Forwarded-Proto','https').set('Origin','https://paytrack.example').set('Access-Control-Request-Method','POST');
+    assert.equal(cors.headers['access-control-allow-origin'],'https://paytrack.example');
     const denied=await request(app).get('/api/health');
     const allowed=await request(app).get('/api/auth/csrf').set('X-Forwarded-Proto','https');
     const cookie=allowed.headers['set-cookie'][0];
