@@ -13,12 +13,13 @@ export const list = (req, res) =>
 export const get = (req, res) =>
   res.json(readFinancial(() => service.getLoan(idSchema.parse(req.params.id))));
 export const create = (req, res) =>
-  res.status(201).json(service.createLoan(loanSchema.parse(req.body)));
+  res.status(201).json(service.createLoan(loanSchema.parse(req.body),req.user));
 export const update = (req, res) =>
   res.json(
     service.updateLoan(
       idSchema.parse(req.params.id),
       loanPatchSchema.parse(req.body),
+      req.user,
     ),
   );
 export const installments = (req, res) =>
@@ -28,5 +29,6 @@ export const updateInstallments = (req, res) =>
     service.updateInstallments(
       idSchema.parse(req.params.id),
       amountsSchema.parse(req.body),
+      req.user,
     ),
   );

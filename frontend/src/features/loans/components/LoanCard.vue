@@ -87,9 +87,9 @@
                 </div>
 
                 <p v-if="loan.daysLate > 0" class="shrink-0 text-[11px] font-medium" :class="loan.status ===
-                        'overdue'
-                        ? 'text-[#b91c1c]'
-                        : 'text-[#b45309]'
+                    'overdue'
+                    ? 'text-[#b91c1c]'
+                    : 'text-[#b45309]'
                     ">
                     {{ lateDaysLabel }}
                 </p>
@@ -137,6 +137,10 @@ const statusClasses = computed(() => {
             'bg-[#d97706] text-white',
         overdue:
             'bg-[#b91c1c] text-white',
+        paid:
+            'bg-[#2563eb] text-white',
+        cancelled:
+            'bg-[#52525b] text-white',
     }
 
     return (

@@ -20,7 +20,7 @@ export function getFee(id) {
   return requireRecord(findFee(id), "Multa");
 }
 
-export function payFee(id, data) {
+export function payFee(id, data, actor) {
   return database()
     .transaction(() => {
       const fee = getFee(id);
@@ -56,7 +56,7 @@ export function payFee(id, data) {
         installment_id: installment.id,
         amount: 0,
         late_fee_amount: data.amount,
-      });
+      },actor);
       refreshFinancialState(loan.id);
       bumpRevision(loan.id);
       return { fee: getFee(id), loan: getLoan(loan.id) };

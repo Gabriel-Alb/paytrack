@@ -43,16 +43,16 @@ export function listLoans(
   return { items, total };
 }
 
-export function insertLoan(data) {
+export function insertLoan(data, actorId = null) {
   return Number(
     database()
       .prepare(
         `INSERT INTO loans (client_id, principal_amount, interest_percentage, interest_amount,
-    total_amount, installment_count, late_fee_per_day, loan_date, first_due_date, notes)
+    total_amount, installment_count, late_fee_per_day, loan_date, first_due_date, notes, created_by)
     VALUES (@client_id,@principal_amount,@interest_percentage,@interest_amount,@total_amount,@installment_count,
-      @late_fee_per_day,@loan_date,@first_due_date,@notes)`,
+      @late_fee_per_day,@loan_date,@first_due_date,@notes,@actorId)`,
       )
-      .run(data).lastInsertRowid,
+      .run({...data,actorId}).lastInsertRowid,
   );
 }
 

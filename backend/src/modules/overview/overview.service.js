@@ -67,7 +67,11 @@ export function report(query) {
   return { ...result, chart, page: query.page, limit: query.limit };
 }
 
-export function notifications() {
+export function notifications(includeActivity = false) {
   refreshFinancialState();
-  return repository.notifications(today());
+  const items = repository.notifications(today(),includeActivity);
+  if (!includeActivity) return items;
+  const timestamp = (value) => Date.parse(value.includes('T') ? value : value.replace(' ','T')+'Z');
+  return [...repository.actionNotifications(),...items]
+    .sort((a,b) => timestamp(b.datetime)-timestamp(a.datetime)).slice(0,100);
 }

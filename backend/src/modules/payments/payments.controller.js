@@ -13,6 +13,7 @@ export const create = (req, res) =>
       service.registerPayment(
         idSchema.parse(req.params.id),
         paymentSchema.parse(req.body),
+        req.user,
       ),
     );
 export const confirm = (req, res) =>
@@ -20,6 +21,7 @@ export const confirm = (req, res) =>
     service.confirmPayments(
       idSchema.parse(req.params.id),
       confirmationSchema.parse(req.body),
+      req.user,
     ),
   );
 export const preview = (req, res) =>

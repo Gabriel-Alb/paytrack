@@ -16,6 +16,15 @@ import {
   refreshClient,
 } from "../installments/installments.service.js";
 import { listPayments } from "../payments/payments.repository.js";
+import { recordAction } from '../auth/auth.repository.js';
+
+function auditLoan(event, actor, loan) {
+  recordAction(event,actor,'loan',loan.id,{
+    customer:loan.client_name,amount:loan.principal_amount,loanId:loan.id,
+    installment_count:loan.installment_count,loan_date:loan.loan_date,
+    end_date:loan.installments.at(-1)?.due_date,
+  });
+}
 
 function presentLoan(loan) {
   return {
@@ -107,7 +116,7 @@ export function assertRevision(loan, revision) {
     );
 }
 
-export function createLoan(data) {
+export function createLoan(data, actor) {
   return database()
     .transaction(() => {
       requireRecord(findClient(data.client_id), "Cliente");
@@ -147,7 +156,7 @@ export function createLoan(data) {
         interest_amount: interest,
         total_amount: total,
         notes: data.notes ?? null,
-      });
+      },actor?.id);
       values.forEach((amount, index) =>
         installments.insertInstallment({
           loan_id: id,
@@ -157,12 +166,14 @@ export function createLoan(data) {
         }),
       );
       refreshFinancialState(id);
-      return getLoan(id);
+      const result = getLoan(id);
+      auditLoan('loan_created',actor,result);
+      return result;
     })
     .immediate();
 }
 
-export function updateLoan(id, data) {
+export function updateLoan(id, data, actor) {
   return database()
     .transaction(() => {
       const loan = getLoan(id);
@@ -179,12 +190,14 @@ export function updateLoan(id, data) {
         data.status ?? loan.status,
       );
       refreshClient(loan.client_id);
-      return getLoan(id);
+      const result = getLoan(id);
+      auditLoan(data.status==='cancelled' ? 'loan_cancelled' : 'loan_updated',actor,result);
+      return result;
     })
     .immediate();
 }
 
-export function updateInstallments(id, data) {
+export function updateInstallments(id, data, actor) {
   return database()
     .transaction(() => {
       const loan = getLoan(id);
@@ -207,7 +220,9 @@ export function updateInstallments(id, data) {
       );
       repository.bumpRevision(id);
       refreshFinancialState(id);
-      return getLoan(id);
+      const result = getLoan(id);
+      auditLoan('installments_updated',actor,result);
+      return result;
     })
     .immediate();
 }

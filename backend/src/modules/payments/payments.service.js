@@ -39,7 +39,7 @@ export function previewPayment(id, data) {
   };
 }
 
-export function registerPayment(id, data) {
+export function registerPayment(id, data, actor) {
   return database()
     .transaction(() => {
       const installment = requireRecord(findInstallment(id), "Parcela");
@@ -59,7 +59,7 @@ export function registerPayment(id, data) {
       const paymentId = repository.insertPayment({
         ...data,
         installment_id: id,
-      });
+      },actor);
       refreshFinancialState(loan.id);
       bumpRevision(loan.id);
       return {
@@ -70,10 +70,10 @@ export function registerPayment(id, data) {
     .immediate();
 }
 
-function reconcileSelection(loan, installment, selection) {
+function reconcileSelection(loan, installment, selection, actor) {
   if (!selection) {
     if (installment.status === "paid")
-      repository.voidInstallmentPayments(installment.id);
+      repository.voidInstallmentPayments(installment.id,actor);
     return;
   }
   validatePaymentDate(selection.payment_date, loan.loan_date);
@@ -100,7 +100,7 @@ function reconcileSelection(loan, installment, selection) {
     installment.status === "paid" &&
     (installment.paid_at !== selection.payment_date ||
       selection.late_fee_received_amount < installment.late_fee_paid_amount);
-  if (corrected) repository.voidInstallmentPayments(installment.id);
+  if (corrected) repository.voidInstallmentPayments(installment.id,actor);
   const amount = corrected
     ? installment.amount
     : installment.amount - installment.paid_amount;
@@ -119,11 +119,11 @@ function reconcileSelection(loan, installment, selection) {
       late_fee_amount: feeAmount,
       payment_date: amount > 0 ? selection.payment_date : today(),
       notes: corrected ? "Correção de pagamento pelo modal do contrato" : null,
-    });
+    },actor,corrected ? 'payment_corrected' : 'payment_created');
   }
 }
 
-export function confirmPayments(id, data) {
+export function confirmPayments(id, data, actor) {
   return database()
     .transaction(() => {
       const loan = getLoan(id);
@@ -148,6 +148,7 @@ export function confirmPayments(id, data) {
           loan,
           installment,
           selections.get(installment.installment_number),
+          actor,
         );
       refreshFinancialState(id);
       bumpRevision(id);
