@@ -7,5 +7,6 @@ export const dashboard = (_req, res) => res.json(readFinancial(() => service.das
 export const report = (req, res) =>
   res.json(readFinancial(() => service.report(reportSchema.parse(req.query))));
 export const notifications = (req, res) => res.json([
-  ...(req.user.role==='master' ? pendingNotifications() : []),...readFinancial(() => service.notifications()),
+  ...(['master','admin'].includes(req.user.role) ? pendingNotifications() : []),
+  ...readFinancial(() => service.notifications(['master','admin'].includes(req.user.role))),
 ]);

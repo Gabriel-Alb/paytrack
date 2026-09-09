@@ -519,6 +519,10 @@ import {
 } from 'vue'
 
 import BaseModal from '@/components/base/BaseModal.vue'
+import { useAuth } from '@/composables/useAuth'
+
+const { user } = useAuth()
+const registeredBy = computed(() => user.value?.name || 'Não identificado')
 
 const InfoItem = defineComponent({
     props: {
@@ -588,10 +592,6 @@ const props = defineProps({
         default: null,
     },
 
-    registeredBy: {
-        type: String,
-        default: 'Não identificado',
-    },
 })
 
 const emit = defineEmits([
@@ -783,7 +783,7 @@ function getPaymentDate(number) {
 function getRegisteredBy(number) {
     return (
         getPayment(number)?.registeredBy ||
-        props.registeredBy
+        registeredBy.value
     )
 }
 
@@ -906,7 +906,7 @@ function togglePayment(installment) {
             paidAt: '',
 
             registeredBy:
-                props.registeredBy,
+                registeredBy.value,
 
             lateDays: 0,
 
@@ -953,6 +953,7 @@ function updatePaymentDate(
             ...payment,
 
             paidAt,
+            registeredBy: registeredBy.value,
 
             lateDays,
 
@@ -988,6 +989,7 @@ function setLateFeeOption(
 
             lateFeeOption:
                 option,
+            registeredBy: registeredBy.value,
 
             customLateFeeValue:
                 option === 'custom'
@@ -1034,6 +1036,7 @@ function updateCustomLateFee(
 
             customLateFeeValue:
                 normalizedValue,
+            registeredBy: registeredBy.value,
         },
     }
 }
@@ -1112,9 +1115,6 @@ function confirm() {
                     paidAt:
                         payment.paidAt,
 
-                    registeredBy:
-                        payment.registeredBy ||
-                        props.registeredBy,
 
                     lateDays:
                         Number(

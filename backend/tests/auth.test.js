@@ -90,7 +90,7 @@ test('solicitação pela API aparece na lista do master e emite evento após com
       assert.equal(list.total,1);assert.equal(list.items[0].email,input.email);
       const saved=repo.byEmail(input.email);
       assert.equal(saved.access_status,'pending');
-      await admin.agent.patch(`/api/users/${saved.id}/access`).send({action}).expect(200);
+      await admin.agent.patch(`/api/users/${saved.id}/access`).send(action==='approve' ? {action,role:'user'} : {action}).expect(200);
       assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
       assert.equal((await admin.agent.get('/api/users?status=pending').expect(200)).body.total,0);
       const status=action==='approve' ? 'active' : 'rejected';
@@ -180,7 +180,7 @@ test('login ativo gera cookie novo opaco; banco só contém hash e API minimiza 
   assert.ok(!JSON.stringify(result.body).includes(raw));
   assert.notEqual(cookie.split(';')[0],anonymous);
   const me=await agent.get('/api/auth/me').expect(200);
-  assert.deepEqual(Object.keys(me.body.user).sort(),['accessStatus','email','id','name','role']);
+  assert.deepEqual(Object.keys(me.body.user).sort(),['accessStatus','cpf','email','id','name','rg','role']);
   await request(app).get('/api/auth/me').set('Cookie',anonymous).expect(401);
 });
 test('senha incorreta, inexistente e email de SQL injection não autenticam',async()=>{
@@ -249,6 +249,79 @@ test('usuário comum não lista, avalia, aprova a si mesmo nem altera role',asyn
   await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role:'master'}).expect(403);
   assert.equal(repo.byId(person.id).role,'user');
 });
+
+test('perfil lê documentos reais, salva só o próprio email e mantém troca de senha e login',async()=>{
+  const person=await user('active');
+  const {agent}=await signIn(person.email);
+  const original=(await agent.get('/api/auth/me').expect(200)).body.user;
+  assert.equal(original.cpf,person.cpf);assert.equal(original.rg,person.rg);
+  const saved=(await agent.patch('/api/auth/me').send({email:' UPDATED@EXAMPLE.TEST '}).expect(200)).body.user;
+  assert.equal(saved.email,'updated@example.test');assert.equal(saved.id,person.id);
+  assert.equal(saved.cpf,person.cpf);assert.equal(saved.rg,person.rg);assert.equal(saved.role,'user');
+  assert.equal(repo.byId(person.id).email,saved.email);assert.equal(repo.byId(master.id).email,master.email);
+  assert.equal((await agent.get('/api/auth/me').expect(200)).body.user.email,saved.email);
+  await signIn(person.email,password,401);
+  const second=await signIn(saved.email);
+  const next=randomBytes(15).toString('base64url');
+  await agent.post('/api/auth/change-password').send({currentPassword:password,newPassword:next}).expect(200);
+  await second.agent.get('/api/auth/me').expect(401);
+  await signIn(saved.email,next);
+});
+
+test('API de perfil rejeita campos protegidos, email inválido/duplicado e escritas sem autenticação/CSRF',async()=>{
+  const person=await user('active');const {agent}=await signIn(person.email);
+  const before=repo.byId(person.id);
+  for (const payload of [{},{email:'invalid'},{email:null},...['cpf','rg','role','id','name','cnh','access_status','accessStatus','approved_by','password_hash'].map((field)=>({email:'changed@example.test',[field]:field==='role'?'admin':'changed'}))])
+    await agent.patch('/api/auth/me').send(payload).expect(400);
+  const duplicate=await agent.patch('/api/auth/me').send({email:' MASTER@EXAMPLE.TEST '}).expect(409);
+  assert.equal(duplicate.body.error.code,'EMAIL_CONFLICT');
+  await agent.patch('/api/auth/me').set('X-CSRF-Token','invalid').send({email:'changed@example.test'}).expect(403);
+  await request(app).patch('/api/auth/me').send({email:'changed@example.test'}).expect(401);
+  assert.deepEqual(repo.byId(person.id),before);
+  await agent.patch('/api/auth/me').send({email:person.email.toUpperCase()}).expect(200);
+});
+
+for (const role of ['user','admin']) test(`aprovação persiste ${role} e backend aplica suas permissões em cada requisição`,async()=>{
+  const person=await user();const owner=await signIn();
+  const approved=(await owner.agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role}).expect(200)).body;
+  assert.equal(approved.role,role);assert.equal(repo.byId(person.id).role,role);
+  const {agent,result}=await signIn(person.email);assert.equal(result.body.user.role,role);
+  const pending=await user('pending',{email:'next@example.test',cpf:'12345678909',rg:'67890',cnh:'10987654321'});
+  const expected=role==='admin'?200:403;
+  await agent.get('/api/users').expect(expected);
+  await agent.get(`/api/users/${pending.id}`).expect(expected);
+  assert.equal((await agent.get('/api/notifications').expect(200)).body.some((row)=>row.type==='access'),role==='admin');
+  await agent.patch(`/api/users/${pending.id}/access`).send({action:'approve',role:'user'}).expect(expected);
+  if (role==='admin') {
+    await agent.patch(`/api/users/${person.id}/access`).send({action:'block'}).expect(409);
+    await agent.patch(`/api/users/${master.id}/access`).send({action:'block'}).expect(403);
+    await agent.patch(`/api/users/${pending.id}/access`).send({action:'block'}).expect(200);
+    await agent.patch(`/api/users/${pending.id}/access`).send({action:'unblock'}).expect(200);
+    const server=app.listen(0,'127.0.0.1');await new Promise((resolve)=>server.once('listening',resolve));
+    const abort=new AbortController();
+    try {
+      const stream=await fetch(`http://127.0.0.1:${server.address().port}/api/users/events`,{headers:{Cookie:result.headers['set-cookie'][0].split(';')[0]},signal:abort.signal});
+      assert.equal(stream.status,200);const reader=stream.body.getReader();
+      assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
+      database().prepare("UPDATE users SET role='user' WHERE id=?").run(person.id);
+      accessEvents.emit('changed');assert.equal((await reader.read()).done,true);
+    } finally {abort.abort();server.closeAllConnections();await new Promise((resolve)=>server.close(resolve))}
+    await agent.get('/api/users').expect(403);
+    await agent.get('/api/users/events').expect(403);
+    await agent.patch(`/api/users/${pending.id}/access`).send({action:'block'}).expect(403);
+  } else {
+    for (const action of ['reject','block','unblock']) await agent.patch(`/api/users/${pending.id}/access`).send({action}).expect(403);
+  }
+});
+
+test('aprovação exige user/admin, rejeita elevação a master e role fora da aprovação',async()=>{
+  const person=await user();const {agent}=await signIn();
+  for (const role of [undefined,'master','owner','ADMIN',null])
+    await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role}).expect(400);
+  for (const action of ['reject','block','unblock'])
+    await agent.patch(`/api/users/${person.id}/access`).send({action,role:'admin'}).expect(400);
+  assert.equal(repo.byId(person.id).role,'user');assert.equal(repo.byId(person.id).access_status,'pending');
+});
 test('master aprova, registra responsável, atualiza notificação e bloqueia/revoga/desbloqueia',async()=>{
   const pending=await user();
   const {agent}=await signIn();
@@ -257,7 +330,7 @@ test('master aprova, registra responsável, atualiza notificação e bloqueia/re
   assert.equal(notice.userId,pending.id);assert.ok(!JSON.stringify(notice).includes(pending.cpf));
   const review=(await agent.get(`/api/users/${pending.id}`).expect(200)).body;
   assert.equal(review.cpf,pending.cpf);assert.equal(review.password_hash,undefined);
-  await agent.patch(`/api/users/${pending.id}/access`).send({action:'approve'}).expect(200);
+  await agent.patch(`/api/users/${pending.id}/access`).send({action:'approve',role:'user'}).expect(200);
   const approved=repo.byId(pending.id);assert.equal(approved.approved_by,master.id);assert.ok(approved.approved_at);
   notifications=(await agent.get('/api/notifications')).body;
   assert.ok(!notifications.some((row)=>row.userId===pending.id));
@@ -272,7 +345,7 @@ test('master aprova, registra responsável, atualiza notificação e bloqueia/re
 test('master rejeita, exige transição válida e impede alteração do próprio acesso',async()=>{
   const person=await user();const {agent}=await signIn();
   await agent.patch(`/api/users/${person.id}/access`).send({action:'reject'}).expect(200);
-  await agent.patch(`/api/users/${person.id}/access`).send({action:'approve'}).expect(409);
+  await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role:'user'}).expect(409);
   await agent.patch(`/api/users/${master.id}/access`).send({action:'block'}).expect(409);
   assert.throws(()=>database().prepare('DELETE FROM users WHERE id=?').run(master.id));
   assert.throws(()=>database().prepare("UPDATE users SET role='user' WHERE id=?").run(master.id));

@@ -6,6 +6,14 @@ const NOTIFICATION_FILTERS = [
     value: 'all',
   },
   {
+    label: 'Cadastros',
+    value: 'registration',
+  },
+  {
+    label: 'Empréstimos',
+    value: 'loan',
+  },
+  {
     label: 'Pagamentos',
     value: 'payment',
   },

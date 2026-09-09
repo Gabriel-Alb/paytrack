@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     rg TEXT UNIQUE,
     cnh TEXT UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('master', 'user')),
+    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('master', 'admin', 'user')),
     access_status TEXT NOT NULL DEFAULT 'pending' CHECK(access_status IN ('pending','active','rejected','blocked')),
     approved_by INTEGER REFERENCES users(id),
     approved_at TEXT,
@@ -37,8 +37,13 @@ CREATE TABLE IF NOT EXISTS auth_audit_logs (
     event TEXT NOT NULL,
     actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     subject_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_name TEXT,
+    entity_type TEXT,
+    entity_id INTEGER,
+    details TEXT CHECK(details IS NULL OR json_valid(details)),
     created_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_auth_audit_entity ON auth_audit_logs(entity_type,entity_id,id);
 CREATE TABLE IF NOT EXISTS auth_rate_limits (
     key TEXT PRIMARY KEY,
     hits INTEGER NOT NULL,
@@ -48,9 +53,9 @@ CREATE INDEX IF NOT EXISTS idx_auth_rate_expiry ON auth_rate_limits(reset_at);
 CREATE INDEX IF NOT EXISTS idx_users_access ON users(access_status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(lower(trim(email)));
 CREATE TRIGGER IF NOT EXISTS users_role_insert BEFORE INSERT ON users
-WHEN NEW.role NOT IN ('master','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
+WHEN NEW.role NOT IN ('master','admin','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
 CREATE TRIGGER IF NOT EXISTS users_role_update BEFORE UPDATE OF role ON users
-WHEN NEW.role NOT IN ('master','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
+WHEN NEW.role NOT IN ('master','admin','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
 CREATE TRIGGER IF NOT EXISTS protect_last_master_update BEFORE UPDATE OF role,access_status ON users
 WHEN OLD.role='master' AND OLD.access_status='active'
  AND (NEW.role<>'master' OR NEW.access_status<>'active')

@@ -32,14 +32,14 @@ export function listClients({ search, status, limit, offset }) {
   return { items, total };
 }
 
-export function insertClient(client) {
+export function insertClient(client, actorId = null) {
   return Number(
     database()
       .prepare(
-        `INSERT INTO clients (name, cpf, rg, cnh, phone, email, notes)
-    VALUES (@name, @cpf, @rg, @cnh, @phone, @email, @notes)`,
+        `INSERT INTO clients (name, cpf, rg, cnh, phone, email, notes, created_by)
+    VALUES (@name, @cpf, @rg, @cnh, @phone, @email, @notes, @actorId)`,
       )
-      .run(client).lastInsertRowid,
+      .run({...client,actorId}).lastInsertRowid,
   );
 }
 

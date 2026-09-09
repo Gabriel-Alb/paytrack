@@ -26,6 +26,10 @@ export async function restoreAuth() {
 export function useAuth() {
   return {
     user: readonly(user),
+    async updateProfile(body) {
+      const result = await request('/auth/me',{method:'PATCH',body})
+      user.value = result.user
+    },
     async login(body) {
       const result = await request('/auth/login',{method:'POST',body})
       user.value = result.user

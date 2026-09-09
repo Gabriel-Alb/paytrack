@@ -12,6 +12,15 @@ export function audit(event, actorId = null, subjectId = null) {
   database().prepare('INSERT INTO auth_audit_logs(event,actor_id,subject_id,created_at) VALUES (?,?,?,?)')
     .run(event,actorId,subjectId,Date.now());
 }
+// Actor is supplied by the authenticated controller, never by the request body.
+// Offline seed operations have no authenticated actor; do not invent one.
+export function recordAction(event, actor, entityType, entityId, details) {
+  if (!actor) return;
+  const user = byId(actor.id);
+  if (!user) throw new Error('Responsável não encontrado.');
+  database().prepare(`INSERT INTO auth_audit_logs(event,actor_id,actor_name,entity_type,entity_id,details,created_at)
+    VALUES (?,?,?,?,?,?,?)`).run(event,user.id,user.name,entityType,entityId,JSON.stringify(details),Date.now());
+}
 export const sessionByHash = (hash) => database().prepare('SELECT * FROM auth_sessions WHERE token_hash=?').get(hash);
 export function insertSession({userId,tokenHash,csrfToken,now,expiresAt}) {
   database().prepare(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,created_at,expires_at,last_seen_at)
@@ -22,14 +31,15 @@ export const revoke = (id) => database().prepare('UPDATE auth_sessions SET revok
 export const revokeAll = (id) => database().prepare('UPDATE auth_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL').run(Date.now(),id);
 export const lastLogin = (id) => database().prepare('UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
 export const savePassword = (id,hash) => database().prepare('UPDATE users SET password_hash=?,password_changed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(hash,id);
-export function setAccess(id, action, actorId) {
+export const saveEmail = (id,email) => database().prepare('UPDATE users SET email=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(email,id);
+export function setAccess(id, action, actorId, role) {
   const updates = {
-    approve: "access_status='active',approved_by=@actorId,approved_at=CURRENT_TIMESTAMP",
+    approve: "access_status='active',role=@role,approved_by=@actorId,approved_at=CURRENT_TIMESTAMP",
     reject: "access_status='rejected',rejected_at=CURRENT_TIMESTAMP",
     block: "access_status='blocked',blocked_at=CURRENT_TIMESTAMP",
     unblock: "access_status='active',blocked_at=NULL",
   };
-  database().prepare(`UPDATE users SET ${updates[action]},updated_at=CURRENT_TIMESTAMP WHERE id=@id`).run({id,actorId});
+  database().prepare(`UPDATE users SET ${updates[action]},updated_at=CURRENT_TIMESTAMP WHERE id=@id`).run({id,actorId,role:role ?? null});
 }
 export function listUsers({status,page}) {
   return {items: database().prepare(`SELECT id,name,email,role,access_status AS accessStatus,created_at AS createdAt

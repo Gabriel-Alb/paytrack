@@ -6,6 +6,7 @@ import {
   refreshClient,
 } from "../installments/installments.service.js";
 import { pagination } from "../../shared/utils/validation.js";
+import { recordAction } from '../auth/auth.repository.js';
 
 function checkDocuments(data, id) {
   const duplicates = repository.findDuplicate(data, id);
@@ -36,7 +37,7 @@ export function listClients(query) {
   };
 }
 
-export function createClient(data) {
+export function createClient(data, actor) {
   return database()
     .transaction(() => {
       const client = {
@@ -48,12 +49,14 @@ export function createClient(data) {
         ...data,
       };
       checkDocuments(client);
-      return getClient(repository.insertClient(client));
+      const id = repository.insertClient(client,actor?.id);
+      recordAction('client_created',actor,'client',id,{customer:client.name});
+      return getClient(id);
     })
     .immediate();
 }
 
-export function updateClient(id, data) {
+export function updateClient(id, data, actor) {
   return database()
     .transaction(() => {
       const client = {
@@ -74,6 +77,7 @@ export function updateClient(id, data) {
           "O status escolhido não corresponde aos contratos e pendências deste cliente.",
         );
       }
+      recordAction('client_updated',actor,'client',id,{customer:result.name,fields:Object.keys(data)});
       return result;
     })
     .immediate();

@@ -22,7 +22,8 @@
                     </time>
                 </div>
 
-                <p class="mt-0.5 truncate text-[12px] leading-5 text-[#71717a]">
+                <p v-if="notification.event" class="mt-0.5 text-[12px] leading-5 text-[#71717a]">{{ message }}</p>
+                <p v-else class="mt-0.5 truncate text-[12px] leading-5 text-[#71717a]">
                     {{ customerLabel }}
 
                     <strong class="font-medium text-[#3f3f46]">
@@ -30,8 +31,17 @@
                     </strong>
                 </p>
 
+                <p v-if="notification.responsible && notification.type !== 'registration'" class="mt-0.5 text-[12px] leading-5 text-[#71717a]">
+                    {{ notification.type === 'payment' ? (notification.event === 'payment_voided' ? 'Estornado por' : 'Lançado por') : 'Responsável' }}: {{ notification.responsible }}
+                </p>
+
                 <button v-if="notification.type === 'access'" type="button" class="mt-3 min-h-11 rounded-lg bg-[#edf7ef] px-3 text-xs font-semibold text-[#166534]" @click="$emit('review', notification.userId)">Avaliar solicitação</button>
-                <div v-else class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-4 text-[#71717a]">
+                <div v-else-if="notification.type === 'loan'" class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-4 text-[#71717a]">
+                    <span>{{ notification.installment_count }} parcelas</span><span aria-hidden="true">•</span>
+                    <span>Empréstimo: {{ formatDate(notification.loan_date) }}</span><span aria-hidden="true">•</span>
+                    <span>Data final: {{ formatDate(notification.end_date) }}</span>
+                </div>
+                <div v-else-if="notification.type !== 'registration'" class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-4 text-[#71717a]">
                     <strong class="font-semibold text-[#3f3f46]">
                         {{ notification.amount }}
                     </strong>
@@ -87,16 +97,26 @@ const isOverdue = computed(() => {
 
 const title = computed(() => {
     if (props.notification.type === 'access') return 'Solicitação de acesso'
+    const titles = {client_created:'Cadastro de cliente',client_updated:'Cadastro atualizado',loan_created:'Novo empréstimo',loan_updated:'Empréstimo atualizado',loan_cancelled:'Empréstimo cancelado',installments_updated:'Parcelas atualizadas',payment_created:'Pagamento recebido',payment_corrected:'Pagamento corrigido',payment_voided:'Pagamento estornado'}
+    if (titles[props.notification.event]) return titles[props.notification.event]
     return isOverdue.value
         ? 'Parcela em atraso'
-        : 'Pagamento efetuado'
+        : 'Pagamento recebido'
 })
+
+const message = computed(() => {
+    const item = props.notification
+    if (item.type === 'registration') return `${item.responsible} ${item.event === 'client_created' ? 'cadastrou' : 'atualizou o cadastro de'} ${item.customer}.`
+    if (item.type === 'loan') return `${title.value} de ${item.amount} para ${item.customer}.`
+    return `${title.value} de ${item.customer}.`
+})
+const formatDate = (value) => value ? value.split('-').reverse().join('/') : 'Não informado'
 
 const customerLabel = computed(() => {
     if (props.notification.type === 'access') return 'Solicitante:'
     return isOverdue.value
         ? 'Cliente:'
-        : 'Pagador:'
+        : 'De:'
 })
 
 const icon = computed(() => {

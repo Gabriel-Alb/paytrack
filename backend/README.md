@@ -25,24 +25,29 @@ npm run auth:create-master
 
 O comando pergunta nome, e-mail, CPF, RG/CNH opcionais e senha com confirmação sem eco.
 Não aceita argumentos nem senha padrão; recusa outro master. Execute no banco correto definido em `.env`.
-Após isso, abra `/login`. Pessoas novas usam `/request-access`; o master avalia pela notificação ou em `/users`.
-`/account` permite trocar senha com a senha atual e encerra todas as sessões.
+Após isso, abra `/login`. Pessoas novas usam `/request-access`; master e admin avaliam pela notificação ou em `/users`.
+`/account` exibe nome, e-mail, CPF e RG reais e permite editar somente o e-mail. A troca de senha exige a senha atual e encerra todas as sessões.
 
 | Acesso | Método e caminho |
 | --- | --- |
 | Público | `GET /api/health`, `GET /api/auth/csrf` |
 | Público com CSRF e rate limit | `POST /api/auth/login`, `POST /api/auth/request-access` |
-| Autenticado | `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-all`, `POST /api/auth/change-password` |
-| Master | `GET /api/users?status=pending&page=1`, `GET /api/users/:id`, `PATCH /api/users/:id/access` |
+| Autenticado | `GET /api/auth/me`, `PATCH /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-all`, `POST /api/auth/change-password` |
+| Master ou admin | `GET /api/users?status=pending&page=1`, `GET /api/users/:id`, `PATCH /api/users/:id/access` |
 
-O PATCH administrativo aceita apenas `{ "action": "approve" }`, `reject`, `block` ou `unblock`.
-Não há rota de criação pública de master nem alteração de role. Solicitações gravadas respondem `202`. Duplicidades no pré-cadastro respondem `409 ACCESS_REQUEST_CONFLICT`, sem identificar qual campo conflitou; nenhum segundo registro é criado.
+O PATCH administrativo exige `{ "action": "approve", "role": "user" }` ou role `admin` na aprovação. As ações `reject`, `block` e `unblock` aceitam somente `action`, preservando o perfil. Não permite alterar o próprio acesso nem que admin altere o acesso de master.
+`PATCH /api/auth/me` aceita somente `{ "email": "novo@example.com" }`; rejeita CPF, RG, role e quaisquer outros campos. E-mail duplicado responde `409 EMAIL_CONFLICT`.
+Não há rota de criação pública de master. Solicitações gravadas respondem `202`. Duplicidades no pré-cadastro respondem `409 ACCESS_REQUEST_CONFLICT`, sem identificar qual campo conflitou; nenhum segundo registro é criado.
 
 ## Organização
 
 `src/modules/{clients,loans,installments,payments,late-fees,overview}` segue rota → controller → service → repository → SQLite. Os endpoints de pagamentos ficam nas rotas de contratos, parcelas e multas. `src/config` inicializa SQLite e aplica migrations; `src/shared` contém validações, datas e erros. As funções monetárias comuns ficam em `../shared/money.js`.
 
 `../SQL/schema.sql` é a fonte do schema. Inicialização e migrações são transacionais, preservam os pagamentos existentes e verificam as chaves estrangeiras antes de confirmar. A migração antiga de pagamentos lê a definição da tabela desse mesmo arquivo.
+
+Cadastros de clientes, empréstimos e pagamentos preenchem `created_by` a partir da sessão autenticada. A auditoria existente também registra ID e nome do responsável no momento da ação, entidade afetada e detalhes para notificações. Inclui edições de cadastro/contrato/parcelas, correções, estornos e recebimentos de multa, na mesma transação da operação. Payloads não aceitam responsáveis. O histórico de pagamentos usa o nome persistido; registros antigos sem autoria permanecem sem atribuição inventada.
+
+Master e admin recebem essas ações em `/api/notifications`, nas categorias Cadastros, Empréstimos e Pagamentos. As notificações preservam o cliente e os dados da ação, incluindo valor, quantidade de parcelas, data do empréstimo e último vencimento. A versão 4 do banco amplia `auth_audit_logs`; reutiliza os campos `created_by` existentes.
 
 ## Endpoints
 
@@ -90,4 +95,4 @@ Testes cobrem documentos duplicados, valores e parcelas, pagamentos, multa, stat
 
 Execute `npm run dev` no frontend e backend. O Vite escuta em `0.0.0.0`; abra `http://IP-DA-MAQUINA:5173` no celular e mantenha `VITE_API_URL` vazio para usar `/api` pelo proxy. O backend pode continuar em `HOST=127.0.0.1`. Em `NODE_ENV=development`, CORS e Origin/Referer aceitam localhost e os IPv4 privados das interfaces da máquina, usando o protocolo e a porta de `FRONTEND_ORIGIN`. Reinicie o backend se o IP mudar. Em produção, somente a origem HTTPS exata configurada é aceita.
 
-O Controle de Acesso consulta os usuários pendentes persistidos e recebe atualizações por `GET /api/users/events` (SSE, exclusivo do master). Solicitação e decisão confirmadas atualizam a lista aberta; reconexões e uma verificação a cada 15 segundos também sincronizam alterações de outro processo.
+O Controle de Acesso consulta os usuários pendentes persistidos e recebe atualizações por `GET /api/users/events` (SSE, exclusivo de master e admin). Solicitação e decisão confirmadas atualizam a lista aberta; reconexões e uma verificação a cada 15 segundos também sincronizam alterações de outro processo.

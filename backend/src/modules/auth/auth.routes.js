@@ -9,12 +9,13 @@ authRoutes.post('/login',...loginLimits,trustedOrigin,requireCsrf,controller.log
 authRoutes.post('/request-access',...requestLimits,trustedOrigin,requireCsrf,controller.requestAccess);
 authRoutes.use(requireAuth,trustedOrigin,requireCsrf);
 authRoutes.get('/me',controller.me);
+authRoutes.patch('/me',controller.updateProfile);
 authRoutes.post('/logout',controller.logout);
 authRoutes.post('/logout-all',controller.logout);
 authRoutes.post('/change-password',...passwordLimits,controller.changePassword);
 
 export const usersRoutes=Router();
-usersRoutes.use(requireRole('master'));
+usersRoutes.use(requireRole('master','admin'));
 usersRoutes.get('/',controller.listUsers);
 usersRoutes.get('/events',controller.watchUsers);
 usersRoutes.get('/:id',controller.reviewUser);

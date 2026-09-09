@@ -123,20 +123,33 @@ export function report(query, date) {
   return { summary, pending, items, total };
 }
 
-export function notifications(date) {
+export function notifications(date, includeActivity = false) {
   return database()
     .prepare(
       `SELECT * FROM (
     SELECT 'payment-'||p.id AS id,'payment' AS type,c.name AS customer,p.amount+p.late_fee_amount AS amount,
-      i.installment_number||'/'||l.installment_count AS installment,p.created_at AS datetime,0 AS days_late
+      i.installment_number||'/'||l.installment_count AS installment,p.created_at AS datetime,0 AS days_late,
+      COALESCE((SELECT a.actor_name FROM auth_audit_logs a WHERE a.entity_type='payment' AND a.entity_id=p.id
+        AND a.event IN ('payment_created','payment_corrected') ORDER BY a.id LIMIT 1),u.name) AS responsible
     FROM payments p JOIN installments i ON i.id=p.installment_id JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
-    WHERE p.voided_at IS NULL
+    LEFT JOIN users u ON u.id=p.created_by
+    WHERE p.voided_at IS NULL AND (@includeActivity=0 OR NOT EXISTS
+      (SELECT 1 FROM auth_audit_logs a WHERE a.entity_type='payment' AND a.entity_id=p.id AND a.event IN ('payment_created','payment_corrected')))
     UNION ALL
     SELECT 'overdue-'||i.id,'overdue',c.name,i.amount-i.paid_amount,i.installment_number||'/'||l.installment_count,
-      i.due_date||'T12:00:00Z',CAST(julianday(@date)-julianday(i.due_date) AS INTEGER)
+      i.due_date||'T12:00:00Z',CAST(julianday(@date)-julianday(i.due_date) AS INTEGER),NULL
     FROM installments i JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
     WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date<@date
   ) ORDER BY datetime DESC LIMIT 50`,
     )
-    .all({ date });
+    .all({ date,includeActivity:Number(includeActivity) });
+}
+
+export function actionNotifications() {
+  return database().prepare(`SELECT id,event,actor_id,actor_name,entity_type,entity_id,details,created_at
+    FROM auth_audit_logs WHERE entity_type IN ('client','loan','payment') ORDER BY id DESC LIMIT 100`).all()
+    .map((row) => ({...JSON.parse(row.details),id:`action-${row.id}`,event:row.event,
+      type:{client:'registration',loan:'loan',payment:'payment'}[row.entity_type],
+      entityId:row.entity_id,responsibleId:row.actor_id,responsible:row.actor_name,
+      datetime:new Date(row.created_at).toISOString(),days_late:0}));
 }

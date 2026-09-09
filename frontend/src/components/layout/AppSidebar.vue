@@ -80,7 +80,7 @@
                         <span>Minha conta</span>
                     </RouterLink>
 
-                    <RouterLink v-if="user?.role === 'master'" to="/users"
+                    <RouterLink v-if="['master', 'admin'].includes(user?.role)" to="/users"
                         class="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#52525b] transition-colors hover:bg-[#f7f7f8] hover:text-[#27272a]"
                         @click="handleMenuNavigation">
                         <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] shrink-0 text-[#71717a]" aria-hidden="true">
@@ -118,7 +118,7 @@
                     </p>
 
                     <p class="truncate text-[11px] text-[#a1a1aa]">
-                        {{ user?.role === 'master' ? 'Administrador' : 'Usuário' }}
+                        {{ ['master', 'admin'].includes(user?.role) ? 'Administrador' : 'Usuário' }}
                     </p>
                 </div>
 

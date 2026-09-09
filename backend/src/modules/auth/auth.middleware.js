@@ -16,8 +16,8 @@ export function requireAuth(req,_res,next) {
   if (Date.now()-req.authSession.last_seen_at>60000) touch(req.authSession.id,Date.now());
   next();
 }
-export const requireRole = (role) => (req,_res,next) => {
-  if (req.user?.role!==role) return next(new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.'));
+export const requireRole = (...roles) => (req,_res,next) => {
+  if (!roles.includes(req.user?.role)) return next(new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.'));
   next();
 };
 export function trustedOrigin(req,_res,next) {

@@ -12,5 +12,6 @@ export const pay = (req, res) =>
       service.payFee(
         idSchema.parse(req.params.id),
         paymentSchema.parse(req.body),
+        req.user,
       ),
     );

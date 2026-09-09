@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { env } from "./env.js";
 import { migrate } from "./migrations.js";
-import { migrateAuth } from './auth-migration.js';
+import { migrateAuth, migrateRoles, migrateActionAudit } from './auth-migration.js';
 import { proportionalAmount } from "../shared/utils/money.js";
 
 let connection;
@@ -22,12 +22,15 @@ export function openDatabase(path = env.DATABASE_PATH) {
     db.pragma("busy_timeout = 5000");
     db.function("money_share", { deterministic: true }, proportionalAmount);
     db.transaction(() => {
+      const version = db.pragma('user_version', { simple: true });
       migrate(db, schema);
       migrateAuth(db);
+      if (version < 3) migrateRoles(db);
+      migrateActionAudit(db);
       db.exec(schema);
       if (db.pragma("foreign_key_check").length)
         throw new Error("Banco contém referências inválidas.");
-      db.pragma("user_version = 2");
+      db.pragma("user_version = 4");
     }).immediate();
     connection = db;
     return db;

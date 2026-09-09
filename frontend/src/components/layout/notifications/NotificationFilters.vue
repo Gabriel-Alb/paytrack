@@ -1,5 +1,5 @@
 <template>
-    <nav class="shrink-0 border-b border-black/[0.06] bg-white px-4" aria-label="Filtrar notificações">
+    <nav class="shrink-0 overflow-x-auto border-b border-black/[0.06] bg-white px-4" aria-label="Filtrar notificações">
         <div class="flex items-center gap-5" role="tablist">
             <button v-for="filter in filters" :key="filter.value" type="button" role="tab"
                 :aria-selected="modelValue === filter.value" :class="[
