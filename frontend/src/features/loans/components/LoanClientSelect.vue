@@ -120,6 +120,7 @@ const props = defineProps({
 const emit = defineEmits([
     'update:modelValue',
     'request-new-client',
+    'select-client',
 ])
 
 const root = ref(null)
@@ -199,6 +200,7 @@ function handleOutsideClick(event) {
 watch(
     selectedClient,
     (client) => {
+        emit('select-client', client ?? null)
         if (client) {
             query.value = client.name
             return

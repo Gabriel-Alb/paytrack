@@ -124,7 +124,7 @@ export function clientBalances(clientId, attentionDays, date) {
   return database()
     .prepare(
       `SELECT c.id, c.status_override,
-    (SELECT COUNT(*) FROM loans WHERE client_id=c.id) AS loan_count,
+    (SELECT COUNT(*) FROM loans WHERE client_id=c.id AND status<>'cancelled') AS loan_count,
     (SELECT COUNT(*) FROM loans WHERE client_id=c.id AND status IN ('active','overdue')) AS open_count,
     EXISTS(SELECT 1 FROM loans l JOIN installments i ON i.loan_id=l.id LEFT JOIN late_fees f ON f.installment_id=i.id
       WHERE l.client_id=c.id AND l.status<>'cancelled' AND

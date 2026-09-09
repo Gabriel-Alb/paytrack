@@ -23,6 +23,8 @@ export function loanView(loan) {
   return { ...loan,clientId:loan.client_id,clientName:loan.client_name,amount:fromCents(loan.principal_amount),
     interest:loan.interest_percentage,totalWithInterest:fromCents(loan.total_amount),profit:fromCents(loan.interest_amount),
     installmentCount:loan.installment_count,paidInstallments:loan.paid_installments,
+    installmentValue:fromCents(loan.min_installment_amount),
+    maxInstallmentValue:fromCents(loan.max_installment_amount),
     dailyLateFee:fromCents(loan.late_fee_per_day),loanDate:loan.loan_date,firstPaymentDate:loan.first_due_date,
     status:loan.display_status,daysLate:loan.days_late,
     installmentRows:installments,
@@ -57,7 +59,6 @@ export const loansApi = {
       installment_number:item.installmentNumber,payment_date:item.paidAt,late_fee_received_amount:toCents(item.lateFeeReceivedAmount),
     })) } }))
   },
-  async preview(id,date) { return request(`/installments/${id}/payment-preview`,{ method:'POST',body:{ payment_date:date } }) },
 }
 
 export async function getReport(query,signal) {
@@ -73,7 +74,7 @@ export async function getReport(query,signal) {
 export async function getDashboard() { return request('/dashboard/summary') }
 export async function getNotifications() {
   return (await request('/notifications')).map((item) => ({ ...item,
-    amount:formatCurrency(fromCents(item.amount)),overdueDays:`${item.days_late} dias de atraso`,
+    amount:item.type === 'access' ? '' : formatCurrency(fromCents(item.amount)),overdueDays:`${item.days_late} dias de atraso`,
     datetime:item.datetime.includes('T') ? item.datetime : item.datetime.replace(' ','T')+'Z',
   }))
 }

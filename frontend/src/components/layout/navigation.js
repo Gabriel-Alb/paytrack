@@ -36,14 +36,17 @@ export const navigationSections = [
             {
                 label: 'Quitados',
                 icon: mdiCheckCircleOutline,
+                to: '/clients?status=quitado',
             },
             {
                 label: 'Inadimplentes',
                 icon: mdiAlertCircleOutline,
+                to: '/clients?status=negativado',
             },
             {
                 label: 'Relatórios',
                 icon: mdiChartBoxOutline,
+                to: '/reports',
             },
         ],
     },
@@ -58,10 +61,12 @@ export const mobileNavigationItems = [
     {
         label: 'Clientes',
         icon: mdiAccountGroupOutline,
+        to: '/clients',
     },
     {
         label: 'Empréstimos',
         icon: mdiCashMultiple,
+        to: '/loans',
     },
 
 ]

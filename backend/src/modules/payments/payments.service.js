@@ -32,7 +32,7 @@ export function assertPayable(loan) {
 export function previewPayment(id, data) {
   const installment = requireRecord(findInstallment(id), "Parcela");
   validatePaymentDate(data.payment_date, installment.loan_date);
-  const lateDays = daysLate(installment.due_date, data.payment_date);
+  const lateDays = daysLate(installment.due_date, installment.paid_at || data.payment_date);
   return {
     days_late: lateDays,
     late_fee_amount: lateDays * installment.late_fee_per_day,
@@ -47,6 +47,9 @@ export function registerPayment(id, data) {
       assertRevision(loan, data.revision);
       assertPayable(loan);
       validatePaymentDate(data.payment_date, loan.loan_date);
+      const previousDate = repository.lastPaymentDate(id);
+      if (previousDate && data.payment_date < previousDate)
+        conflict("PAYMENT_DATE_CONFLICT", "O pagamento não pode anteceder os recebimentos já registrados.");
       const current = loan.installments.find((item) => item.id === id);
       if (data.amount > current.amount - current.paid_amount)
         conflict(

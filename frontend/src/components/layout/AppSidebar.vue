@@ -65,28 +65,33 @@
         </nav>
 
         <div class="border-t border-black/[0.06] p-4">
+            <RouterLink v-if="user?.role === 'master'" to="/users" class="mb-2 block rounded-lg px-2 py-3 text-sm font-medium text-[#166534]" @click="$emit('close')">Controle de acesso</RouterLink>
+            <RouterLink to="/account" class="mb-2 block rounded-lg px-2 py-3 text-sm text-[#52525b]" @click="$emit('close')">Minha conta</RouterLink>
             <div class="flex items-center gap-3 px-2 py-2">
                 <div
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f0fdf4] text-xs font-semibold text-[#166534]">
-                    GA
+                    {{ user?.name?.slice(0, 1).toUpperCase() }}
                 </div>
 
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-[13px] font-semibold text-[#27272a]">
-                        Gabriel
+                        {{ user?.name }}
                     </p>
 
                     <p class="truncate text-[11px] text-[#a1a1aa]">
-                        Administrador
+                        {{ user?.role === 'master' ? 'Administrador' : 'Usuário' }}
                     </p>
                 </div>
             </div>
+            <button type="button" :disabled="pendingOperation" class="mt-2 min-h-11 w-full rounded-lg border border-black/10 text-sm font-medium text-[#52525b] disabled:opacity-50" @click="signOut">Sair do sistema</button>
         </div>
     </aside>
 </template>
 
 <script setup>
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { perform,pendingOperation } from '@/services/api'
 
 import {
     mdiClose,
@@ -104,9 +109,12 @@ defineProps({
 defineEmits(['close'])
 
 const route = useRoute()
+const router = useRouter()
+const {user,logout} = useAuth()
+const signOut = () => perform(async () => { await logout(); await router.replace('/login') })
 
 const isActive = (item) => {
-    return item.to === route.path
+    return item.to === route.fullPath
 }
 
 const getItemClasses = (item) => [

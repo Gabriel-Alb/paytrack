@@ -214,8 +214,8 @@
                             </p>
 
                             <p class="mt-1 text-sm font-semibold text-[#27272a]">
-                                {{ largestDelay }}
-                                {{ largestDelay === 1 ? 'contrato' : 'contratos' }}
+                                {{ pendingContracts }}
+                                {{ pendingContracts === 1 ? 'contrato' : 'contratos' }}
                             </p>
                         </div>
                         <div class="rounded-lg bg-[#fafafa] p-3">
@@ -241,7 +241,7 @@
                                     <p class="mt-0.5 text-[10px] text-black/35">
                                         Contrato #{{ payment.contractId }}
 
-                                        <template class="" v-if="payment.daysLate">
+                                        <template v-if="payment.daysLate">
                                             • {{ payment.daysLate }}
                                             {{
                                                 payment.daysLate === 1
@@ -323,7 +323,7 @@
                     </p>
                 </header>
 
-                <div v-if="periodRecords.length" class="mt-6">
+                <div v-if="recordCount" class="mt-6">
                     <div class="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
                         <div class="relative size-[205px] shrink-0" @pointerleave="hoveredPaymentStatus = ''">
                             <svg viewBox="0 0 160 160" class="size-full -rotate-90 overflow-visible">
@@ -367,7 +367,7 @@
 
                                 <template v-else>
                                     <strong class="text-3xl font-semibold tracking-[-0.04em] text-[#27272a]">
-                                        {{ periodRecords.length }}
+                                        {{ recordCount }}
                                     </strong>
 
                                     <span class="mt-1 text-xs text-black/40">
@@ -655,6 +655,7 @@
                 </p>
             </div>
         </section>
+        <div ref="target" aria-hidden="true" />
     </div>
 </template>
 
@@ -667,6 +668,8 @@ import {
 
 import BaseBarChart from '@/components/base/BaseBarChart.vue'
 import BaseDatePicker from '@/components/base/BaseDatePicker.vue'
+import { getReport, currentDate } from '@/services/paytrack'
+import { usePagedList } from '@/composables/usePagedList'
 
 const periodOptions = [
     {
@@ -745,13 +748,13 @@ const mobileSortOptions = tableColumns
 
 const reportMode = ref('day')
 
-const dayDate = ref('2026-08-25')
+const dayDate = ref(currentDate())
 
-const weekStartDate = ref('2026-08-25')
-const weekEndDate = ref('2026-08-31')
+const weekStartDate = ref(currentDate())
+const weekEndDate = ref(formatIsoDate(new Date(Date.parse(currentDate()) + 6 * 86400000)))
 
-const selectedMonth = ref(8)
-const selectedYear = ref(2026)
+const selectedMonth = ref(Number(currentDate().slice(5,7)))
+const selectedYear = ref(Number(currentDate().slice(0,4)))
 
 const selectedPaymentStatus = ref('all')
 const hoveredPaymentStatus = ref('')
@@ -779,303 +782,6 @@ const yearOptions = computed(() => {
         (first, second) => first - second,
     )
 })
-
-const payments = ref([
-    {
-        id: 1,
-        date: '2026-08-25',
-        paymentDate: '2026-08-25',
-        client: 'João da Silva',
-        contractId: 48,
-        expected: 466.67,
-        received: 466.67,
-        expectedProfit: 75,
-        realizedProfit: 75,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 2,
-        date: '2026-08-25',
-        paymentDate: '2026-08-25',
-        client: 'Larissa Gomes',
-        contractId: 71,
-        expected: 560,
-        received: 560,
-        expectedProfit: 84,
-        realizedProfit: 84,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 3,
-        date: '2026-08-25',
-        paymentDate: '2026-08-25',
-        client: 'Vinícius Ribeiro',
-        contractId: 72,
-        expected: 920,
-        received: 920,
-        expectedProfit: 138,
-        realizedProfit: 138,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 4,
-        date: '2026-08-25',
-        paymentDate: '2026-08-25',
-        client: 'Thiago Moreira',
-        contractId: 70,
-        expected: 680,
-        received: 400,
-        expectedProfit: 102,
-        realizedProfit: 60,
-        status: 'partial',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 5,
-        date: '2026-08-25',
-        paymentDate: '2026-08-25',
-        client: 'Maria Oliveira Santos',
-        contractId: 47,
-        expected: 550,
-        received: 300,
-        expectedProfit: 82.5,
-        realizedProfit: 45,
-        status: 'partial',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 6,
-        date: '2026-08-25',
-        paymentDate: '2026-08-25',
-        client: 'Ricardo Martins',
-        contractId: 62,
-        expected: 740,
-        received: 500,
-        expectedProfit: 111,
-        realizedProfit: 75,
-        status: 'partial',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 7,
-        date: '2026-08-25',
-        paymentDate: '',
-        client: 'Carlos Henrique Souza',
-        contractId: 46,
-        expected: 1150,
-        received: 0,
-        expectedProfit: 172.5,
-        realizedProfit: 0,
-        status: 'unpaid',
-        daysLate: 8,
-        lateFee: 92,
-    },
-    {
-        id: 8,
-        date: '2026-08-25',
-        paymentDate: '',
-        client: 'Pedro Almeida',
-        contractId: 41,
-        expected: 660,
-        received: 0,
-        expectedProfit: 99,
-        realizedProfit: 0,
-        status: 'unpaid',
-        daysLate: 3,
-        lateFee: 54,
-    },
-    {
-        id: 9,
-        date: '2026-08-25',
-        paymentDate: '',
-        client: 'André Moraes',
-        contractId: 68,
-        expected: 1050,
-        received: 0,
-        expectedProfit: 157,
-        realizedProfit: 0,
-        status: 'unpaid',
-        daysLate: 6,
-        lateFee: 84,
-    },
-    {
-        id: 10,
-        date: '2026-08-25',
-        paymentDate: '',
-        client: 'Eduardo Campos',
-        contractId: 63,
-        expected: 970,
-        received: 0,
-        expectedProfit: 145.5,
-        realizedProfit: 0,
-        status: 'unpaid',
-        daysLate: 4,
-        lateFee: 68,
-    },
-    {
-        id: 11,
-        date: '2026-08-01',
-        paymentDate: '2026-08-01',
-        client: 'Felipe Martins',
-        contractId: 52,
-        expected: 720,
-        received: 720,
-        expectedProfit: 105,
-        realizedProfit: 105,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 12,
-        date: '2026-08-03',
-        paymentDate: '2026-08-03',
-        client: 'Rafael Almeida',
-        contractId: 53,
-        expected: 950,
-        received: 950,
-        expectedProfit: 135,
-        realizedProfit: 135,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 13,
-        date: '2026-08-05',
-        paymentDate: '2026-08-05',
-        client: 'Fernanda Souza',
-        contractId: 56,
-        expected: 840,
-        received: 840,
-        expectedProfit: 122,
-        realizedProfit: 122,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 14,
-        date: '2026-08-07',
-        paymentDate: '2026-08-07',
-        client: 'Marcelo Nunes',
-        contractId: 61,
-        expected: 880,
-        received: 880,
-        expectedProfit: 132,
-        realizedProfit: 132,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 15,
-        date: '2026-08-09',
-        paymentDate: '',
-        client: 'Augusto Prado',
-        contractId: 73,
-        expected: 620,
-        received: 0,
-        expectedProfit: 93,
-        realizedProfit: 0,
-        status: 'unpaid',
-        daysLate: 4,
-        lateFee: 48,
-    },
-    {
-        id: 16,
-        date: '2026-08-12',
-        paymentDate: '2026-08-12',
-        client: 'Carolina Mendes',
-        contractId: 65,
-        expected: 810,
-        received: 810,
-        expectedProfit: 121,
-        realizedProfit: 121,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 17,
-        date: '2026-08-17',
-        paymentDate: '2026-08-17',
-        client: 'Isabela Rocha',
-        contractId: 67,
-        expected: 630,
-        received: 630,
-        expectedProfit: 94,
-        realizedProfit: 94,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 18,
-        date: '2026-08-20',
-        paymentDate: '',
-        client: 'Renato Carvalho',
-        contractId: 74,
-        expected: 1050,
-        received: 0,
-        expectedProfit: 157,
-        realizedProfit: 0,
-        status: 'unpaid',
-        daysLate: 6,
-        lateFee: 84,
-    },
-    {
-        id: 19,
-        date: '2026-08-23',
-        paymentDate: '2026-08-23',
-        client: 'Priscila Alves',
-        contractId: 69,
-        expected: 760,
-        received: 760,
-        expectedProfit: 114,
-        realizedProfit: 114,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 20,
-        date: '2026-08-27',
-        paymentDate: '2026-08-27',
-        client: 'Bruno Rodrigues',
-        contractId: 75,
-        expected: 560,
-        received: 560,
-        expectedProfit: 84,
-        realizedProfit: 84,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-    {
-        id: 21,
-        date: '2026-08-30',
-        paymentDate: '2026-08-30',
-        client: 'Mariana Costa',
-        contractId: 76,
-        expected: 920,
-        received: 920,
-        expectedProfit: 138,
-        realizedProfit: 138,
-        status: 'paid',
-        daysLate: 0,
-        lateFee: 0,
-    },
-])
 
 watch(
     weekStartDate,
@@ -1151,94 +857,20 @@ const periodRange = computed(() => {
     }
 })
 
-const periodRecords = computed(() =>
-    payments.value.filter(
-        (payment) =>
-            payment.date >= periodRange.value.start &&
-            payment.date <= periodRange.value.end,
-    ),
-)
-
-const totalExpected = computed(() =>
-    sum(
-        periodRecords.value,
-        'expected',
-    ),
-)
-
-const totalReceived = computed(() =>
-    sum(
-        periodRecords.value,
-        'received',
-    ),
-)
-
-const totalPending = computed(() =>
-    Math.max(
-        totalExpected.value -
-        totalReceived.value,
-        0,
-    ),
-)
-
-const expectedProfit = computed(() =>
-    sum(
-        periodRecords.value,
-        'expectedProfit',
-    ),
-)
-
-const realizedProfit = computed(() =>
-    sum(
-        periodRecords.value,
-        'realizedProfit',
-    ),
-)
-
-const paidRecords = computed(() =>
-    periodRecords.value.filter(
-        (payment) =>
-            payment.status === 'paid',
-    ),
-)
-
-const partialRecords = computed(() =>
-    periodRecords.value.filter(
-        (payment) =>
-            payment.status === 'partial',
-    ),
-)
-
-const unpaidRecords = computed(() =>
-    periodRecords.value.filter(
-        (payment) =>
-            payment.status === 'unpaid',
-    ),
-)
-
-const pendingRecords = computed(() =>
-    periodRecords.value
-        .filter(
-            (payment) =>
-                getOutstandingValue(payment) > 0,
-        )
-        .sort(
-            (first, second) =>
-                second.daysLate -
-                first.daysLate,
-        ),
-)
-
-const largestDelay = computed(() =>
-    periodRecords.value.reduce(
-        (highest, payment) =>
-            Math.max(
-                highest,
-                Number(payment.daysLate) || 0,
-            ),
-        0,
-    ),
-)
+const query = computed(() => ({ ...periodRange.value, mode:reportMode.value, status:selectedPaymentStatus.value, search:search.value, sort:sortKey.value, direction:sortDirection.value }))
+const { items:sortedPeriodRecords, metadata, target } = usePagedList(getReport, query)
+const summary = computed(() => metadata.value?.summary ?? {})
+const recordCount = computed(() => summary.value.count ?? 0)
+const paidCount = computed(() => summary.value.paid ?? 0)
+const partialCount = computed(() => summary.value.partial ?? 0)
+const unpaidCount = computed(() => summary.value.unpaid ?? 0)
+const totalExpected = computed(() => Number(summary.value.expected ?? 0))
+const totalReceived = computed(() => Number(summary.value.received ?? 0))
+const totalPending = computed(() => Number(summary.value.pending ?? 0))
+const expectedProfit = computed(() => Number(summary.value.expectedProfit ?? 0))
+const realizedProfit = computed(() => Number(summary.value.realizedProfit ?? 0))
+const pendingRecords = computed(() => metadata.value?.pending ?? [])
+const pendingContracts = computed(() => summary.value.pendingContracts ?? 0)
 
 const receiptRate = computed(() => {
     if (!totalExpected.value) {
@@ -1312,37 +944,37 @@ const paymentIndicators = computed(() => [
     {
         key: 'expected',
         label: 'Pagamentos previstos',
-        value: periodRecords.value.length,
+        value: recordCount.value,
         percentage: null,
         percentageClass: '',
     },
     {
         key: 'paid',
         label: 'Pagamentos realizados',
-        value: paidRecords.value.length,
+        value: paidCount.value,
         percentage: getPercentage(
-            paidRecords.value.length,
-            periodRecords.value.length,
+            paidCount.value,
+            recordCount.value,
         ),
         percentageClass: 'text-[#166534]',
     },
     {
         key: 'partial',
         label: 'Pagamentos parciais',
-        value: partialRecords.value.length,
+        value: partialCount.value,
         percentage: getPercentage(
-            partialRecords.value.length,
-            periodRecords.value.length,
+            partialCount.value,
+            recordCount.value,
         ),
         percentageClass: 'text-[#b45309]',
     },
     {
         key: 'unpaid',
         label: 'Não pagos',
-        value: unpaidRecords.value.length,
+        value: unpaidCount.value,
         percentage: getPercentage(
-            unpaidRecords.value.length,
-            periodRecords.value.length,
+            unpaidCount.value,
+            recordCount.value,
         ),
         percentageClass: 'text-[#b91c1c]',
     },
@@ -1350,27 +982,27 @@ const paymentIndicators = computed(() => [
 
 const paymentStatusItems = computed(() => {
     const total =
-        periodRecords.value.length
+        recordCount.value
 
     const items = [
         {
             key: 'paid',
             label: 'Pagos',
-            value: paidRecords.value.length,
+            value: paidCount.value,
             color: '#166534',
         },
         {
             key: 'partial',
             label: 'Parciais',
             value:
-                partialRecords.value.length,
+                partialCount.value,
             color: '#d99732',
         },
         {
             key: 'unpaid',
             label: 'Não pagos',
             value:
-                unpaidRecords.value.length,
+                unpaidCount.value,
             color: '#c24141',
         },
     ]
@@ -1438,151 +1070,12 @@ const selectedPaymentStatusLabel =
         ),
     )
 
-const searchedPeriodRecords = computed(() => {
-    let records =
-        periodRecords.value
-
-    if (
-        selectedPaymentStatus.value !==
-        'all'
-    ) {
-        records = records.filter(
-            (payment) =>
-                payment.status ===
-                selectedPaymentStatus.value,
-        )
-    }
-
-    const term =
-        search.value
-            .trim()
-            .toLowerCase()
-
-    if (!term) {
-        return records
-    }
-
-    return records.filter(
-        (payment) => {
-            const values = [
-                payment.client,
-                String(
-                    payment.contractId,
-                ),
-                getStatusLabel(
-                    payment.status,
-                ),
-                payment.date,
-                payment.paymentDate,
-            ]
-
-            return values.some(
-                (value) =>
-                    String(value ?? '')
-                        .toLowerCase()
-                        .includes(term),
-            )
-        },
-    )
-})
-
-const sortedPeriodRecords = computed(() => {
-    return [
-        ...searchedPeriodRecords.value,
-    ].sort(
-        (first, second) => {
-            const firstValue =
-                getSortValue(
-                    first,
-                    sortKey.value,
-                )
-
-            const secondValue =
-                getSortValue(
-                    second,
-                    sortKey.value,
-                )
-
-            let comparison = 0
-
-            if (
-                typeof firstValue ===
-                'number' &&
-                typeof secondValue ===
-                'number'
-            ) {
-                comparison =
-                    firstValue -
-                    secondValue
-            } else {
-                comparison =
-                    String(firstValue)
-                        .localeCompare(
-                            String(
-                                secondValue,
-                            ),
-                            'pt-BR',
-                            {
-                                numeric: true,
-                                sensitivity:
-                                    'base',
-                            },
-                        )
-            }
-
-            return (
-                sortDirection.value ===
-                    'asc'
-                    ? comparison
-                    : -comparison
-            )
-        },
-    )
-})
-
-const chartItems = computed(() => {
-    if (reportMode.value === 'day') {
-        return [
-            createChartItem(
-                dayDate.value,
-            ),
-        ]
-    }
-
-    if (reportMode.value === 'week') {
-        const start =
-            parseDate(
-                weekStartDate.value,
-            )
-
-        const end =
-            parseDate(
-                weekEndDate.value,
-            )
-
-        if (!start || !end) {
-            return []
-        }
-
-        const amount = Math.max(
-            1,
-            Math.min(
-                getDaysDifference(
-                    start,
-                    end,
-                ) + 1,
-                7,
-            ),
-        )
-
-        return createDailyChartItems(
-            start,
-            amount,
-        )
-    }
-
-    return createMonthlyChartItems()
-})
+const chartItems = computed(() => (metadata.value?.chart ?? []).map(item => ({
+    id:item.start,
+    label:reportMode.value === 'month' ? item.start.slice(8) + '–' + item.end.slice(8) : reportMode.value === 'day' ? formatDayMonth(item.start) : formatWeekday(item.start),
+    fullLabel:formatLongDate(item.start) + (item.end !== item.start ? ' – ' + formatLongDate(item.end) : ''),
+    value:Number(item.value),
+})))
 
 const chartDescription = computed(() => {
     if (reportMode.value === 'day') {
@@ -1595,152 +1088,6 @@ const chartDescription = computed(() => {
 
     return 'Recebimentos agrupados por semana dentro do mês selecionado.'
 })
-
-function createChartItem(
-    value,
-) {
-    const date =
-        parseDate(value)
-
-    if (!date) {
-        return {
-            id: value,
-            label: '—',
-            fullLabel: 'Data inválida',
-            value: 0,
-        }
-    }
-
-    const total = payments.value
-        .filter(
-            (payment) =>
-                payment.date === value,
-        )
-        .reduce(
-            (sumValue, payment) =>
-                sumValue +
-                Number(
-                    payment.received,
-                ),
-            0,
-        )
-
-    return {
-        id: value,
-        date: value,
-        label:
-            reportMode.value === 'day'
-                ? formatDayMonth(value)
-                : formatWeekday(value),
-        fullLabel:
-            formatLongDate(value),
-        value: total,
-    }
-}
-
-function createDailyChartItems(
-    start,
-    amount,
-) {
-    return Array.from(
-        {
-            length: amount,
-        },
-        (_, index) => {
-            const date =
-                new Date(start)
-
-            date.setUTCDate(
-                start.getUTCDate() +
-                index,
-            )
-
-            return createChartItem(
-                formatIsoDate(date),
-            )
-        },
-    )
-}
-
-function createMonthlyChartItems() {
-    const amountOfDays =
-        new Date(
-            Date.UTC(
-                selectedYear.value,
-                selectedMonth.value,
-                0,
-            ),
-        ).getUTCDate()
-
-    const groups = [
-        [1, 7],
-        [8, 14],
-        [15, 21],
-        [22, 28],
-        [29, amountOfDays],
-    ].filter(
-        ([start]) =>
-            start <= amountOfDays,
-    )
-
-    return groups.map(
-        (
-            [
-                startDay,
-                endDay,
-            ],
-            index,
-        ) => {
-            const safeEnd =
-                Math.min(
-                    endDay,
-                    amountOfDays,
-                )
-
-            const startDate =
-                formatDateParts(
-                    selectedYear.value,
-                    selectedMonth.value,
-                    startDay,
-                )
-
-            const endDate =
-                formatDateParts(
-                    selectedYear.value,
-                    selectedMonth.value,
-                    safeEnd,
-                )
-
-            const value =
-                payments.value
-                    .filter(
-                        (payment) =>
-                            payment.date >=
-                            startDate &&
-                            payment.date <=
-                            endDate,
-                    )
-                    .reduce(
-                        (
-                            total,
-                            payment,
-                        ) =>
-                            total +
-                            Number(
-                                payment.received,
-                            ),
-                        0,
-                    )
-
-            return {
-                id: `week-${index}`,
-                label: `${String(startDay).padStart(2, '0')}–${String(safeEnd).padStart(2, '0')}`,
-                fullLabel: `${startDay} a ${safeEnd} de ${months[selectedMonth.value - 1].label.toLowerCase()}`,
-                value,
-            }
-        },
-    )
-}
 
 function setSort(key) {
     if (
@@ -1761,59 +1108,8 @@ function toggleSortDirection() {
             : 'asc'
 }
 
-function getSortValue(
-    payment,
-    key,
-) {
-    if (key === 'pending') {
-        return getOutstandingValue(
-            payment,
-        )
-    }
-
-    if (key === 'status') {
-        const order = {
-            paid: 1,
-            partial: 2,
-            unpaid: 3,
-        }
-
-        return (
-            order[
-            payment.status
-            ] ?? 99
-        )
-    }
-
-    if (
-        key === 'expected' ||
-        key === 'received' ||
-        key === 'contractId'
-    ) {
-        return Number(
-            payment[key] ?? 0,
-        )
-    }
-
-    return payment[key] ?? ''
-}
-
 function changeReportMode(mode) {
     reportMode.value = mode
-}
-
-function sum(
-    records,
-    property,
-) {
-    return records.reduce(
-        (total, record) =>
-            total +
-            Number(
-                record[property] || 0,
-            ),
-        0,
-    )
 }
 
 function getPercentage(
@@ -1830,16 +1126,8 @@ function getPercentage(
     ) * 100
 }
 
-function getOutstandingValue(
-    payment,
-) {
-    return Math.max(
-        Number(payment.expected) -
-        Number(
-            payment.received,
-        ),
-        0,
-    )
+function getOutstandingValue(payment) {
+    return Number(payment.pending)
 }
 
 function getStatusLabel(
@@ -1880,20 +1168,6 @@ function togglePaymentStatus(
             status
             ? 'all'
             : status
-}
-
-function getDaysDifference(
-    start,
-    end,
-) {
-    const milliseconds =
-        end.getTime() -
-        start.getTime()
-
-    return Math.floor(
-        milliseconds /
-        86400000,
-    )
 }
 
 function parseDate(value) {

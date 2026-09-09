@@ -8,11 +8,58 @@ CREATE TABLE IF NOT EXISTS users (
     rg TEXT UNIQUE,
     cnh TEXT UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'user',
-    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('master', 'user')),
+    access_status TEXT NOT NULL DEFAULT 'pending' CHECK(access_status IN ('pending','active','rejected','blocked')),
+    approved_by INTEGER REFERENCES users(id),
+    approved_at TEXT,
+    rejected_at TEXT,
+    blocked_at TEXT,
+    password_changed_at TEXT,
+    last_login_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    csrf_token TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL,
+    revoked_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS auth_audit_logs (
+    id INTEGER PRIMARY KEY,
+    event TEXT NOT NULL,
+    actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    subject_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_rate_limits (
+    key TEXT PRIMARY KEY,
+    hits INTEGER NOT NULL,
+    reset_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_rate_expiry ON auth_rate_limits(reset_at);
+CREATE INDEX IF NOT EXISTS idx_users_access ON users(access_status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(lower(trim(email)));
+CREATE TRIGGER IF NOT EXISTS users_role_insert BEFORE INSERT ON users
+WHEN NEW.role NOT IN ('master','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
+CREATE TRIGGER IF NOT EXISTS users_role_update BEFORE UPDATE OF role ON users
+WHEN NEW.role NOT IN ('master','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
+CREATE TRIGGER IF NOT EXISTS protect_last_master_update BEFORE UPDATE OF role,access_status ON users
+WHEN OLD.role='master' AND OLD.access_status='active'
+ AND (NEW.role<>'master' OR NEW.access_status<>'active')
+ AND (SELECT count(*) FROM users WHERE role='master' AND access_status='active')<=1
+BEGIN SELECT RAISE(ABORT, 'Last active master'); END;
+CREATE TRIGGER IF NOT EXISTS protect_last_master_delete BEFORE DELETE ON users
+WHEN OLD.role='master' AND OLD.access_status='active'
+ AND (SELECT count(*) FROM users WHERE role='master' AND access_status='active')<=1
+BEGIN SELECT RAISE(ABORT, 'Last active master'); END;
 
 CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

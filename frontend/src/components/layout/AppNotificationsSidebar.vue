@@ -12,11 +12,12 @@
                 <NotificationSidebarHeader ref="headerRef" @close="close" />
 
                 <NotificationFilters v-model="activeFilter" :filters="filters" />
+                <p v-if="feedback" role="status" class="px-4 py-3 text-sm text-[#166534]">{{ feedback }}</p>
 
                 <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                     <template v-if="groupedNotifications.length">
                         <NotificationGroup v-for="group in groupedNotifications" :key="group.label" :label="group.label"
-                            :notifications="group.notifications" />
+                            :notifications="group.notifications" @review="review" />
                     </template>
 
                     <NotificationEmptyState v-else />
@@ -24,6 +25,7 @@
             </aside>
         </Transition>
     </Teleport>
+    <AccessReviewModal :user-id="selectedUser" @close="selectedUser=null" @updated="updated" />
 </template>
 
 <script setup>
@@ -38,10 +40,15 @@ import NotificationEmptyState from './notifications/NotificationEmptyState.vue'
 import NotificationFilters from './notifications/NotificationFilters.vue'
 import NotificationGroup from './notifications/NotificationGroup.vue'
 import NotificationSidebarHeader from './notifications/NotificationSidebarHeader.vue'
+import AccessReviewModal from '@/features/auth/components/AccessReviewModal.vue'
 
 import { getNotifications } from '@/services/paytrack'
-import { perform } from '@/services/api'
+import { perform,apiNotice } from '@/services/api'
 const notifications = ref([])
+const selectedUser = ref(null)
+const feedback = ref('')
+function review(id) { selectedUser.value=id; emit('close') }
+function updated() { feedback.value='Acesso atualizado com sucesso.'; apiNotice.value=feedback.value; perform(async()=>{notifications.value=await getNotifications()}) }
 import { useNotifications } from '../../composables/useNotifications.js'
 
 const props = defineProps({

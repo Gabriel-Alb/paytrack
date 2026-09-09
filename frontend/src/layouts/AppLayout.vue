@@ -14,6 +14,7 @@
 
             <main class="px-4 pt-5 pb-28 sm:px-7 sm:py-6 lg:px-10 lg:py-8">
                 <p v-if="apiError" role="alert" class="mb-4 text-sm text-red-700">{{ apiError }}</p>
+                <p v-if="apiNotice" role="status" class="mb-4 text-sm text-[#166534]">{{ apiNotice }}</p>
                 <RouterView />
             </main>
         </div>
@@ -29,7 +30,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { apiError } from '@/services/api'
+import { apiError,apiNotice } from '@/services/api'
 import { RouterView } from 'vue-router'
 
 import AppHeader from '@/components/layout/AppHeader.vue'

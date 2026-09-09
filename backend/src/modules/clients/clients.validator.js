@@ -52,7 +52,7 @@ export const clientSchema = z
       .string()
       .trim()
       .max(30)
-      .regex(/^[\d\s()+.\-]*$/)
+      .regex(/^[\d\s()+.-]*$/)
       .transform((value) => value.replace(/\D/g, "") || null)
       .nullable()
       .optional(),

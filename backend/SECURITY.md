@@ -1,0 +1,48 @@
+# Segurança da autenticação do PayTrack
+
+## Implementação
+
+- Argon2id via `argon2`: memória 19 MiB, 2 iterações, paralelismo 1, salt aleatório gerado pela biblioteca. Coluna TEXT sem truncamento. Política de 15–128 pontos de código Unicode, espaços e colagem permitidos, sem composição obrigatória.
+- Sessões opacas de 32 bytes CSPRNG. Apenas SHA-256 do segredo aleatório fica em `auth_sessions`; o segredo bruto vai exclusivamente no cookie HttpOnly. Não há JWT, pepper improvisado, senha reversível ou segredo padrão.
+- Cookie de produção `__Host-paytrack_session`, Secure, HttpOnly, SameSite=Strict, Path=/, sem Domain. Desenvolvimento HTTP tem cookie separado. Prazo padrão: 24h absoluto e 2h ocioso, configuráveis e limitados; atividade atualizada no máximo uma vez por minuto.
+- Login emite sessão nova e revoga a pré-sessão. Logout revoga no servidor; logout-all, bloqueio e mudança de senha revogam todas as sessões. Cada chamada autenticada consulta usuário e status no banco.
+- CSRF sincronizado: 32 bytes aleatórios vinculados à sessão no SQLite; frontend mantém só o CSRF em memória e envia `X-CSRF-Token`. GET `/auth/csrf` pode estabelecer uma pré-sessão anônima de 30 minutos, sem acesso privado, para proteger também login/cadastro. Esse GET e atualização de atividade escrevem somente metadados de segurança. GETs financeiros retornam os cálculos atuais em savepoint revertido, sem persistir alterações de negócio.
+- Origin/Referer deve corresponder à origem configurada nas escritas; CORS aceita só essa origem com credenciais. A SPA deve permanecer na mesma origem/site HTTPS para compatibilidade com SameSite=Strict. Não adicionar tokens em URLs.
+- `express-rate-limit` com contadores SQLite persistentes e atômicos: login 30/IP e 10/e-mail normalizado por 15 minutos; cadastro 5/IP e 3/e-mail; troca de senha 10/IP e 5/usuário. Há limite para pré-sessões. Respostas 429 não mostram tentativas restantes. Expiração da janela permite nova tentativa. A normalização de IP do pacote trata IPv6; headers de proxy não são confiáveis por padrão.
+- Somente master lista/avalia solicitações e aprova/rejeita/bloqueia/desbloqueia. Role e status são rejeitados no payload público. Transições administrativas, revogação e auditoria são transacionais. Triggers impedem remover/rebaixar/bloquear o último master ativo, inclusive via SQL normal.
+- `auth_audit_logs` registra eventos, IDs internos e horário: criação do master, solicitação/aprovação/rejeição/bloqueio/desbloqueio, login aceito/negado, logout, senha alterada e sessões revogadas. Não registra senha, hash, token, cookie, CSRF, e-mail ou documentos. Falha de login genérica não identifica a conta. Erros internos são logados sem objeto, stack ou mensagem original que possa conter dados.
+- `/auth/me` e listas administrativas omitem documentos. Notificações administrativas levam só nome, ID e horário. Documentos do solicitante são retornados somente no detalhe master. Dados de clientes financeiros permanecem disponíveis aos usuários ativos conforme a política existente.
+- JSON limitado a 128 KiB; Zod estrito; consultas parametrizadas; Vue com interpolação escapada; respostas da API com `Cache-Control: no-store`; Helmet e identificação Express desabilitada.
+
+Referências: [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+
+## Migration e bootstrap
+
+`src/config/auth-migration.js` executa dentro da transação IMMEDIATE de inicialização. A versão SQLite passa a 2. Preserva IDs e chaves estrangeiras, normaliza documentos e e-mail e aborta integralmente em colisões. Adiciona status, aprovação, datas de rejeição/bloqueio/troca de senha/login; remove `active` para ter uma só fonte de verdade. Cria tabelas de sessões, auditoria e limites, índices e proteção do último master. Reabertura é idempotente.
+
+Usuários legados desativados ficam `blocked`; master legado ativo com hash Argon2id permanece ativo; demais ficam `pending`. Hashes legados não Argon2id não são aceitos para login. Não é possível converter um hash antigo sem a senha original: se houver usuários assim, é necessária remediação offline com identidade verificada, fora desta etapa. Um master já existente faz o bootstrap recusar nova criação, mesmo bloqueado. Não remover o master ou substituir hashes sem procedimento operacional autorizado.
+
+Antes de migrar produção, faça backup consistente via API SQLite/backup com a aplicação parada ou ferramenta adequada ao WAL; não copie somente o arquivo `.db` enquanto houver escrita. Execute e teste a migração em uma cópia. Colisões precisam de revisão offline, sem apagar dados automaticamente. A migração não reescreve arquivos de backup antigos nem apaga com segurança páginas já existentes.
+
+Para criar o primeiro master: `npm run auth:create-master` dentro de `backend`. Use terminal interativo, sem argumentos de senha. A senha e confirmação não têm eco, não são incluídas em argumentos de processo e são limpas das referências do script após uso. Não há senha padrão nem geração automática de conta. O script verifica duplicidade também na transação, impedindo duas criações concorrentes.
+
+## Configuração obrigatória antes de produção
+
+1. Defina `NODE_ENV=production` e `FRONTEND_ORIGIN` como origem HTTPS exata, sem caminho/barra final. A aplicação recusa HTTP e falha ao iniciar com origem inadequada. Não configure produção como desenvolvimento.
+2. Termine TLS em proxy local, faça bind da API em loopback e configure `TRUST_PROXY=loopback` apenas nesse cenário. Bloqueie acesso externo direto à porta da API. O proxy precisa substituir headers encaminhados; não aceitar `X-Forwarded-*` arbitrário do cliente. Outra topologia requer revisão explícita da configuração; não usar `trust proxy=true`.
+3. Sirva o build Vue e `/api` pela mesma origem HTTPS. Helmet cobre respostas da API; o servidor que serve HTML/arquivos estáticos deve aplicar CSP (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'` como ponto de partida a validar), HSTS, proteção contra MIME sniffing e enquadramento. O estilo inline é necessário aos componentes existentes. Não publique o servidor Vite de desenvolvimento.
+4. Banco, WAL/SHM, diretório de dados e backups contêm dados sensíveis. A conta de serviço deve ter acesso exclusivo por ACL/permissões; proteger volume e backups com criptografia e controle de acesso da infraestrutura (por exemplo, volume criptografado gerenciado). Não servir esse diretório por HTTP, não versionar e não compartilhar cópias em logs/anexos. Definir retenção e acesso à auditoria conforme necessidade operacional.
+5. Não há `SESSION_SECRET` obrigatório neste desenho: não assinamos tokens, validamos hashes de segredos aleatórios no banco. Não criar chaves de criptografia fictícias nem configurar valores padrão. `.env` fica ignorado pelo Git. Acesso de escrita ao banco equivale a controle do sistema e exige proteção operacional.
+
+## Limitações explícitas
+
+- CPF/RG/CNH de usuários e clientes **não possuem criptografia por campo**. A decisão preserva consultas, busca parcial e unicidade existentes. Criptografia do volume, backups e ACLs depende da infraestrutura e não foi configurada automaticamente nesta máquina. Uma etapa futura exigirá AES-GCM e índice de igualdade HMAC com chaves separadas, migração, rotação e plano de recuperação revisados.
+- Sem MFA ou recuperação self-service. Recuperação futura exige canal confiável de verificação e tokens de uso único, curtos, aleatórios e armazenados por hash. Não existe envio, consulta ou recuperação da senha original. Não há integração de lista de senhas comprometidas nesta etapa.
+- Rate limit reduz abuso, mas não elimina ataques distribuídos e pode atrasar usuários que compartilham IP ou conta alvo. O SQLite é adequado ao porte atual e a workers no mesmo host/arquivo, não a múltiplos servidores independentes. Proteção contra DDoS e monitoramento/alertas de auditoria dependem da operação.
+- Hash dummy reduz diferenças de tempo para contas inexistentes, sem promessa de tempo constante de rede. Pré-cadastro não revela qual identificador já existe. Mensagens de status de acesso só aparecem após senha correta.
+- XSS na origem ainda pode operar com a sessão do usuário, mesmo sem ler o cookie. Manter CSP, dependências atualizadas e escape de conteúdo. Testes desktop/mobile usam Chromium; Safari/iOS real e a configuração TLS/proxy final precisam de validação no deploy.
+- O JavaScript permite limpar referências, mas não garante sobrescrita física imediata da memória de senha pelo coletor de lixo. As senhas não são persistidas pelo frontend.
+
+## Verificação
+
+`npm test` executa testes financeiros, autenticação e migrations em bancos isolados. `npm run lint` verifica backend. Dentro de `frontend`, executar `npm test`, `npm run lint` e `npm run build`. Executar `npm audit` nos dois projetos. Os testes de produção exercitam HTTPS/proxy e flags de cookie sem afrouxar os controles da aplicação.

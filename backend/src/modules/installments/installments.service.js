@@ -3,8 +3,14 @@ import { env } from "../../config/env.js";
 import { today } from "../../shared/utils/dates.js";
 import * as repository from "./installments.repository.js";
 
-let refreshedDatabase;
-let refreshedDate;
+// Existing read services reconcile derived balances. Return that current view without
+// committing their writes on GET. Financial mutation services still commit normally.
+export function readFinancial(operation) {
+  const db = database();
+  db.exec('SAVEPOINT financial_read');
+  try { return operation(); }
+  finally { db.exec('ROLLBACK TO financial_read; RELEASE financial_read'); }
+}
 
 export function refreshClient(id = null, date = today()) {
   for (const client of repository.clientBalances(
@@ -27,8 +33,6 @@ export function refreshClient(id = null, date = today()) {
 
 export function refreshFinancialState(loanId = null, date = today()) {
   const db = database();
-  if (loanId === null && refreshedDatabase === db && refreshedDate === date)
-    return;
   db.transaction(() => {
     repository.reconcileInstallments(date, loanId);
     repository.reconcileFees(date, loanId);
@@ -45,8 +49,4 @@ export function refreshFinancialState(loanId = null, date = today()) {
     if (loanId === null) refreshClient(null, date);
     else if (balances[0]) refreshClient(balances[0].client_id, date);
   })();
-  if (loanId === null) {
-    refreshedDatabase = db;
-    refreshedDate = date;
-  }
 }
