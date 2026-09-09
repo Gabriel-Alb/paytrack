@@ -1,13 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { restoreAuth,onSessionExpired } from '@/composables/useAuth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
   routes: [
+    { path:'/login',name:'login',meta:{public:true},component:()=>import('@/features/auth/views/LoginView.vue') },
+    { path:'/request-access',name:'request-access',meta:{public:true},component:()=>import('@/features/auth/views/RequestAccessView.vue') },
     {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
+        {path:'account',name:'account',meta:{title:'Minha conta'},component:()=>import('@/features/auth/views/AccountView.vue')},
+        {path:'users',name:'users',meta:{title:'Controle de acesso',master:true},component:()=>import('@/features/auth/views/UsersView.vue')},
         {
           path: '',
           name: 'dashboard',
@@ -39,7 +44,19 @@ const router = createRouter({
         },
       ],
     },
+    { path:'/:pathMatch(.*)*',redirect:'/' },
   ],
+})
+
+router.beforeEach(async (to) => {
+  const user = await restoreAuth()
+  if (!user && !to.meta.public) return {name:'login'}
+  if (user && to.meta.public) return {name:'dashboard'}
+  if (to.meta.master && user?.role!=='master') return {name:'dashboard'}
+})
+onSessionExpired(() => {
+  if (router.currentRoute.value.matched.length && !router.currentRoute.value.meta.public)
+    router.replace({name:'login'})
 })
 
 export default router

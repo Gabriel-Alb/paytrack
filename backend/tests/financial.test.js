@@ -6,15 +6,26 @@ import { openDatabase, closeDatabase, database } from '../src/config/database.js
 import { today, addDays } from '../src/shared/utils/dates.js';
 import { env } from '../src/config/env.js';
 import { seedDevelopment } from '../database/seed.js';
+import { createMaster } from '../src/modules/auth/auth.service.js';
+import { randomBytes } from 'node:crypto';
 
-const api = request(app);
+let api;
 const clientData = {
   name: 'Cliente de teste',
   cpf: '529.982.247-25',
   rg: '12.345-X',
   cnh: '12345678901',
 };
-beforeEach(() => openDatabase(':memory:'));
+beforeEach(async () => {
+  openDatabase(':memory:');
+  const password=randomBytes(24).toString('base64url');
+  await createMaster({name:'Test Master',email:'master@example.test',cpf:'12345678909',password});
+  api=request.agent(app);
+  const csrf=(await api.get('/api/auth/csrf')).body.csrfToken;
+  const login=await api.post('/api/auth/login').set('Origin',env.FRONTEND_ORIGIN).set('X-CSRF-Token',csrf).send({email:'master@example.test',password}).expect(200);
+  api.set('Origin',env.FRONTEND_ORIGIN);
+  api.set('X-CSRF-Token',login.body.csrfToken);
+});
 afterEach(closeDatabase);
 async function client(data = {}) {
   return (

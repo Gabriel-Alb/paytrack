@@ -12,6 +12,32 @@ O seed é opcional, destinado ao desenvolvimento e idempotente por CPF. Ele cria
 
 Configuração em `.env`, conforme `.env.example`. O banco padrão é `backend/database/paytrack.db`; os testes usam bancos isolados. O frontend Vite encaminha `/api` para `http://127.0.0.1:3000`.
 
+## Autenticação e produção
+
+Veja [SECURITY.md](SECURITY.md) para configuração, limites, migração e riscos restantes.
+Todas as rotas financeiras abaixo exigem usuário ativo e sessão válida. Escritas também exigem CSRF e Origin/Referer autorizado.
+
+Crie o primeiro administrador dentro de `backend`, em um terminal interativo:
+
+```sh
+npm run auth:create-master
+```
+
+O comando pergunta nome, e-mail, CPF, RG/CNH opcionais e senha com confirmação sem eco.
+Não aceita argumentos nem senha padrão; recusa outro master. Execute no banco correto definido em `.env`.
+Após isso, abra `/login`. Pessoas novas usam `/request-access`; o master avalia pela notificação ou em `/users`.
+`/account` permite trocar senha com a senha atual e encerra todas as sessões.
+
+| Acesso | Método e caminho |
+| --- | --- |
+| Público | `GET /api/health`, `GET /api/auth/csrf` |
+| Público com CSRF e rate limit | `POST /api/auth/login`, `POST /api/auth/request-access` |
+| Autenticado | `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-all`, `POST /api/auth/change-password` |
+| Master | `GET /api/users?status=pending&page=1`, `GET /api/users/:id`, `PATCH /api/users/:id/access` |
+
+O PATCH administrativo aceita apenas `{ "action": "approve" }`, `reject`, `block` ou `unblock`.
+Não há rota de criação pública de master nem alteração de role. Duplicidades no pré-cadastro respondem com o mesmo `202` genérico para reduzir enumeração; nenhum segundo registro é criado.
+
 ## Organização
 
 `src/modules/{clients,loans,installments,payments,late-fees,overview}` segue rota → controller → service → repository → SQLite. Os endpoints de pagamentos ficam nas rotas de contratos, parcelas e multas. `src/config` inicializa SQLite e aplica migrations; `src/shared` contém validações, datas e erros. As funções monetárias comuns ficam em `../shared/money.js`.

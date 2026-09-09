@@ -6,13 +6,14 @@
 
         <div class="space-y-2">
             <NotificationCard v-for="notification in notifications" :key="notification.id"
-                :notification="notification" />
+                :notification="notification" @review="$emit('review', $event)" />
         </div>
     </section>
 </template>
 
 <script setup>
 import NotificationCard from './NotificationCard.vue'
+defineEmits(['review'])
 
 defineProps({
     label: {

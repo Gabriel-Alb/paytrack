@@ -1,4 +1,5 @@
 import * as service from "./clients.service.js";
+import { readFinancial } from '../installments/installments.service.js';
 import {
   clientSchema,
   clientPatchSchema,
@@ -7,9 +8,9 @@ import {
 import { idSchema } from "../../shared/utils/validation.js";
 
 export const list = (req, res) =>
-  res.json(service.listClients(clientListSchema.parse(req.query)));
+  res.json(readFinancial(() => service.listClients(clientListSchema.parse(req.query))));
 export const get = (req, res) =>
-  res.json(service.getClient(idSchema.parse(req.params.id)));
+  res.json(readFinancial(() => service.getClient(idSchema.parse(req.params.id))));
 export const create = (req, res) =>
   res.status(201).json(service.createClient(clientSchema.parse(req.body)));
 export const update = (req, res) =>

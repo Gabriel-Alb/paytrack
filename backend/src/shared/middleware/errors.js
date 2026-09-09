@@ -7,7 +7,7 @@ export function errorHandler(error, _req, res, _next) {
       error: {
         code: "VALIDATION_ERROR",
         message: "Verifique os dados informados.",
-        details: error.issues.map(({ path, message }) => ({
+        details: _req.path.includes('/auth/') ? undefined : error.issues.map(({ path, message }) => ({
           field: path.join("."),
           message,
         })),
@@ -57,7 +57,8 @@ export function errorHandler(error, _req, res, _next) {
         },
       });
   }
-  console.error("Falha interna na API:", error);
+  // Never log error objects: SQLite/validation errors can contain input or secrets.
+  console.error("Falha interna na API.");
   return res
     .status(500)
     .json({

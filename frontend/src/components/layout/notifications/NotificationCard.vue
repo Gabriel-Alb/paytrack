@@ -30,7 +30,8 @@
                     </strong>
                 </p>
 
-                <div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-4 text-[#71717a]">
+                <button v-if="notification.type === 'access'" type="button" class="mt-3 min-h-11 rounded-lg bg-[#edf7ef] px-3 text-xs font-semibold text-[#166534]" @click="$emit('review', notification.userId)">Avaliar solicitação</button>
+                <div v-else class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-4 text-[#71717a]">
                     <strong class="font-semibold text-[#3f3f46]">
                         {{ notification.amount }}
                     </strong>
@@ -78,18 +79,21 @@ const props = defineProps({
         required: true,
     },
 })
+defineEmits(['review'])
 
 const isOverdue = computed(() => {
     return props.notification.type === 'overdue'
 })
 
 const title = computed(() => {
+    if (props.notification.type === 'access') return 'Solicitação de acesso'
     return isOverdue.value
         ? 'Parcela em atraso'
         : 'Pagamento efetuado'
 })
 
 const customerLabel = computed(() => {
+    if (props.notification.type === 'access') return 'Solicitante:'
     return isOverdue.value
         ? 'Cliente:'
         : 'Pagador:'

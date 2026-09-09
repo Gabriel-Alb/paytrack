@@ -74,7 +74,7 @@ export async function getReport(query,signal) {
 export async function getDashboard() { return request('/dashboard/summary') }
 export async function getNotifications() {
   return (await request('/notifications')).map((item) => ({ ...item,
-    amount:formatCurrency(fromCents(item.amount)),overdueDays:`${item.days_late} dias de atraso`,
+    amount:item.type === 'access' ? '' : formatCurrency(fromCents(item.amount)),overdueDays:`${item.days_late} dias de atraso`,
     datetime:item.datetime.includes('T') ? item.datetime : item.datetime.replace(' ','T')+'Z',
   }))
 }
