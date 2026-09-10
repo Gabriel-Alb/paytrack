@@ -34,6 +34,20 @@ const router = createRouter({
           },
           component: () => import('@/features/loans/views/LoansView.vue'),
         },
+        {
+          path: 'loans/paid',
+          name: 'paid-loans',
+          meta: { title: 'Empréstimos quitados' },
+          props: { fixedStatus: 'paid' },
+          component: () => import('@/features/loans/views/LoansView.vue'),
+        },
+        {
+          path: 'loans/overdue',
+          name: 'overdue-loans',
+          meta: { title: 'Empréstimos negativados' },
+          props: { fixedStatus: 'overdue' },
+          component: () => import('@/features/loans/views/LoansView.vue'),
+        },
                 {
           path: 'reports',
           name: 'reports',

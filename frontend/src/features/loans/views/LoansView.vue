@@ -1,7 +1,7 @@
 <template>
     <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
-        <LoansGrid :loans="loans" @filter="filters = $event" @open-loan="openLoanInstallments">
-            <template #toolbar-action>
+        <LoansGrid :loans="loans" :search-only="!!fixedStatus" @filter="filters = $event" @open-loan="openLoanInstallments">
+            <template v-if="!fixedStatus" #toolbar-action>
                 <button type="button"
                     class="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-sm shadow-[#166534]/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#14532d] hover:shadow-md hover:shadow-[#166534]/15 active:scale-[0.98] sm:w-auto"
                     @click="openNewLoan">
@@ -36,9 +36,14 @@ import { clientsApi, loansApi } from '@/services/paytrack'
 import { perform } from '@/services/api'
 import { usePagedList } from '@/composables/usePagedList'
 
+const props = defineProps({
+  fixedStatus: { type: String, default: '' },
+})
 const route = useRoute()
 const filters = ref({})
-const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => filters.value))
+const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => (
+  props.fixedStatus ? { search: filters.value.search, status: props.fixedStatus } : filters.value
+)))
 const clients = ref([])
 const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)

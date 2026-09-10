@@ -36,12 +36,12 @@ export const navigationSections = [
             {
                 label: 'Quitados',
                 icon: mdiCheckCircleOutline,
-                to: '/clients?status=quitado',
+                to: '/loans/paid',
             },
             {
-                label: 'Inadimplentes',
+                label: 'Negativados',
                 icon: mdiAlertCircleOutline,
-                to: '/clients?status=negativado',
+                to: '/loans/overdue',
             },
             {
                 label: 'Relatórios',
