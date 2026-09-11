@@ -1,5 +1,5 @@
 <template>
-    <article class="relative overflow-visible rounded-xl border border-black/[0.07] bg-white p-4 sm:p-6">
+    <article class="relative overflow-visible rounded-xl border border-black/[0.07] bg-white p-4 sm:p-6" :class="{ 'compact-chart': compact }">
         <header class="flex items-start justify-between gap-4">
             <div class="min-w-0">
                 <h2 class="truncate text-[15px] font-semibold tracking-[-0.02em] text-[#27272a] sm:text-base">
@@ -19,8 +19,8 @@
             </slot>
         </header>
 
-        <div v-if="normalizedItems.length" ref="chartAreaRef" class="relative mt-5 overflow-visible sm:mt-6">
-            <div class="relative h-[235px] min-h-[235px] overflow-visible sm:h-[var(--chart-height)] sm:min-h-[220px]"
+        <div v-if="normalizedItems.length" ref="chartAreaRef" class="chart-area relative mt-5 overflow-visible sm:mt-6">
+            <div class="chart-frame relative h-[235px] min-h-[235px] overflow-visible sm:h-[var(--chart-height)] sm:min-h-[220px]"
                 :style="chartStyle">
                 <div class="pointer-events-none absolute inset-x-0 top-0 bottom-7" aria-hidden="true">
                     <span v-for="line in gridLines" :key="line"
@@ -34,7 +34,7 @@
                         class="grid min-w-0 grid-rows-[minmax(0,1fr)_28px] overflow-visible"
                         @pointerenter="handlePointerEnter(index, $event)" @pointerleave="handlePointerLeave(index)">
                         <div class="flex min-h-0 items-end justify-center overflow-visible">
-                            <div class="relative flex h-full items-end justify-center overflow-visible">
+                            <div class="chart-bar-track relative flex h-full items-end justify-center overflow-visible">
                                 <Transition enter-active-class="transition-all duration-150 ease-out"
                                     enter-from-class="translate-y-1 scale-95 opacity-0"
                                     enter-to-class="translate-y-0 scale-100 opacity-100"
@@ -42,10 +42,12 @@
                                     leave-from-class="translate-y-0 scale-100 opacity-100"
                                     leave-to-class="translate-y-1 scale-95 opacity-0">
                                     <div v-if="isPopoverVisible(index)"
-                                        class="absolute z-[100] whitespace-nowrap rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5 shadow-[0_6px_18px_rgb(0_0_0/0.10)]"
+                                        class="chart-tooltip absolute z-[100] whitespace-nowrap rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5 shadow-[0_6px_18px_rgb(0_0_0/0.10)]"
                                         :style="{
                                             bottom: `${getBarHeight(item.value)}%`,
                                             marginBottom: '8px',
+                                            left: compact && index === 0 ? '0' : undefined,
+                                            right: compact && index === normalizedItems.length - 1 ? '0' : undefined,
                                         }">
                                         <p class="text-[9px] font-medium text-[#8b8b93]">
                                             {{ item.fullLabel }}
@@ -71,7 +73,7 @@
                                             : 'scale-y-0',
                                     ]" :style="getBarStyle(item, index)"
                                     :aria-label="`${item.fullLabel}: ${valueFormatter(item.value)}`"
-                                    :aria-pressed="isSelected(index)" @click="toggleSelected(index)" />
+                                    :aria-pressed="isSelected(index)" @focus="hoveredIndex = index" @blur="hoveredIndex = null" @click="toggleSelected(index)" />
                             </div>
                         </div>
 
@@ -97,9 +99,11 @@ import {
     onBeforeUnmount,
     onMounted,
     ref,
+    watch,
 } from 'vue'
 
 const props = defineProps({
+    compact: { type: Boolean, default: false },
     title: {
         type: String,
         required: true,
@@ -297,6 +301,8 @@ const clearPopovers = () => {
     selectedIndexes.value = []
 }
 
+watch(() => props.items, clearPopovers)
+
 const handleOutsidePointerDown = (event) => {
     if (!selectedIndexes.value.length) {
         return
@@ -357,3 +363,22 @@ onBeforeUnmount(() => {
     )
 })
 </script>
+
+<style scoped>
+.compact-chart { min-width: 0; padding: 16px; border-radius: 16px; }
+.compact-chart header { gap: 10px; }
+.compact-chart h2 { font-size: 13px; line-height: 20px; }
+.compact-chart header p { font-size: 11px; }
+.compact-chart .chart-area { margin-top: 20px; }
+.compact-chart .chart-frame { height: var(--chart-height); min-height: 0; }
+.compact-chart .chart-bar-track { width: 100%; }
+.compact-chart .chart-bar-track > button { width: 52%; min-width: 0; max-width: 54px; min-height: 2px; border-radius: 7px 7px 2px 2px; transition: height .3s ease, transform .5s ease; }
+.compact-chart .chart-tooltip { max-width: 190px; white-space: normal; width: max-content; }
+@media (max-width: 499px) {
+  .compact-chart header { flex-wrap: wrap; }
+  .compact-chart .chart-tooltip { max-width: 135px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-bar-track > button { transition: none !important; }
+}
+</style>

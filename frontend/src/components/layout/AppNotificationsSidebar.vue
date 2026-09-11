@@ -7,7 +7,7 @@
 
         <Transition name="notifications-sidebar">
             <aside v-if="isOpen" id="notifications-sidebar"
-                class="fixed top-0 right-0 z-50 flex h-dvh w-full flex-col border-l border-black/[0.06] bg-[#f7f7f8] shadow-[-12px_0_30px_rgba(0,0,0,0.06)] sm:w-[392px]"
+                class="fixed top-0 right-0 z-50 flex h-dvh w-full flex-col border-l border-black/[0.06] bg-[#f7f7f8] shadow-[-12px_0_30px_rgba(0,0,0,0.06)] max-lg:pt-[env(safe-area-inset-top,0px)] sm:w-[392px]"
                 role="dialog" aria-modal="true" aria-labelledby="notifications-title">
                 <NotificationSidebarHeader ref="headerRef" @close="close" />
 

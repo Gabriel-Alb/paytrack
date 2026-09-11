@@ -4,6 +4,12 @@ html {
   background: #f6f7f8;
 }
 
+@media (width < 64rem) {
+  html {
+    background: #fff;
+  }
+}
+
 body {
   margin: 0;
   min-width: 320px;
