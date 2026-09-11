@@ -68,5 +68,10 @@ export const mobileNavigationItems = [
         icon: mdiCashMultiple,
         to: '/loans',
     },
+    {
+        label: 'Relatórios',
+        icon: mdiChartBoxOutline,
+        to: '/reports',
+    },
 
 ]

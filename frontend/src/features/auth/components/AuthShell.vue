@@ -1,8 +1,9 @@
 <template>
-  <main :class="split
+  <main :class="[split
       ? 'fixed inset-0 overflow-hidden bg-white text-[#18181b]'
-      : 'min-h-dvh bg-[#f6f7f8] text-[#18181b]'
-    ">
+      : 'min-h-dvh bg-[#f6f7f8] text-[#18181b]',
+      extendMobileBackground && 'max-lg:z-10 max-lg:bg-transparent',
+    ]">
     <div v-if="split" class="grid h-full w-full overflow-hidden lg:grid-cols-[52%_48%]">
       <aside class="relative hidden h-full min-h-0 overflow-hidden bg-[#166534] lg:block">
         <img :src="backgroundImage" alt="" class="absolute inset-0 h-full w-full object-cover" />
@@ -43,14 +44,17 @@
           ? 'overflow-y-auto overscroll-contain lg:overflow-hidden'
           : 'overflow-hidden'
         ">
-        <div class="fixed inset-0 z-0 lg:hidden">
-          <img :src="backgroundImage" alt="" class="h-full w-full scale-[1.03] object-cover" />
+        <Teleport to="body" :disabled="!extendMobileBackground">
+          <div class="fixed inset-0 z-0 lg:hidden"
+            :class="extendMobileBackground && 'auth-viewport-background pointer-events-none'">
+            <img :src="backgroundImage" alt="" class="h-full w-full scale-[1.03] object-cover" />
 
-          <div class="absolute inset-0 bg-gradient-to-br from-[#166534]/90 via-[#166534]/76 to-[#0c3d20]/94" />
+            <div class="absolute inset-0 bg-gradient-to-br from-[#166534]/90 via-[#166534]/76 to-[#0c3d20]/94" />
 
-          <div
-            class="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(255,255,255,0.14),transparent_32%)]" />
-        </div>
+            <div
+              class="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(255,255,255,0.14),transparent_32%)]" />
+          </div>
+        </Teleport>
 
         <div
           class="pointer-events-none absolute right-[-180px] top-[-180px] hidden size-[420px] rounded-full bg-[#166534]/[0.035] blur-3xl lg:block" />
@@ -107,9 +111,10 @@
 </template>
 
 <script setup>
+import { onBeforeUnmount, onMounted } from 'vue'
 import backgroundImage from '@/assets/img/image.png'
 
-defineProps({
+const props = defineProps({
   title: {
     type: String,
     required: true,
@@ -121,5 +126,44 @@ defineProps({
   wide: Boolean,
   split: Boolean,
   mobileScrollable: Boolean,
+  extendMobileBackground: Boolean,
 })
+
+let restoreMobileBackground
+
+onMounted(() => {
+  if (!props.extendMobileBackground) return
+
+  const root = document.documentElement
+  const themeColor = document.querySelector('meta[name="theme-color"]')
+  const previousThemeColor = themeColor?.getAttribute('content')
+
+  root.classList.add('auth-mobile-background')
+  // Reuse the existing mobile-only theme meta; restore it when leaving login.
+  themeColor?.setAttribute('content', '#166534')
+
+  restoreMobileBackground = () => {
+    root.classList.remove('auth-mobile-background')
+    if (previousThemeColor == null) themeColor?.removeAttribute('content')
+    else themeColor?.setAttribute('content', previousThemeColor)
+  }
+})
+
+onBeforeUnmount(() => restoreMobileBackground?.())
 </script>
+
+<style scoped>
+@media (width < 64rem) {
+  :global(html.auth-mobile-background) {
+    background-color: #17723b;
+  }
+
+  .auth-viewport-background {
+    /* Only the backdrop spans the expanded browser viewport; the form stays put. */
+    height: 100vh;
+    height: 100lvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+}
+</style>

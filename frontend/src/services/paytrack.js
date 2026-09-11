@@ -61,13 +61,15 @@ export const loansApi = {
   },
 }
 
-export async function getReport(query,signal) {
-  const result=await request(`/reports?${queryString(query)}`,{ signal })
+export async function getMonthlyReport(query,signal) {
+  const result=await request(`/reports?${queryString({ ...query,mode:'month' })}`,{ signal })
   const mapMoney = (record,keys) => ({ ...record,...Object.fromEntries(keys.map((key) => [key,fromCents(record[key])])) })
-  const keys=['expected','received','pending','expectedProfit','realizedProfit','lateFee']
-  return { ...result,items:result.items.map((row) => mapMoney(row,keys)),pending:result.pending.map((row) => mapMoney(row,keys)),
-    summary:mapMoney(result.summary,keys.filter((key) => key!=='lateFee')),
-    chart:result.chart.map((item) => ({ ...item,value:fromCents(item.value) })),
+  return { ...result,
+    summary:mapMoney(result.summary,['capital','received','pending','expectedProfit','realizedProfit']),
+    contracts:result.contracts.map((row) => mapMoney(row,['amount'])),
+    contractStatuses:result.contractStatuses.map((row) => mapMoney(row,['expected','pending'])),
+    agenda:result.agenda.map((row) => mapMoney(row,['expected','received'])),
+    receiptDays:result.receiptDays.map((item) => mapMoney(item,['value'])),
   }
 }
 

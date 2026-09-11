@@ -55,16 +55,21 @@ export function upcoming(date) {
     .all(date);
 }
 
-const reportRows = `WITH allocation AS (
+const interestAllocation = `WITH allocation AS (
   SELECT i.*, l.client_id, l.interest_amount, l.total_amount,
     COALESCE(SUM(i.amount) OVER (PARTITION BY i.loan_id ORDER BY i.installment_number ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS before_amount
   FROM installments i JOIN loans l ON l.id=i.loan_id WHERE l.status<>'cancelled'
-), financial AS (
-  SELECT i.*, money_share(i.before_amount+i.amount,i.interest_amount,i.total_amount)-money_share(i.before_amount,i.interest_amount,i.total_amount) AS interest_share,
+), interest_allocation AS (
+  SELECT i.*, money_share(i.before_amount+i.amount,i.interest_amount,i.total_amount)-money_share(i.before_amount,i.interest_amount,i.total_amount) AS interest_share
+  FROM allocation i
+)`;
+
+const reportRows = `${interestAllocation}, financial AS (
+  SELECT i.*,
     CASE WHEN f.status='waived' THEN 0 ELSE COALESCE(f.amount,0) END AS fee,
     COALESCE(f.paid_amount,0) AS fee_paid,
     (SELECT MAX(payment_date) FROM payments p WHERE p.installment_id=i.id AND p.voided_at IS NULL) AS payment_date
-  FROM allocation i LEFT JOIN late_fees f ON f.installment_id=i.id WHERE i.due_date BETWEEN @start AND @end
+  FROM interest_allocation i LEFT JOIN late_fees f ON f.installment_id=i.id WHERE i.due_date BETWEEN @start AND @end
 ), rows AS (
   SELECT i.id,c.name AS client,i.loan_id AS contractId,i.due_date AS date,i.payment_date AS paymentDate,
     i.amount+i.fee AS expected,i.paid_amount+i.fee_paid AS received,
@@ -74,8 +79,30 @@ const reportRows = `WITH allocation AS (
     CASE WHEN i.paid_amount>=i.amount AND i.fee_paid>=i.fee THEN 'paid'
       WHEN i.paid_amount+i.fee_paid>0 THEN 'partial' ELSE 'unpaid' END AS status,
     CASE WHEN i.paid_amount<i.amount OR i.fee_paid<i.fee THEN MAX(0,CAST(julianday(@today)-julianday(i.due_date) AS INTEGER)) ELSE 0 END AS daysLate,
+    i.installment_number AS installmentNumber,
+    CASE WHEN i.paid_amount<i.amount THEN MAX(0,CAST(julianday(@today)-julianday(i.due_date) AS INTEGER)) ELSE 0 END AS installmentDaysLate,
+    i.fee>i.fee_paid AS feePending,
     i.fee AS lateFee FROM financial i JOIN clients c ON c.id=i.client_id
   )`;
+
+export function monthlyReport(start, end, date) {
+  const db = database();
+  const installments = db.prepare(`${reportRows} SELECT * FROM rows ORDER BY date,id`)
+    .all({ start, end, today: date });
+  const contracts = db.prepare(`SELECT l.id,c.name AS client,l.principal_amount AS amount,l.loan_date AS date
+    FROM loans l JOIN clients c ON c.id=l.client_id
+    WHERE l.status<>'cancelled' AND l.loan_date BETWEEN ? AND ? ORDER BY l.loan_date DESC,l.id DESC`)
+    .all(start, end);
+  const cash = db.prepare(`${interestAllocation}, payment_allocation AS (
+    SELECT p.*,i.interest_share,i.amount AS installment_amount,
+      SUM(p.amount) OVER (PARTITION BY p.installment_id ORDER BY p.payment_date,p.id) AS cumulative_amount
+    FROM payments p JOIN interest_allocation i ON i.id=p.installment_id WHERE p.voided_at IS NULL
+  ) SELECT COALESCE(SUM(amount+late_fee_amount),0) AS received,
+    COALESCE(SUM(money_share(cumulative_amount,interest_share,installment_amount)
+      -money_share(cumulative_amount-amount,interest_share,installment_amount)+late_fee_amount),0) AS realizedProfit
+    FROM payment_allocation WHERE payment_date BETWEEN ? AND ?`).get(start, end);
+  return { installments, contracts, cash };
+}
 
 export function report(query, date) {
   const params = { start: query.start, end: query.end, today: date };

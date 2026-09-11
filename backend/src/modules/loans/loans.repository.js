@@ -15,6 +15,12 @@ export function findLoan(id, date) {
     .get({ id, date });
 }
 
+export function loansDueInPeriod(start, end, date) {
+  return database().prepare(`${select} WHERE l.status<>'cancelled' AND EXISTS (
+    SELECT 1 FROM installments due WHERE due.loan_id=l.id AND due.due_date BETWEEN @start AND @end
+  ) GROUP BY l.id ORDER BY days_late DESC,l.id DESC`).all({ start, end, date });
+}
+
 export function listLoans(
   { search, status, client_id, limit, offset },
   date,

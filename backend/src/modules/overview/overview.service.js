@@ -1,6 +1,7 @@
 import * as repository from "./overview.repository.js";
 import { refreshFinancialState } from "../installments/installments.service.js";
-import { addDays, today } from "../../shared/utils/dates.js";
+import { addDays, today, visualStatus } from "../../shared/utils/dates.js";
+import { loansDueInPeriod } from "../loans/loans.repository.js";
 import { pagination } from "../../shared/utils/validation.js";
 import { env } from "../../config/env.js";
 
@@ -43,10 +44,11 @@ export function dashboard() {
 
 export function report(query) {
   refreshFinancialState();
+  if (query.mode === "month") return monthlyReport(query);
   const result = repository.report(pagination(query), today());
   const receipts = repository.receiptDays(query.start, query.end);
   const chart = [];
-  const groupSize = query.mode === "month" ? 7 : 1;
+  const groupSize = 1;
   for (
     let start = query.start;
     start <= query.end;
@@ -65,6 +67,54 @@ export function report(query) {
     });
   }
   return { ...result, chart, page: query.page, limit: query.limit };
+}
+
+function monthlyReport({ start, end }) {
+  const date = today();
+  const { installments, contracts, cash } = repository.monthlyReport(start, end, date);
+  const summary = { capital: 0, ...cash, pending: 0, expectedProfit: 0 };
+  for (const contract of contracts) summary.capital += contract.amount;
+  const agenda = new Map();
+  const dueByContract = new Map();
+  const priority = { 'on-time': 0, attention: 1, overdue: 2 };
+  for (const row of installments) {
+    summary.pending += row.pending;
+    summary.expectedProfit += row.expectedProfit;
+    const status = visualStatus(row.installmentDaysLate, Boolean(row.feePending));
+    const day = agenda.get(row.date) ?? {
+      date: row.date, count: 0, expected: 0, received: 0, paid: 0, pending: 0, late: 0,
+      status: 'on-time',
+    };
+    day.count++;
+    day.expected += row.expected;
+    day.received += row.received;
+    if (!row.pending) day.paid++;
+    else if (status === 'on-time') day.pending++;
+    else day.late++;
+    if (priority[status] > priority[day.status]) day.status = status;
+    agenda.set(row.date, day);
+    const due = dueByContract.get(row.contractId) ?? { expected: 0, pending: 0, representative: row };
+    due.expected += row.expected;
+    due.pending += row.pending;
+    if (row.pending && !due.representative.pending) due.representative = row;
+    dueByContract.set(row.contractId, due);
+  }
+  const contractStatuses = loansDueInPeriod(start, end, date).map((loan) => {
+    const due = dueByContract.get(loan.id);
+    return {
+      id: loan.id, client: loan.client_name,
+      status: visualStatus(loan.days_late, loan.fee_remaining > 0), daysLate: loan.days_late,
+      date: due.representative.date, installmentNumber: due.representative.installmentNumber,
+      installmentCount: loan.installment_count, expected: due.expected, pending: due.pending,
+    };
+  });
+  return {
+    today: date, summary, contracts, contractStatuses,
+    agenda: [...agenda.values()].map((day) => ({
+      ...day, status: day.status === 'on-time' && day.pending > 0 && day.date > date ? 'pending' : day.status,
+    })),
+    receiptDays: repository.receiptDays(start, end),
+  };
 }
 
 export function notifications(includeActivity = false) {

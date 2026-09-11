@@ -6,11 +6,11 @@
     </Transition>
 
     <aside :class="[
-        'fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col border-r border-black/[0.07] bg-white transition-transform duration-300 lg:z-40 lg:w-[248px] lg:translate-x-0',
+        'fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col border-r border-black/[0.07] bg-white transition-transform duration-300 max-lg:pt-[env(safe-area-inset-top,0px)] max-lg:pb-[env(safe-area-inset-bottom,0px)] lg:z-40 lg:w-[224px] lg:translate-x-0',
         isOpen && 'translate-x-0',
     ]">
         <div
-            class="flex h-[68px] shrink-0 items-center justify-between border-b border-black/[0.05] px-5 lg:h-[76px] lg:px-6">
+            class="flex h-[68px] shrink-0 items-center justify-between border-b border-black/[0.05] px-5 lg:h-[60px] lg:px-5">
             <RouterLink to="/" class="flex items-center gap-3" @click="closeSidebar">
                 <div
                     class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#166534] text-sm font-bold text-white">

@@ -1,5 +1,5 @@
 <template>
-  <AuthShell wide split title="Entrar" description="Entre com seu e-mail e senha para acessar sua conta.">
+  <AuthShell wide split extend-mobile-background title="Entrar" description="Entre com seu e-mail e senha para acessar sua conta.">
     <p v-if="route.query.passwordChanged" role="status"
       class="mb-4 rounded-lg border border-[#166534]/10 bg-[#166534]/[0.06] px-3.5 py-2.5 text-xs text-[#166534] lg:text-sm">
       Senha alterada. Entre novamente.
