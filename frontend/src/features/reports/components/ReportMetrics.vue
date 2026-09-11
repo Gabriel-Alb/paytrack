@@ -7,7 +7,7 @@
 
       <div class="relative mt-2 w-[124px]">
         <select id="report-month" :value="modelValue"
-          class="h-7 w-full cursor-pointer appearance-none rounded-md border border-zinc-200 bg-white px-2.5 pr-7 text-[12px] font-medium text-zinc-700 outline-none transition duration-200 hover:border-zinc-300 focus:border-green-700/40 focus:ring-2 focus:ring-green-700/10"
+          class="h-7 w-full cursor-pointer appearance-none rounded-md border border-zinc-200 bg-white px-2.5 pr-7 text-[12px] font-medium text-zinc-700 outline-none transition duration-200 hover:border-zinc-300 focus:border-zinc-300 focus:ring-2 focus:ring-zinc-200/60"
           @change="$emit('update:modelValue', Number($event.target.value))">
           <option v-for="month in months" :key="month.value" :value="month.value">
             {{ month.label }}
