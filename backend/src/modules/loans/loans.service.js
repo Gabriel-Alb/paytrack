@@ -18,6 +18,8 @@ import {
 import { listPayments } from "../payments/payments.repository.js";
 import { recordAction } from '../auth/auth.repository.js';
 
+import { resolveCompany } from '../../shared/middleware/company-access.js';
+
 function auditLoan(event, actor, loan) {
   recordAction(event,actor,'loan',loan.id,{
     customer:loan.client_name,amount:loan.principal_amount,loanId:loan.id,
@@ -119,7 +121,9 @@ export function assertRevision(loan, revision) {
 export function createLoan(data, actor) {
   return database()
     .transaction(() => {
-      requireRecord(findClient(data.client_id), "Cliente");
+      const client = requireRecord(findClient(data.client_id), "Cliente");
+      const companyId = resolveCompany(data.company_id);
+      if (client.company_id !== companyId) throw new AppError(400,'CLIENT_COMPANY_MISMATCH','O cliente deve pertencer à empresa selecionada.');
       const interest = interestAmount(
         data.principal_amount,
         data.interest_percentage,

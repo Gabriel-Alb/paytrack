@@ -35,6 +35,7 @@
                         class="mdi mdi-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg text-[#71717a]"
                         aria-hidden="true" />
                 </div>
+                <slot name="company-filter" />
             </div>
 
             <div class="w-full shrink-0 sm:w-auto">

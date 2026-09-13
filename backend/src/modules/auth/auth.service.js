@@ -16,7 +16,12 @@ export async function verifyPassword(hash,password) {
   try { return await argon2.verify(hash,password); }
   catch { await argon2.verify(await dummy(),password); return false; }
 }
-export const safeUser = (user) => ({id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status});
+import { userCompanies, replaceUserCompanies } from '../companies/companies.repository.js';
+
+export const safeUser = (user) => {
+  const companies = userCompanies(user.id);
+  return {id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status,companies,companyIds:companies.map(company=>company.id)};
+};
 export const profileUser = (user) => ({...safeUser(user),cpf:user.cpf,rg:user.rg});
 export function updateProfile(user,input) {
   const {email} = profileSchema.parse(input);
@@ -69,12 +74,12 @@ export async function requestAccess(data) {
 }
 export async function createMaster(input) {
   const data = requestSchema.parse(input);
-  if (repo.hasMaster()) throw new AppError(409,'MASTER_EXISTS','Já existe um master.');
+  if (repo.hasMaster()) throw new AppError(409,'MASTER_EXISTS','Já existe um administrador.');
   const passwordHash = await hashPassword(data.password);
   return repo.atomic(() => {
-    if (repo.hasMaster()) throw new AppError(409,'MASTER_EXISTS','Já existe um master.');
-    const id = repo.insertUser({...data,passwordHash},'master','active');
-    repo.audit('master_created',id,id);
+    if (repo.hasMaster()) throw new AppError(409,'MASTER_EXISTS','Já existe um administrador.');
+    const id = repo.insertUser({...data,passwordHash},'admin','active');
+    repo.audit('admin_created',id,id);
     return safeUser(repo.byId(id));
   });
 }
@@ -125,18 +130,22 @@ export function reviewUser(id) {
   return {...safeUser(user),cpf:user.cpf,rg:user.rg,cnh:user.cnh,createdAt:user.created_at};
 }
 export function changeAccess(actor,id,input) {
-  if (!['master','admin'].includes(actor.role)) throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
-  const {action,role} = accessSchema.parse(input);
+  if (actor.role !== 'admin') throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
+  const {action,role,companyIds} = accessSchema.parse(input);
   const result = repo.atomic(() => {
     const user = requireRecord(repo.byId(id),'Usuário');
     const expected = {approve:'pending',reject:'pending',block:'active',unblock:'blocked'}[action];
-    if (user.access_status!==expected) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
+    if (action === 'edit' ? !['active','blocked'].includes(user.access_status) : user.access_status!==expected) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
     if (user.id===actor.id) throw new AppError(409,'SELF_ACCESS_CHANGE','Não é possível alterar o próprio acesso.');
-    if (user.role==='master' && actor.role!=='master') throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
+    if (user.role === 'admin' && user.access_status === 'active' && (action === 'block' || (action === 'edit' && role === 'user')) && !repo.hasOtherActiveAdmin(id))
+      throw new AppError(409,'LAST_ADMIN','Mantenha pelo menos um administrador ativo.');
+    if (action === 'approve' || action === 'edit') replaceUserCompanies(id, companyIds);
+    if (action === 'unblock' && user.role === 'user' && !userCompanies(id).length)
+      throw new AppError(400,'COMPANY_REQUIRED','Vincule pelo menos uma empresa antes de desbloquear.');
     repo.setAccess(id,action,actor.id,role);
-    repo.revokeAll(id);
-    repo.audit({approve:'access_approved',reject:'access_rejected',block:'user_blocked',unblock:'user_unblocked'}[action],actor.id,id);
-    repo.audit('sessions_revoked',actor.id,id);
+    if (action !== 'edit') repo.revokeAll(id);
+    repo.audit({edit:'access_updated',approve:'access_approved',reject:'access_rejected',block:'user_blocked',unblock:'user_unblocked'}[action],actor.id,id);
+    if (action !== 'edit') repo.audit('sessions_revoked',actor.id,id);
     return safeUser(repo.byId(id));
   });
   accessEvents.emit('changed');

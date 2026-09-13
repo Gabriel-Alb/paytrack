@@ -66,7 +66,7 @@ router.beforeEach(async (to) => {
   const user = await restoreAuth()
   if (!user && !to.meta.public) return {name:'login'}
   if (user && to.meta.public) return {name:'dashboard'}
-  if (to.meta.admin && !['master','admin'].includes(user?.role)) return {name:'dashboard'}
+  if (to.meta.admin && !(user?.role === 'admin')) return {name:'dashboard'}
 })
 onSessionExpired(() => {
   if (router.currentRoute.value.matched.length && !router.currentRoute.value.meta.public)

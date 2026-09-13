@@ -106,6 +106,7 @@ import { clientsApi } from '@/services/paytrack'
 import { apiError } from '@/services/api'
 
 const props = defineProps({
+    companyId: {type:Number,default:null},
     modelValue: {
         type: [Number, String],
         default: null,
@@ -131,7 +132,7 @@ const availableClients = ref([])
 const selectedClient = computed(() =>
     [...props.clients, ...availableClients.value].find(
         (client) =>
-            String(client.id) === String(props.modelValue),
+            client.company_id === props.companyId && String(client.id) === String(props.modelValue),
     ),
 )
 
@@ -140,11 +141,13 @@ let requestVersion = 0
 let searchTimer
 async function searchClients() {
   const version = ++requestVersion
+  if (!props.companyId) { availableClients.value = []; return }
   try {
-    const result = await clientsApi.list({ search:query.value, limit:50 })
+    const result = await clientsApi.list({ search:query.value, limit:50, company_id:props.companyId })
     if (version === requestVersion) availableClients.value = result.items
   } catch (error) { if (version === requestVersion) apiError.value = error.message }
 }
+watch(() => props.companyId, () => { availableClients.value = []; query.value = ''; searchClients() })
 watch(query, () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchClients, 200) })
 onMounted(searchClients)
 onBeforeUnmount(() => { requestVersion++; clearTimeout(searchTimer) })

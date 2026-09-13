@@ -4,8 +4,8 @@ export function portfolioAt(date) {
   return database()
     .prepare(
       `SELECT COALESCE(SUM(MAX(0,l.total_amount-COALESCE(p.received,0))),0) AS amount
-    FROM loans l LEFT JOIN (SELECT i.loan_id,SUM(p.amount) AS received FROM payments p
-      JOIN installments i ON i.id=p.installment_id WHERE p.voided_at IS NULL AND p.payment_date<=@date GROUP BY i.loan_id) p ON p.loan_id=l.id
+    FROM scoped_loans l LEFT JOIN (SELECT i.loan_id,SUM(p.amount) AS received FROM scoped_payments p
+      JOIN scoped_installments i ON i.id=p.installment_id WHERE p.voided_at IS NULL AND p.payment_date<=@date GROUP BY i.loan_id) p ON p.loan_id=l.id
     WHERE l.loan_date<=@date AND l.status<>'cancelled'`,
     )
     .get({ date }).amount;
@@ -15,7 +15,7 @@ export function receipts(start, end) {
   return database()
     .prepare(
       `SELECT COALESCE(SUM(amount+late_fee_amount),0) AS amount,COUNT(*) AS count
-    FROM payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ?`,
+    FROM scoped_payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ?`,
     )
     .get(start, end);
 }
@@ -24,7 +24,7 @@ export function receiptDays(start, end) {
   return database()
     .prepare(
       `SELECT payment_date AS date,SUM(amount+late_fee_amount) AS value
-    FROM payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ? GROUP BY payment_date ORDER BY payment_date`,
+    FROM scoped_payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ? GROUP BY payment_date ORDER BY payment_date`,
     )
     .all(start, end);
 }
@@ -35,7 +35,7 @@ export function portfolioStatus(date, attention) {
       `WITH balances AS (SELECT l.id,
     MAX(CASE WHEN i.paid_amount<i.amount THEN MAX(0,julianday(@date)-julianday(i.due_date)) ELSE 0 END) AS days,
     SUM(CASE WHEN f.status<>'waived' THEN MAX(0,f.amount-f.paid_amount) ELSE 0 END) AS fees
-    FROM loans l JOIN installments i ON i.loan_id=l.id LEFT JOIN late_fees f ON f.installment_id=i.id
+    FROM scoped_loans l JOIN scoped_installments i ON i.loan_id=l.id LEFT JOIN scoped_late_fees f ON f.installment_id=i.id
     WHERE l.status IN ('active','overdue') GROUP BY l.id)
     SELECT COUNT(*) AS total,COALESCE(SUM(days=0 AND COALESCE(fees,0)=0),0) AS regular,
       COALESCE(SUM(days<=@attention AND (days>0 OR fees>0)),0) AS attention,
@@ -47,8 +47,8 @@ export function portfolioStatus(date, attention) {
 export function upcoming(date) {
   return database()
     .prepare(
-      `SELECT i.id,l.id AS loan_id,c.name,i.due_date FROM installments i
-    JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
+      `SELECT i.id,l.id AS loan_id,c.name,i.due_date FROM scoped_installments i
+    JOIN scoped_loans l ON l.id=i.loan_id JOIN scoped_clients c ON c.id=l.client_id
     WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date>=?
     ORDER BY i.due_date,i.id LIMIT 3`,
     )
@@ -58,7 +58,7 @@ export function upcoming(date) {
 const interestAllocation = `WITH allocation AS (
   SELECT i.*, l.client_id, l.interest_amount, l.total_amount,
     COALESCE(SUM(i.amount) OVER (PARTITION BY i.loan_id ORDER BY i.installment_number ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS before_amount
-  FROM installments i JOIN loans l ON l.id=i.loan_id WHERE l.status<>'cancelled'
+  FROM scoped_installments i JOIN scoped_loans l ON l.id=i.loan_id WHERE l.status<>'cancelled'
 ), interest_allocation AS (
   SELECT i.*, money_share(i.before_amount+i.amount,i.interest_amount,i.total_amount)-money_share(i.before_amount,i.interest_amount,i.total_amount) AS interest_share
   FROM allocation i
@@ -68,8 +68,8 @@ const reportRows = `${interestAllocation}, financial AS (
   SELECT i.*,
     CASE WHEN f.status='waived' THEN 0 ELSE COALESCE(f.amount,0) END AS fee,
     COALESCE(f.paid_amount,0) AS fee_paid,
-    (SELECT MAX(payment_date) FROM payments p WHERE p.installment_id=i.id AND p.voided_at IS NULL) AS payment_date
-  FROM interest_allocation i LEFT JOIN late_fees f ON f.installment_id=i.id WHERE i.due_date BETWEEN @start AND @end
+    (SELECT MAX(payment_date) FROM scoped_payments p WHERE p.installment_id=i.id AND p.voided_at IS NULL) AS payment_date
+  FROM interest_allocation i LEFT JOIN scoped_late_fees f ON f.installment_id=i.id WHERE i.due_date BETWEEN @start AND @end
 ), rows AS (
   SELECT i.id,c.name AS client,i.loan_id AS contractId,i.due_date AS date,i.payment_date AS paymentDate,
     i.amount+i.fee AS expected,i.paid_amount+i.fee_paid AS received,
@@ -82,7 +82,7 @@ const reportRows = `${interestAllocation}, financial AS (
     i.installment_number AS installmentNumber,
     CASE WHEN i.paid_amount<i.amount THEN MAX(0,CAST(julianday(@today)-julianday(i.due_date) AS INTEGER)) ELSE 0 END AS installmentDaysLate,
     i.fee>i.fee_paid AS feePending,
-    i.fee AS lateFee FROM financial i JOIN clients c ON c.id=i.client_id
+    i.fee AS lateFee FROM financial i JOIN scoped_clients c ON c.id=i.client_id
   )`;
 
 export function monthlyReport(start, end, date) {
@@ -90,13 +90,13 @@ export function monthlyReport(start, end, date) {
   const installments = db.prepare(`${reportRows} SELECT * FROM rows ORDER BY date,id`)
     .all({ start, end, today: date });
   const contracts = db.prepare(`SELECT l.id,c.name AS client,l.principal_amount AS amount,l.loan_date AS date
-    FROM loans l JOIN clients c ON c.id=l.client_id
+    FROM scoped_loans l JOIN scoped_clients c ON c.id=l.client_id
     WHERE l.status<>'cancelled' AND l.loan_date BETWEEN ? AND ? ORDER BY l.loan_date DESC,l.id DESC`)
     .all(start, end);
   const cash = db.prepare(`${interestAllocation}, payment_allocation AS (
     SELECT p.*,i.interest_share,i.amount AS installment_amount,
       SUM(p.amount) OVER (PARTITION BY p.installment_id ORDER BY p.payment_date,p.id) AS cumulative_amount
-    FROM payments p JOIN interest_allocation i ON i.id=p.installment_id WHERE p.voided_at IS NULL
+    FROM scoped_payments p JOIN interest_allocation i ON i.id=p.installment_id WHERE p.voided_at IS NULL
   ) SELECT COALESCE(SUM(amount+late_fee_amount),0) AS received,
     COALESCE(SUM(money_share(cumulative_amount,interest_share,installment_amount)
       -money_share(cumulative_amount-amount,interest_share,installment_amount)+late_fee_amount),0) AS realizedProfit
@@ -156,16 +156,16 @@ export function notifications(date, includeActivity = false) {
       `SELECT * FROM (
     SELECT 'payment-'||p.id AS id,'payment' AS type,c.name AS customer,p.amount+p.late_fee_amount AS amount,
       i.installment_number||'/'||l.installment_count AS installment,p.created_at AS datetime,0 AS days_late,
-      COALESCE((SELECT a.actor_name FROM auth_audit_logs a WHERE a.entity_type='payment' AND a.entity_id=p.id
+      COALESCE((SELECT a.actor_name FROM scoped_auth_audit_logs a WHERE a.entity_type='payment' AND a.entity_id=p.id
         AND a.event IN ('payment_created','payment_corrected') ORDER BY a.id LIMIT 1),u.name) AS responsible
-    FROM payments p JOIN installments i ON i.id=p.installment_id JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
+    FROM scoped_payments p JOIN scoped_installments i ON i.id=p.installment_id JOIN scoped_loans l ON l.id=i.loan_id JOIN scoped_clients c ON c.id=l.client_id
     LEFT JOIN users u ON u.id=p.created_by
     WHERE p.voided_at IS NULL AND (@includeActivity=0 OR NOT EXISTS
-      (SELECT 1 FROM auth_audit_logs a WHERE a.entity_type='payment' AND a.entity_id=p.id AND a.event IN ('payment_created','payment_corrected')))
+      (SELECT 1 FROM scoped_auth_audit_logs a WHERE a.entity_type='payment' AND a.entity_id=p.id AND a.event IN ('payment_created','payment_corrected')))
     UNION ALL
     SELECT 'overdue-'||i.id,'overdue',c.name,i.amount-i.paid_amount,i.installment_number||'/'||l.installment_count,
       i.due_date||'T12:00:00Z',CAST(julianday(@date)-julianday(i.due_date) AS INTEGER),NULL
-    FROM installments i JOIN loans l ON l.id=i.loan_id JOIN clients c ON c.id=l.client_id
+    FROM scoped_installments i JOIN scoped_loans l ON l.id=i.loan_id JOIN scoped_clients c ON c.id=l.client_id
     WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date<@date
   ) ORDER BY datetime DESC LIMIT 50`,
     )
@@ -174,7 +174,7 @@ export function notifications(date, includeActivity = false) {
 
 export function actionNotifications() {
   return database().prepare(`SELECT id,event,actor_id,actor_name,entity_type,entity_id,details,created_at
-    FROM auth_audit_logs WHERE entity_type IN ('client','loan','payment') ORDER BY id DESC LIMIT 100`).all()
+    FROM scoped_auth_audit_logs WHERE entity_type IN ('client','loan','payment') ORDER BY id DESC LIMIT 100`).all()
     .map((row) => ({...JSON.parse(row.details),id:`action-${row.id}`,event:row.event,
       type:{client:'registration',loan:'loan',payment:'payment'}[row.entity_type],
       entityId:row.entity_id,responsibleId:row.actor_id,responsible:row.actor_name,

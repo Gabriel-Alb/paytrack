@@ -4,10 +4,11 @@
         @update:model-value="handleModalModelValue">
         <form id="loan-form" class="w-full min-w-0 max-w-full space-y-7 overflow-x-hidden" @submit.prevent="submit"
             @keydown.enter.prevent>
+            <CompanySelect :model-value="form.companyId" :active="open" @update:model-value="changeCompany" />
             <section class="min-w-0">
 
                 <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-                    <LoanClientSelect v-model="form.clientId" :clients="clients"
+                    <LoanClientSelect v-model="form.clientId" :clients="clients" :company-id="form.companyId"
                         @select-client="selectedClient = $event"
                         @request-new-client="requestNewClient" />
 
@@ -180,6 +181,7 @@ import {
     watch,
 } from 'vue'
 
+import CompanySelect from '@/components/base/CompanySelect.vue'
 import BaseModal from '@/components/base/BaseModal.vue'
 
 import LoanClientSelect from './LoanClientSelect.vue'
@@ -213,6 +215,7 @@ const emit = defineEmits([
 ])
 
 const form = reactive({
+    companyId: null,
     clientId: null,
     amount: null,
     interest: null,
@@ -268,8 +271,12 @@ function requestNewClient() {
     emit('request-new-client')
 }
 
+function changeCompany(id) {
+    if (form.companyId !== id) { form.companyId = id; form.clientId = null; selectedClient.value = null }
+}
 function submit() {
     if (
+        !form.companyId ||
         !form.clientId ||
         !form.amount ||
         !form.installmentCount ||
@@ -306,6 +313,7 @@ watch(
         }
 
         Object.assign(form, {
+            companyId: props.draft.companyId ?? null,
             clientId:
                 props.draft.clientId ??
                 null,

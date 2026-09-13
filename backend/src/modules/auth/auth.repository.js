@@ -3,7 +3,8 @@ import { database } from '../../config/database.js';
 export const atomic = (operation) => database().transaction(operation).immediate();
 export const byEmail = (email) => database().prepare('SELECT * FROM users WHERE email=? COLLATE NOCASE').get(email);
 export const byId = (id) => database().prepare('SELECT * FROM users WHERE id=?').get(id);
-export const hasMaster = () => !!database().prepare("SELECT 1 FROM users WHERE role='master'").get();
+export const hasMaster = () => !!database().prepare("SELECT 1 FROM users WHERE role='admin'").get();
+export const hasOtherActiveAdmin = id => !!database().prepare("SELECT 1 FROM users WHERE role='admin' AND access_status='active' AND id<>?").get(id);
 export function insertUser({name,email,cpf,rg=null,cnh=null,passwordHash}, role, status) {
   return Number(database().prepare(`INSERT INTO users (name,email,cpf,rg,cnh,password_hash,role,access_status,password_changed_at)
     VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`).run(name,email,cpf,rg,cnh,passwordHash,role,status).lastInsertRowid);
@@ -35,6 +36,7 @@ export const saveEmail = (id,email) => database().prepare('UPDATE users SET emai
 export function setAccess(id, action, actorId, role) {
   const updates = {
     approve: "access_status='active',role=@role,approved_by=@actorId,approved_at=CURRENT_TIMESTAMP",
+    edit: "role=@role",
     reject: "access_status='rejected',rejected_at=CURRENT_TIMESTAMP",
     block: "access_status='blocked',blocked_at=CURRENT_TIMESTAMP",
     unblock: "access_status='active',blocked_at=NULL",
