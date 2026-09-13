@@ -1,6 +1,9 @@
 <template>
     <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
         <LoansGrid :loans="loans" :search-only="!!fixedStatus" @filter="filters = $event" @open-loan="openLoanInstallments">
+            <template v-if="!fixedStatus" #company-filter>
+                <CompanySelect v-if="user?.role === 'admin'" v-model="companyFilter" filter class="w-full sm:w-48 sm:shrink-0" />
+            </template>
             <template v-if="!fixedStatus" #toolbar-action>
                 <button type="button"
                     class="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-sm shadow-[#166534]/10 transition-[background-color,box-shadow,transform] duration-150 hover:bg-[#14532d] hover:shadow-md hover:shadow-[#166534]/15 active:scale-[0.98] sm:w-auto"
@@ -17,7 +20,7 @@
         <LoanFormModal :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
             @save="createLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
 
-        <ClientFormModal :model-value="isClientModalOpen" :client="null" @update:model-value="setClientModalOpen"
+        <ClientFormModal :model-value="isClientModalOpen" :client="null" :initial-company-id="loanDraft.companyId" @update:model-value="setClientModalOpen"
             @save="createClient" @close="returnToLoan" />
 
         <LoanInstallmentsModal v-model="isInstallmentsModalOpen" :loan="selectedLoan" @close="clearSelectedLoan"
@@ -27,6 +30,8 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import CompanySelect from '@/components/base/CompanySelect.vue'
+import { useAuth } from '@/composables/useAuth'
 import { useRoute } from 'vue-router'
 import ClientFormModal from '@/features/clients/components/ClientFormModal.vue'
 import LoanFormModal from '@/features/loans/components/LoanFormModal.vue'
@@ -39,17 +44,19 @@ import { usePagedList } from '@/composables/usePagedList'
 const props = defineProps({
   fixedStatus: { type: String, default: '' },
 })
+const { user } = useAuth()
+const companyFilter = ref(null)
 const route = useRoute()
 const filters = ref({})
 const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => (
-  props.fixedStatus ? { search: filters.value.search, status: props.fixedStatus } : filters.value
+  props.fixedStatus ? { search: {...filters.value,company_id: user.value?.role === 'admin' ? companyFilter.value ?? undefined : undefined}.search, status: props.fixedStatus } : filters.value
 )))
 const clients = ref([])
 const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)
 const isInstallmentsModalOpen = ref(false)
 const selectedLoan = ref(null)
-const createEmptyDraft = () => ({ clientId:null, amount:null, interest:null, installmentCount:1,
+const createEmptyDraft = () => ({ companyId:null, clientId:null, amount:null, interest:null, installmentCount:1,
   installments:[], installmentOverrides:{}, dailyLateFee:null, loanDate:'', firstPaymentDate:'' })
 const loanDraft = reactive(createEmptyDraft())
 function updateLoanDraft(draft) { Object.assign(loanDraft, draft) }
@@ -73,6 +80,7 @@ function createClient(form) {
   perform(async () => {
     const client = await clientsApi.save(null, form)
     clients.value = [client]
+    loanDraft.companyId = client.company_id
     loanDraft.clientId = client.id
     isClientModalOpen.value = false
     isLoanModalOpen.value = true

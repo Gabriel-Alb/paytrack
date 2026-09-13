@@ -43,7 +43,7 @@ export function watchUsers(req,res) {
   res.flushHeaders();
   const refresh = () => {
     loadSession(req,res,() => {});
-    if (!['master','admin'].includes(req.user?.role)) { res.end(); return; }
+    if (!['admin'].includes(req.user?.role)) { res.end(); return; }
     res.write('data: refresh\n\n');
   };
   accessEvents.on('changed',refresh);

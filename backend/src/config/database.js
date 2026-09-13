@@ -6,6 +6,8 @@ import { migrate } from "./migrations.js";
 import { migrateAuth, migrateRoles, migrateActionAudit } from './auth-migration.js';
 import { proportionalAmount } from "../shared/utils/money.js";
 
+import { migrateCompanies } from './company-migration.js';
+import { installCompanyAccess } from '../shared/middleware/company-access.js';
 let connection;
 const schema = readFileSync(
   new URL("../../../SQL/schema.sql", import.meta.url),
@@ -21,17 +23,21 @@ export function openDatabase(path = env.DATABASE_PATH) {
     db.pragma("journal_mode = WAL");
     db.pragma("busy_timeout = 5000");
     db.function("money_share", { deterministic: true }, proportionalAmount);
+    db.pragma("foreign_keys = OFF");
     db.transaction(() => {
       const version = db.pragma('user_version', { simple: true });
       migrate(db, schema);
       migrateAuth(db);
       if (version < 3) migrateRoles(db);
       migrateActionAudit(db);
+      if (version < 5) migrateCompanies(db, schema);
       db.exec(schema);
       if (db.pragma("foreign_key_check").length)
         throw new Error("Banco contém referências inválidas.");
-      db.pragma("user_version = 4");
+      db.pragma("user_version = 5");
     }).immediate();
+    db.pragma("foreign_keys = ON");
+    installCompanyAccess(db);
     connection = db;
     return db;
   } catch (error) {

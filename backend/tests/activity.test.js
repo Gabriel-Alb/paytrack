@@ -17,6 +17,7 @@ beforeEach(async()=>{
   openDatabase(':memory:');
   const password=randomBytes(12).toString('base64url'),passwordHash=await hashPassword(password);
   regularId=insertUser({name:'Gabriel Albuquerque Silva',email:'gabriel@example.test',cpf:'11144477735',passwordHash},'user','active');
+  database().prepare('INSERT INTO user_companies(user_id,company_id) VALUES(?,1)').run(regularId);
   adminId=insertUser({name:'Administrador teste',email:'admin@example.test',cpf:'12345678909',passwordHash},'admin','active');
   async function login(email) {
     const agent=request.agent(app),csrf=(await agent.get('/api/auth/csrf').expect(200)).body.csrfToken;

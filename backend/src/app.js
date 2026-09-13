@@ -13,6 +13,9 @@ import { AppError } from "./shared/errors/AppError.js";
 import { authRoutes,usersRoutes } from './modules/auth/auth.routes.js';
 import { loadSession,requireAuth,requireCsrf,trustedOrigin } from './modules/auth/auth.middleware.js';
 
+import { companyAccess } from './shared/middleware/company-access.js';
+import { companiesRoutes } from './modules/companies/companies.routes.js';
+
 export const app = express();
 app.disable("x-powered-by");
 if (env.TRUST_PROXY) app.set('trust proxy',env.TRUST_PROXY);
@@ -26,10 +29,11 @@ app.use((req,res,next) => {
 app.use(cors({ origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),credentials:true,methods:['GET','POST','PUT','PATCH','DELETE'],allowedHeaders:['Content-Type','X-CSRF-Token'] }));
 app.use(express.json({ limit: "128kb" }));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
-app.use('/api',loadSession);
+app.use('/api',loadSession,companyAccess);
 app.use('/api/auth',authRoutes);
 app.use('/api',requireAuth,trustedOrigin,requireCsrf);
 app.use('/api/users',usersRoutes);
+app.use('/api/companies',companiesRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/loans", loansRoutes);
 app.use("/api/installments", installmentsRoutes);

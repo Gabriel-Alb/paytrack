@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 import { openDatabase, closeDatabase } from '../src/config/database.js';
 import { refreshFinancialState } from '../src/modules/installments/installments.service.js';
 
-const schema = readFileSync(new URL('../../SQL/schema.sql', import.meta.url), 'utf8');
+const schema = readFileSync(new URL('./fixtures/schema-v4.sql', import.meta.url), 'utf8');
 
 test('migração preserva pagamentos, multas e referências; reabertura é idempotente', () => {
   const directory = mkdtempSync(join(tmpdir(), 'paytrack-migration-'));
@@ -40,7 +40,7 @@ test('migração preserva pagamentos, multas e referências; reabertura é idemp
     assert.equal(db.prepare('SELECT amount FROM installments').get().amount, 1000);
     assert.equal(db.prepare('SELECT paid_amount FROM late_fees').get().paid_amount, 100);
     assert.equal(db.prepare('SELECT status FROM loans').get().status, 'overdue');
-    assert.equal(db.pragma('user_version', { simple: true }), 4);
+    assert.equal(db.pragma('user_version', { simple: true }),5);
     assert.deepEqual(db.pragma('foreign_key_check'), []);
     const payments = db.prepare('SELECT * FROM payments').all();
     closeDatabase();

@@ -46,6 +46,8 @@ export function migrateRoles(db) {
     DROP TRIGGER IF EXISTS users_role_update;
     DROP TRIGGER IF EXISTS protect_last_master_update;
     DROP TRIGGER IF EXISTS protect_last_master_delete;
+    DROP TRIGGER IF EXISTS protect_last_admin_update;
+    DROP TRIGGER IF EXISTS protect_last_admin_delete;
     ALTER TABLE users DROP COLUMN role;
     ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'
       CHECK(role IN ('master','admin','user'));

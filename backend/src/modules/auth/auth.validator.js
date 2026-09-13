@@ -10,7 +10,9 @@ export const loginSchema = z.object({ email: emailSchema, password: passwordSche
 export const changePasswordSchema = z.object({ currentPassword: passwordSchema, newPassword: passwordSchema }).strict();
 export const profileSchema = z.object({ email: emailSchema }).strict();
 export const accessSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('approve'), role: z.enum(['user','admin']) }).strict(),
+  z.object({ action: z.enum(['approve','edit']), role: z.enum(['user','admin']).default('user'), companyIds: z.array(z.number().int().positive()).max(10000).default([]) }).strict()
+    .refine(data => data.role === 'admin' || data.companyIds.length > 0, {message:'Selecione pelo menos uma empresa.',path:['companyIds']})
+    .refine(data => new Set(data.companyIds).size === data.companyIds.length, {message:'Empresas duplicadas.',path:['companyIds']}),
   z.object({ action: z.enum(['reject','block','unblock']) }).strict(),
 ]);
 export const usersQuerySchema = z.object({

@@ -8,7 +8,7 @@ import { openDatabase,closeDatabase } from '../src/config/database.js';
 import { hashPassword } from '../src/modules/auth/auth.service.js';
 import { randomBytes } from 'node:crypto';
 
-const current=readFileSync(new URL('../../SQL/schema.sql',import.meta.url),'utf8');
+const current=readFileSync(new URL('./fixtures/schema-v4.sql',import.meta.url),'utf8');
 const legacyUsers=`CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL COLLATE NOCASE UNIQUE,
   cpf TEXT UNIQUE,rg TEXT UNIQUE,cnh TEXT UNIQUE,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user',
@@ -16,7 +16,7 @@ const legacyUsers=`CREATE TABLE users (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`;
 const legacySchema=legacyUsers+current.slice(current.indexOf('CREATE TABLE IF NOT EXISTS clients'));
 const financialTables=['clients','loans','installments','payments','late_fees'];
-const snapshot=(db)=>financialTables.map((table)=>db.prepare(`SELECT * FROM ${table}`).all());
+const snapshot=(db)=>financialTables.map((table)=>db.prepare(`SELECT * FROM ${table}`).all().map(row=>{const copy={...row};delete copy.company_id;return copy}));
 
 test('migration v3 amplia auditoria sem inventar autores, preserva histórico e reabre sem alterações',()=>{
   const directory=mkdtempSync(join(tmpdir(),'paytrack-action-migration-')),path=join(directory,'audit.db');
@@ -38,11 +38,11 @@ test('migration v3 amplia auditoria sem inventar autores, preserva histórico e 
       VALUES('client_created',1,'Nome histórico','client',1,?,2)`).run(JSON.stringify({customer:'Cliente legado'}));
     const history=db.prepare('SELECT * FROM auth_audit_logs').all();closeDatabase();db=openDatabase(path);
     assert.deepEqual(db.prepare('SELECT * FROM auth_audit_logs').all(),history);
-    assert.equal(db.pragma('user_version',{simple:true}),4);assert.deepEqual(db.pragma('foreign_key_check'),[]);
+    assert.equal(db.pragma('user_version',{simple:true}),5);assert.deepEqual(db.pragma('foreign_key_check'),[]);
   } finally {closeDatabase();rmSync(directory,{recursive:true,force:true})}
 });
 
-test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e proteções do master',()=>{
+test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e conversão de master e proteção do último administrador',()=>{
   const directory=mkdtempSync(join(tmpdir(),'paytrack-roles-migration-')),path=join(directory,'roles.db');
   try {
     const old=new Database(path);
@@ -58,18 +58,19 @@ test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e pro
     const sessions=old.prepare('SELECT * FROM auth_sessions').all(),logs=old.prepare('SELECT * FROM auth_audit_logs').all();
     old.close();
     let db=openDatabase(path);
-    assert.deepEqual(db.prepare('SELECT * FROM users ORDER BY id').all(),users);
+    assert.deepEqual(db.prepare('SELECT * FROM users ORDER BY id').all(),users.map(user=>({...user,role:user.role==='master'?'admin':user.role})));
     assert.deepEqual(snapshot(db),finances);assert.deepEqual(db.prepare('SELECT * FROM auth_sessions').all(),sessions);
     assert.deepEqual(db.prepare('SELECT * FROM auth_audit_logs').all(),logs);
     assert.equal(db.pragma('foreign_keys',{simple:true}),1);assert.deepEqual(db.pragma('foreign_key_check'),[]);
     db.exec("UPDATE users SET role='admin',access_status='active',approved_by=1 WHERE id=2");
     assert.throws(()=>db.exec("UPDATE users SET role='invalid' WHERE id=2"));
-    assert.throws(()=>db.exec("UPDATE users SET role='admin' WHERE id=1"));
-    assert.throws(()=>db.exec("UPDATE users SET access_status='blocked' WHERE id=1"));
-    assert.throws(()=>db.exec('DELETE FROM users WHERE id=1'));
+    db.exec("UPDATE users SET role='user' WHERE id=1");
+    assert.throws(()=>db.exec("UPDATE users SET role='user' WHERE id=2"));
+    assert.throws(()=>db.exec("UPDATE users SET access_status='blocked' WHERE id=2"));
+    assert.throws(()=>db.exec('DELETE FROM users WHERE id=2'));
     closeDatabase();db=openDatabase(path);
     assert.equal(db.prepare('SELECT role FROM users WHERE id=2').get().role,'admin');
-    assert.equal(db.pragma('user_version',{simple:true}),4);assert.deepEqual(db.pragma('foreign_key_check'),[]);
+    assert.equal(db.pragma('user_version',{simple:true}),5);assert.deepEqual(db.pragma('foreign_key_check'),[]);
   } finally {closeDatabase();rmSync(directory,{recursive:true,force:true})}
 });
 
@@ -104,7 +105,7 @@ test('migration auth sobre legado preserva usuários, finanças e FKs, normaliza
     const users=migrated.prepare('SELECT * FROM users').all();closeDatabase();
     migrated=openDatabase(path);
     assert.deepEqual(migrated.prepare('SELECT * FROM users').all(),users);
-    assert.deepEqual(snapshot(migrated),before);assert.equal(migrated.pragma('user_version',{simple:true}),4);
+    assert.deepEqual(snapshot(migrated),before);assert.equal(migrated.pragma('user_version',{simple:true}),5);
   } finally {closeDatabase();rmSync(directory,{recursive:true,force:true})}
 });
 for(const field of ['cpf','rg','cnh','email'])test(`duplicidade normalizada de ${field} aborta toda migration sem mudanças parciais`,()=>{

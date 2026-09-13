@@ -47,7 +47,7 @@ export const loansApi = {
   async get(id) { return loanView(await request(`/loans/${id}`)) },
   async create(form) {
     return loanView(await request('/loans',{ method:'POST',body:{
-      client_id:Number(form.clientId),principal_amount:toCents(form.amount),interest_percentage:String(form.interest || 0),
+      company_id:Number(form.companyId),client_id:Number(form.clientId),principal_amount:toCents(form.amount),interest_percentage:String(form.interest || 0),
       installment_count:Number(form.installmentCount),late_fee_per_day:toCents(form.dailyLateFee),
       loan_date:form.loanDate,first_due_date:form.firstPaymentDate,
       installments:form.installments.map(toCents),

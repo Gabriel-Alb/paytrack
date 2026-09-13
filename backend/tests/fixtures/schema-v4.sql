@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     rg TEXT UNIQUE,
     cnh TEXT UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin', 'user')),
+    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('master', 'admin', 'user')),
     access_status TEXT NOT NULL DEFAULT 'pending' CHECK(access_status IN ('pending','active','rejected','blocked')),
     approved_by INTEGER REFERENCES users(id),
     approved_at TEXT,
@@ -53,38 +53,25 @@ CREATE INDEX IF NOT EXISTS idx_auth_rate_expiry ON auth_rate_limits(reset_at);
 CREATE INDEX IF NOT EXISTS idx_users_access ON users(access_status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(lower(trim(email)));
 CREATE TRIGGER IF NOT EXISTS users_role_insert BEFORE INSERT ON users
-WHEN NEW.role NOT IN ('admin','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
+WHEN NEW.role NOT IN ('master','admin','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
 CREATE TRIGGER IF NOT EXISTS users_role_update BEFORE UPDATE OF role ON users
-WHEN NEW.role NOT IN ('admin','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
-CREATE TRIGGER IF NOT EXISTS protect_last_admin_update BEFORE UPDATE OF role,access_status ON users
-WHEN OLD.role='admin' AND OLD.access_status='active'
- AND (NEW.role<>'admin' OR NEW.access_status<>'active')
- AND (SELECT count(*) FROM users WHERE role='admin' AND access_status='active')<=1
-BEGIN SELECT RAISE(ABORT, 'Last active administrator'); END;
-CREATE TRIGGER IF NOT EXISTS protect_last_admin_delete BEFORE DELETE ON users
-WHEN OLD.role='admin' AND OLD.access_status='active'
- AND (SELECT count(*) FROM users WHERE role='admin' AND access_status='active')<=1
-BEGIN SELECT RAISE(ABORT, 'Last active administrator'); END;
-
-CREATE TABLE IF NOT EXISTS companies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(trim(name)) BETWEEN 2 AND 150),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS user_companies (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
-    PRIMARY KEY(user_id,company_id)
-);
-CREATE INDEX IF NOT EXISTS idx_user_companies_company ON user_companies(company_id,user_id);
+WHEN NEW.role NOT IN ('master','admin','user') BEGIN SELECT RAISE(ABORT, 'Invalid role'); END;
+CREATE TRIGGER IF NOT EXISTS protect_last_master_update BEFORE UPDATE OF role,access_status ON users
+WHEN OLD.role='master' AND OLD.access_status='active'
+ AND (NEW.role<>'master' OR NEW.access_status<>'active')
+ AND (SELECT count(*) FROM users WHERE role='master' AND access_status='active')<=1
+BEGIN SELECT RAISE(ABORT, 'Last active master'); END;
+CREATE TRIGGER IF NOT EXISTS protect_last_master_delete BEFORE DELETE ON users
+WHEN OLD.role='master' AND OLD.access_status='active'
+ AND (SELECT count(*) FROM users WHERE role='master' AND access_status='active')<=1
+BEGIN SELECT RAISE(ABORT, 'Last active master'); END;
 
 CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
     name TEXT NOT NULL,
-    cpf TEXT NOT NULL,
-    rg TEXT,
-    cnh TEXT,
+    cpf TEXT NOT NULL UNIQUE,
+    rg TEXT UNIQUE,
+    cnh TEXT UNIQUE,
     phone TEXT,
     email TEXT COLLATE NOCASE,
     status TEXT NOT NULL DEFAULT 'sem_contrato'
@@ -94,9 +81,6 @@ CREATE TABLE IF NOT EXISTS clients (
     status_override TEXT CHECK (status_override IS NULL OR status_override = 'negativado'),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(company_id,cpf),
-    UNIQUE(company_id,rg),
-    UNIQUE(company_id,cnh),
     FOREIGN KEY (created_by) REFERENCES users(id)
         ON UPDATE CASCADE
         ON DELETE SET NULL
@@ -208,8 +192,3 @@ CREATE INDEX IF NOT EXISTS idx_payments_payment_date
 
 CREATE INDEX IF NOT EXISTS idx_late_fees_status
     ON late_fees(status);
-
-CREATE TRIGGER IF NOT EXISTS clients_company_immutable BEFORE UPDATE OF company_id ON clients
-WHEN NEW.company_id<>OLD.company_id BEGIN SELECT RAISE(ABORT,'Client company is immutable'); END;
-CREATE TRIGGER IF NOT EXISTS loans_client_immutable BEFORE UPDATE OF client_id ON loans
-WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END;

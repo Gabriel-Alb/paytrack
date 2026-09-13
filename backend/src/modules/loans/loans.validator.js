@@ -21,6 +21,7 @@ const percentage = z
   );
 export const loanSchema = z
   .object({
+    company_id: idSchema.optional(),
     client_id: idSchema,
     principal_amount: positiveCents,
     interest_percentage: percentage.default("0"),
@@ -47,6 +48,7 @@ export const loanPatchSchema = z
   })
   .strict();
 export const loanListSchema = listSchema.extend({
+  company_id: idSchema.optional(),
   client_id: idSchema.optional(),
   status: z
     .enum(["on-time", "attention", "overdue", "paid", "cancelled", "active"])

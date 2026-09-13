@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 
 let api;
 const clientData = {
+  company_id: 1,
   name: 'Cliente de teste',
   cpf: '529.982.247-25',
   rg: '12.345-X',
@@ -41,6 +42,7 @@ async function loan(data = {}) {
     await api
       .post('/api/loans')
       .send({
+        company_id: 1,
         client_id: c.id,
         principal_amount: 10000,
         interest_percentage: '10',
@@ -109,6 +111,7 @@ test('valida CPF, centavos inteiros, datas e IDs', async () => {
   await api.post('/api/clients').send({ name: 'Inválido', cpf: '11111111111' }).expect(400);
   const c = await client();
   const data = {
+    company_id: 1,
     client_id: c.id,
     principal_amount: 10.5,
     installment_count: 1,
@@ -157,6 +160,7 @@ test('suporta parcelas personalizadas parciais e completas', async () => {
   await api
     .post('/api/loans')
     .send({
+      company_id: 1,
       client_id: l.client_id,
       principal_amount: 101,
       installment_count: 2,
@@ -169,6 +173,7 @@ test('suporta parcelas personalizadas parciais e completas', async () => {
 test('rejeita soma incorreta e personalização inválida sem criar contrato', async () => {
   const c = await client();
   const data = {
+    company_id: 1,
     client_id: c.id,
     principal_amount: 100,
     installment_count: 2,
@@ -305,6 +310,7 @@ test('rollback de empréstimo se INSERT de parcela falhar', async () => {
   await api
     .post('/api/loans')
     .send({
+      company_id: 1,
       client_id: c.id,
       principal_amount: 1000,
       installment_count: 2,

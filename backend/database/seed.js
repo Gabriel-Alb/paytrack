@@ -21,7 +21,7 @@ export function seedDevelopment() {
       ];
       let created = 0;
       for (const [index, example] of examples.entries()) {
-        if (database().prepare('SELECT id FROM clients WHERE cpf=?').get(example.cpf)) continue;
+        if (database().prepare('SELECT id FROM clients WHERE company_id=1 AND cpf=?').get(example.cpf)) continue;
         const client = createClient(
           clientSchema.parse({
             name: example.name,

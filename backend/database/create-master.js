@@ -34,7 +34,7 @@ try {
   if (process.argv.length!==2 || !process.stdin.isTTY || !process.stdout.isTTY)
     throw new Error('Use npm run auth:create-master em um terminal interativo, sem argumentos.');
   openDatabase();
-  if (hasMaster()) throw new Error('Já existe um master. Nenhum usuário foi criado.');
+  if (hasMaster()) throw new Error('Já existe um administrador. Nenhum usuário foi criado.');
   const input=createInterface({input:process.stdin,output:process.stdout});
   try {
     form={};
@@ -46,12 +46,12 @@ try {
   if (form.password!==confirmation) throw new Error('As senhas não coincidem.');
   confirmation='';
   await createMaster(form);
-  process.stdout.write('Master criado com acesso ativo.\n');
+  process.stdout.write('Administrador criado com acesso ativo.\n');
 } catch (error) {
-  const message=error.code==='MASTER_EXISTS' ? 'Já existe um master.' :
+  const message=error.code==='MASTER_EXISTS' ? 'Já existe um administrador.' :
     error.name==='ZodError' ? 'Dados inválidos. Verifique e-mail, documentos e senha de 6–20 caracteres.' :
     error.code?.startsWith('SQLITE') ? 'Não foi possível criar: verifique duplicidade de dados e o banco.' :
-    ['Cancelado.','As senhas não coincidem.','Já existe um master. Nenhum usuário foi criado.','Use npm run auth:create-master em um terminal interativo, sem argumentos.'].includes(error.message) ? error.message : 'Não foi possível criar o master. Verifique a configuração.';
+    ['Cancelado.','As senhas não coincidem.','Já existe um administrador. Nenhum usuário foi criado.','Use npm run auth:create-master em um terminal interativo, sem argumentos.'].includes(error.message) ? error.message : 'Não foi possível criar o administrador. Verifique a configuração.';
   process.stderr.write(`${message}\n`);
   process.exitCode=1;
 } finally {

@@ -8,6 +8,8 @@ import {
 import { pagination } from "../../shared/utils/validation.js";
 import { recordAction } from '../auth/auth.repository.js';
 
+import { resolveCompany } from '../../shared/middleware/company-access.js';
+
 function checkDocuments(data, id) {
   const duplicates = repository.findDuplicate(data, id);
   for (const key of ["cpf", "rg", "cnh"]) {
@@ -48,6 +50,7 @@ export function createClient(data, actor) {
         notes: null,
         ...data,
       };
+      client.company_id = resolveCompany(data.company_id);
       checkDocuments(client);
       const id = repository.insertClient(client,actor?.id);
       recordAction('client_created',actor,'client',id,{customer:client.name});
