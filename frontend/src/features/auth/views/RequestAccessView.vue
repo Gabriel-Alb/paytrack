@@ -6,16 +6,7 @@
     title="Solicitar acesso"
     description="Preencha seus dados. Um administrador avaliará sua solicitação antes de liberar o acesso."
   >
-    <div
-      v-if="sent"
-      role="status"
-      class="rounded-xl border border-[#166534]/10 bg-[#166534]/[0.06] px-4 py-3 text-sm leading-6 text-[#166534]"
-    >
-      {{ sent }}
-    </div>
-
     <form
-      v-else
       class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-x-3 lg:gap-y-2.5"
       @submit.prevent="submit"
     >
@@ -57,14 +48,6 @@
         class="[&_input]:h-10 [&_input]:rounded-lg [&_input]:text-[13px] [&_label]:mb-1 [&_label]:text-xs"
       />
 
-      <p
-        v-if="error"
-        role="alert"
-        class="rounded-lg border border-red-100 bg-red-50 px-3.5 py-2 text-xs text-red-700 lg:col-span-2"
-      >
-        {{ error }}
-      </p>
-
       <button
         :disabled="busy"
         class="mt-0.5 flex h-10 items-center justify-center rounded-lg bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-[0_6px_16px_rgba(22,101,52,0.14)] transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-px hover:bg-[#14532d] hover:shadow-[0_8px_20px_rgba(22,101,52,0.18)] active:translate-y-0 active:scale-[0.995] disabled:pointer-events-none disabled:opacity-50 lg:col-span-2"
@@ -88,7 +71,8 @@
 
 <script setup>
 import { onBeforeUnmount, reactive, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { toast } from '@/composables/useToast'
 import { request } from '@/services/api'
 import AuthShell from '../components/AuthShell.vue'
 import PasswordField from '../components/PasswordField.vue'
@@ -104,9 +88,8 @@ const form = reactive({
 })
 
 const confirmation = ref('')
-const error = ref('')
 const busy = ref(false)
-const sent = ref('')
+const router = useRouter()
 
 const fields = [
   {
@@ -150,39 +133,36 @@ const fields = [
 async function submit() {
   if (busy.value) return
 
-  error.value = ''
-
   if (form.password !== confirmation.value) {
-    error.value = 'As senhas não coincidem.'
+    toast.error('As senhas não coincidem.')
     return
   }
 
   if (!validPassword(form.password)) {
-    error.value = PASSWORD_MESSAGE
+    toast.error(PASSWORD_MESSAGE)
     return
   }
 
   busy.value = true
 
   try {
-    sent.value = (
-      await request('/auth/request-access', {
+    await request('/auth/request-access', {
         method: 'POST',
         body: {
           ...form,
         },
       })
-    ).message
+
+    toast.success('Acesso solicitado com sucesso. Aguarde a avaliação do administrador.')
 
     for (const key of Object.keys(form)) {
       form[key] = ''
     }
-  } catch (failure) {
-    error.value =
-      failure.message || 'Não foi possível enviar. Tente novamente.'
-  } finally {
-    form.password = ''
     confirmation.value = ''
+    await router.replace('/login')
+  } catch (failure) {
+    toast.error(failure.message || 'Não foi possível enviar. Tente novamente.')
+  } finally {
     busy.value = false
   }
 }

@@ -15,8 +15,6 @@
             <main :class="route.name === 'reports'
                 ? 'px-3 pt-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] sm:px-5 lg:px-5 lg:py-4'
                 : 'px-4 pt-5 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] sm:px-7 sm:pt-6 sm:pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:px-10 lg:py-8'">
-                <p v-if="apiError" role="alert" class="mb-4 text-sm text-red-700">{{ apiError }}</p>
-                <p v-if="apiNotice" role="status" class="mb-4 text-sm text-[#166534]">{{ apiNotice }}</p>
                 <RouterView />
             </main>
         </div>
@@ -32,7 +30,6 @@
 
 <script setup>
 import { ref } from 'vue'
-import { apiError,apiNotice } from '@/services/api'
 import { RouterView, useRoute } from 'vue-router'
 
 import AppHeader from '@/components/layout/AppHeader.vue'

@@ -1,7 +1,6 @@
 import { ref } from 'vue'
+import { toast } from '../composables/useToast.js'
 
-export const apiError = ref('')
-export const apiNotice = ref('')
 export const pendingOperation = ref(false)
 const baseUrl = import.meta.env?.VITE_API_URL || '/api'
 export const watchAccessChanges = (refresh) => {
@@ -26,23 +25,34 @@ async function getCsrf() {
 export async function request(path,{ method='GET',body,signal }={}, retry=true) {
   const headers = body === undefined ? {} : { 'Content-Type':'application/json' }
   if (!['GET','HEAD'].includes(method)) headers['X-CSRF-Token'] = await getCsrf()
-  const response = await fetch(`${baseUrl}${path}`,{
-    method,signal,credentials:'include',headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  const result = await response.json().catch(() => ({}))
+  let response
+  try {
+    response = await fetch(`${baseUrl}${path}`,{
+      method,signal,credentials:'include',headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch (cause) {
+    if (cause.name === 'AbortError') throw cause
+    throw new Error('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.', { cause })
+  }
+  if (response.status === 204) return null
+  let result
+  try { result = await response.json() }
+  catch {
+    throw new Error('O servidor retornou uma resposta inesperada. Tente novamente.')
+  }
   if (!response.ok) {
-    if (result.error?.code === 'CSRF_INVALID' && retry) {
+    if (result?.error?.code === 'CSRF_INVALID' && retry) {
       setCsrfToken('')
       return request(path,{method,body,signal},false)
     }
-    if (response.status === 401 && result.error?.code === 'UNAUTHENTICATED') {
+    if (response.status === 401 && result?.error?.code === 'UNAUTHENTICATED') {
       setCsrfToken('')
       onUnauthorized(path)
     }
-    const details = result.error?.details?.map((item) => `${item.field}: ${item.message}`).join(' ')
-    const error = new Error(details || result.error?.message || 'Não foi possível concluir a operação.')
-    error.code = result.error?.code
+    const details = Array.isArray(result?.error?.details) ? result.error.details.map((item) => `${item.field}: ${item.message}`).join(' ') : ''
+    const error = new Error(details || result?.error?.message || 'Não foi possível concluir a operação.')
+    error.code = result?.error?.code
     error.status = response.status
     throw error
   }
@@ -52,9 +62,8 @@ export async function request(path,{ method='GET',body,signal }={}, retry=true) 
 export async function perform(operation) {
   if (pendingOperation.value) return
   pendingOperation.value = true
-  apiError.value = ''
   try { return await operation() }
-  catch (error) { apiError.value = error.message || 'Não foi possível conectar à API.' }
+  catch (error) { toast.error(error) }
   finally { pendingOperation.value = false }
 }
 

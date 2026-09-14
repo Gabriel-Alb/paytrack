@@ -6,7 +6,16 @@ export function errorHandler(error, _req, res, _next) {
     return res.status(400).json({
       error: {
         code: "VALIDATION_ERROR",
-        message: "Verifique os dados informados.",
+        message: _req.originalUrl?.split('?')[0] === '/api/auth/request-access'
+          ? [...new Set(error.issues.map(({ path }) => ({
+            name: 'Informe um nome entre 2 e 150 caracteres.',
+            email: 'Informe um e-mail válido.',
+            cpf: 'Informe um CPF válido.',
+            rg: 'Confira o RG informado (até 30 caracteres).',
+            cnh: 'A CNH deve conter 11 dígitos ou ficar em branco.',
+            password: 'A senha deve conter de 6 a 20 caracteres.',
+          })[path[0]] || 'Verifique os dados informados.'))].join(' ')
+          : "Verifique os dados informados.",
         details: _req.path.includes('/auth/') ? undefined : error.issues.map(({ path, message }) => ({
           field: path.join("."),
           message,

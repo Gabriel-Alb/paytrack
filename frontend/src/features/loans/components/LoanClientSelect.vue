@@ -103,7 +103,7 @@ import {
     watch,
 } from 'vue'
 import { clientsApi } from '@/services/paytrack'
-import { apiError } from '@/services/api'
+import { toast } from '@/composables/useToast'
 
 const props = defineProps({
     companyId: {type:Number,default:null},
@@ -145,7 +145,7 @@ async function searchClients() {
   try {
     const result = await clientsApi.list({ search:query.value, limit:50, company_id:props.companyId })
     if (version === requestVersion) availableClients.value = result.items
-  } catch (error) { if (version === requestVersion) apiError.value = error.message }
+  } catch (error) { if (version === requestVersion) toast.error(error) }
 }
 watch(() => props.companyId, () => { availableClients.value = []; query.value = ''; searchClients() })
 watch(query, () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchClients, 200) })

@@ -1,13 +1,5 @@
 <template>
   <div class="monthly-report" :aria-busy="loading">
-    <div v-if="error" class="report-error" role="alert">
-      <span>{{ error }}</span>
-
-      <button type="button" @click="reload">
-        Tentar novamente
-      </button>
-    </div>
-
     <div class="report-dashboard">
       <div class="report-main">
         <ReportMetrics v-model="selectedMonth" :summary="data?.summary" :available="!!data" />
@@ -56,8 +48,6 @@ const {
   selectedStatus,
   data,
   loading,
-  error,
-  reload,
   weeks,
   days,
   chartItems,

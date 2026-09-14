@@ -1,9 +1,5 @@
 <template>
   <AuthShell wide split extend-mobile-background title="Entrar" description="Entre com seu e-mail e senha para acessar sua conta.">
-    <p v-if="route.query.passwordChanged" role="status"
-      class="mb-4 rounded-lg border border-[#166534]/10 bg-[#166534]/[0.06] px-3.5 py-2.5 text-xs text-[#166534] lg:text-sm">
-      Senha alterada. Entre novamente.
-    </p>
 
     <form class="space-y-3" @submit.prevent="submit">
       <div>
@@ -17,11 +13,6 @@
 
       <PasswordField id="password" v-model="password" autocomplete="current-password"
         class="[&_input]:h-10 [&_input]:rounded-lg [&_input]:text-[13px] [&_label]:mb-1 [&_label]:text-xs" />
-
-      <p v-if="error || apiError" role="alert"
-        class="rounded-lg border border-red-100 bg-red-50 px-3.5 py-2 text-xs text-red-700">
-        {{ error || apiError }}
-      </p>
 
       <button :disabled="busy"
         class="mt-0.5 flex h-10 w-full items-center justify-center rounded-lg bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-[0_6px_16px_rgba(22,101,52,0.14)] transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-px hover:bg-[#14532d] hover:shadow-[0_8px_20px_rgba(22,101,52,0.18)] active:translate-y-0 active:scale-[0.995] disabled:pointer-events-none disabled:opacity-50">
@@ -51,28 +42,25 @@
 </template>
 
 <script setup>
+import { toast } from '@/composables/useToast'
 import { onBeforeUnmount, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { apiError } from '@/services/api'
 import AuthShell from '../components/AuthShell.vue'
 import PasswordField from '../components/PasswordField.vue'
 
 const router = useRouter()
-const route = useRoute()
 const auth = useAuth()
 
 const email = ref('')
 const password = ref('')
-const error = ref('')
+
 const busy = ref(false)
 
 async function submit() {
   if (busy.value) return
 
   busy.value = true
-  error.value = ''
-  apiError.value = ''
 
   try {
     await auth.login({
@@ -82,8 +70,7 @@ async function submit() {
 
     await router.replace('/')
   } catch (failure) {
-    error.value =
-      failure.message || 'Não foi possível conectar. Tente novamente.'
+    toast.error(failure.message || 'Não foi possível conectar. Tente novamente.')
   } finally {
     password.value = ''
     busy.value = false

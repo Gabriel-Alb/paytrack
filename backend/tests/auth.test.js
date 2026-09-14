@@ -41,6 +41,45 @@ async function user(status='pending',overrides={}) {
 }
 const count=()=>database().prepare('SELECT count(*) n FROM users').get().n;
 
+test('assinante com falha não transforma cadastro persistido ou aprovação em erro, nem impede outros assinantes', async () => {
+  const admin = await signIn(), visitor = await browser();
+  const failing = () => { throw new Error('Conexão interrompida'); };
+  let received = 0;
+  const healthy = () => { received++; };
+  mock.method(console, 'error', () => {});
+  accessEvents.on('changed', failing);
+  accessEvents.on('changed', healthy);
+  try {
+    await visitor.agent.post('/api/auth/request-access').send({...data(),rg:'',cnh:''}).expect(202);
+    const saved = repo.byEmail(data().email);
+    assert.equal(saved.access_status, 'pending');
+    assert.equal(saved.rg, null);
+    assert.equal(saved.cnh, null);
+    assert.equal(received, 1);
+    assert.equal((await admin.agent.get('/api/users?status=pending').expect(200)).body.items[0].id, saved.id);
+    await admin.agent.patch(`/api/users/${saved.id}/access`).send({action:'approve',role:'user',companyIds:[1]}).expect(200);
+    assert.equal(received, 2);
+    assert.equal(repo.byId(saved.id).access_status, 'active');
+    assert.deepEqual(database().prepare('SELECT company_id FROM user_companies WHERE user_id=?').all(saved.id), [{company_id:1}]);
+    await signIn(data().email);
+  } finally {
+    accessEvents.off('changed', failing);
+    accessEvents.off('changed', healthy);
+  }
+});
+
+test('cadastro explica validação sem expor valores, não grava falhas e aceita correção na mesma sessão', async () => {
+  const {agent} = await browser();
+  const invalid = await agent.post('/api/auth/request-access').send({...data(),cpf:'11111111111'}).expect(400);
+  assert.equal(invalid.body.error.message, 'Informe um CPF válido.');
+  assert.ok(!JSON.stringify(invalid.body).includes('11111111111'));
+  assert.equal(count(), 1);
+  await agent.post('/api/auth/request-access').send(data()).expect(202);
+  await agent.post('/api/auth/request-access').send(data()).expect(409);
+  assert.equal(count(), 2);
+  assert.equal(database().prepare("SELECT count(*) n FROM auth_audit_logs WHERE event='access_requested'").get().n, 1);
+});
+
 test('pré-cadastro normaliza documentos/e-mail, persiste Argon2id e não autentica',async()=>{
   const {agent}=await browser();
   const result=await agent.post('/api/auth/request-access').send({...data(),email:' PERSON@EXAMPLE.TEST '}).expect(202);

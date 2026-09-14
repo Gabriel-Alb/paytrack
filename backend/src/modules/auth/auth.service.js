@@ -4,7 +4,7 @@ import * as repo from './auth.repository.js';
 import { authConfig } from '../../config/auth.js';
 import { AppError, requireRecord } from '../../shared/errors/AppError.js';
 import { requestSchema, profileSchema, accessSchema } from './auth.validator.js';
-import { accessEvents } from './auth.events.js';
+import { notifyAccessChanged } from './auth.events.js';
 
 export const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 export const hashPassword = (password) => argon2.hash(password, {type: argon2.argon2id,...authConfig.password});
@@ -36,7 +36,7 @@ export function updateProfile(user,input) {
     if (error.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error;
     throw new AppError(409,'EMAIL_CONFLICT','Este e-mail já está cadastrado.');
   }
-  accessEvents.emit('changed');
+  notifyAccessChanged();
   return result;
 }
 const invalidCredentials = () => new AppError(401,'INVALID_CREDENTIALS','E-mail ou senha inválidos.');
@@ -70,7 +70,7 @@ export async function requestAccess(data) {
     if (error.code!=='SQLITE_CONSTRAINT_UNIQUE') throw error;
     throw new AppError(409,'ACCESS_REQUEST_CONFLICT','Não foi possível registrar a solicitação: e-mail ou documento já cadastrado. Confira seus dados ou entre em contato com o administrador.');
   }
-  accessEvents.emit('changed');
+  notifyAccessChanged();
 }
 export async function createMaster(input) {
   const data = requestSchema.parse(input);
@@ -148,7 +148,7 @@ export function changeAccess(actor,id,input) {
     if (action !== 'edit') repo.audit('sessions_revoked',actor.id,id);
     return safeUser(repo.byId(id));
   });
-  accessEvents.emit('changed');
+  notifyAccessChanged();
   return result;
 }
 export const listUsers = repo.listUsers;

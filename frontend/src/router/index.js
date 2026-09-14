@@ -12,7 +12,7 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         {path:'account',name:'account',meta:{title:'Minha conta'},component:()=>import('@/features/auth/views/AccountView.vue')},
-        {path:'users',name:'users',meta:{title:'Controle de acesso',admin:true},component:()=>import('@/features/auth/views/UsersView.vue')},
+        {path:'users',name:'users',meta:{title:'Administração',admin:true},component:()=>import('@/features/auth/views/UsersView.vue')},
         {
           path: '',
           name: 'dashboard',

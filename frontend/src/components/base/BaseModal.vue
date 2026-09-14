@@ -57,7 +57,6 @@
                     </header>
 
                     <div class="flex-1 overflow-y-auto overscroll-contain p-4 sm:px-6 sm:py-5" :class="contentClass">
-                        <p v-if="apiError" role="alert" class="mb-4 text-sm text-red-700">{{ apiError }}</p>
                         <slot />
                     </div>
 
@@ -80,7 +79,6 @@ import {
 } from 'vue'
 
 import { useBottomSheetDrag } from '@/composables/useBottomSheetDrag'
-import { apiError } from '@/services/api'
 
 const props = defineProps({
     modelValue: {
@@ -181,7 +179,6 @@ watch(
     () => props.modelValue,
     (open) => {
         if (open) {
-            apiError.value = ''
             resetDrag()
         }
     },
