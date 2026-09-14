@@ -1,0 +1,65 @@
+import { test, afterEach, mock } from 'node:test'
+import assert from 'node:assert/strict'
+import { toast, useToast } from '../src/composables/useToast.js'
+
+const host = useToast()
+afterEach(() => { toast.clear(); host.suspend(false); host.setLimit(3); mock.timers.reset() })
+
+test('fila limita notificações e só inicia expiração quando elas aparecem', () => {
+  mock.timers.enable({apis:['setTimeout','Date']})
+  host.setLimit(1)
+  toast.success('Salvo')
+  toast.error('Falhou')
+  assert.deepEqual(host.items.value.map(item => item.message), ['Salvo'])
+  mock.timers.tick(5000)
+  assert.deepEqual(host.items.value.map(item => item.message), ['Falhou'])
+  mock.timers.tick(7999)
+  assert.equal(host.items.value.length, 1)
+  mock.timers.tick(1)
+  assert.equal(host.items.value.length, 0)
+})
+
+test('mensagem repetida não duplica e fechamento manual promove o próximo item', () => {
+  host.setLimit(1)
+  const id = toast.error(new Error('Conexão indisponível'))
+  assert.equal(toast.error('Conexão indisponível'), id)
+  toast.info('Atualização')
+  toast.dismiss(id)
+  assert.equal(host.items.value[0].message, 'Atualização')
+  toast.error(Object.assign(new Error('Cancelado'), {name:'AbortError'}))
+  toast.dismiss(host.items.value[0].id)
+  assert.equal(host.items.value.length, 0)
+})
+
+test('hover, foco e aba oculta preservam tempo de leitura de forma independente', () => {
+  mock.timers.enable({apis:['setTimeout','Date']})
+  const id = toast.success('Dados atualizados')
+  mock.timers.tick(2000)
+  host.pause(id, 'pointer', true)
+  host.pause(id, 'focus', true)
+  host.pause(id, 'pointer', false)
+  mock.timers.tick(10000)
+  assert.equal(host.items.value.length, 1)
+  host.suspend(true)
+  host.pause(id, 'focus', false)
+  mock.timers.tick(10000)
+  host.suspend(false)
+  mock.timers.tick(2999)
+  assert.equal(host.items.value.length, 1)
+  mock.timers.tick(1)
+  assert.equal(host.items.value.length, 0)
+})
+
+test('mudança para mobile conserva a ordem e tempo das notificações em espera', () => {
+  mock.timers.enable({apis:['setTimeout','Date']})
+  const ids = ['Um','Dois','Três','Quatro'].map(message => toast.success(message))
+  mock.timers.tick(1000)
+  host.pause(ids[1], 'pointer', true)
+  host.setLimit(1)
+  mock.timers.tick(4000)
+  assert.equal(host.items.value[0].id, ids[1])
+  mock.timers.tick(3999)
+  assert.equal(host.items.value[0].id, ids[1])
+  mock.timers.tick(1)
+  assert.equal(host.items.value[0].id, ids[2])
+})
