@@ -1,12 +1,12 @@
+import { toast } from './useToast.js'
 import { ref, readonly } from 'vue'
-import { request, setCsrfToken, setUnauthorizedHandler, apiError, apiNotice } from '../services/api.js'
+import { request, setCsrfToken, setUnauthorizedHandler } from '../services/api.js'
 
 const user = ref(null)
 let restoring
 let expired = () => {}
 setUnauthorizedHandler((path) => {
   user.value = null
-  apiNotice.value = ''
   // The router already owns navigation during /me restoration. Redirecting here
   // would cancel that navigation and start another /me request indefinitely.
   if (path !== '/auth/me') expired()
@@ -18,7 +18,7 @@ export async function restoreAuth() {
     return user.value
   }).catch((error) => {
     user.value = null
-    if (error.status !== 401) apiError.value = 'Não foi possível verificar a sessão. Tente novamente.'
+    if (error.status !== 401) toast.error('Não foi possível verificar a sessão. Tente novamente.')
     return null
   }).finally(() => { restoring = undefined })
   return restoring
@@ -34,15 +34,11 @@ export function useAuth() {
       const result = await request('/auth/login',{method:'POST',body})
       user.value = result.user
       setCsrfToken(result.csrfToken)
-      apiError.value = ''
-      apiNotice.value = ''
     },
     async logout() {
       await request('/auth/logout',{method:'POST'})
       user.value = null
       setCsrfToken('')
-      apiError.value = ''
-      apiNotice.value = ''
     },
     async changePassword(body) {
       await request('/auth/change-password',{method:'POST',body})

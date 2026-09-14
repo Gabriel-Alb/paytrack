@@ -6,6 +6,16 @@ import { request,setCsrfToken,setUnauthorizedHandler } from '../src/services/api
 const originalFetch=globalThis.fetch
 afterEach(()=>{globalThis.fetch=originalFetch;setCsrfToken('');setUnauthorizedHandler(()=>{})})
 const response=(status,body)=>({ok:status===200,status,json:async()=>body})
+
+test('rede indisponível e resposta não JSON geram mensagens compreensíveis; cancelamentos são preservados', async () => {
+  setCsrfToken('test')
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
+  await assert.rejects(request('/auth/request-access', {method:'POST',body:{}}), /Verifique sua conexão/)
+  globalThis.fetch = async () => ({ok:true,status:202,json:async () => { throw new SyntaxError('HTML') }})
+  await assert.rejects(request('/auth/request-access', {method:'POST',body:{}}), /resposta inesperada/)
+  globalThis.fetch = async () => { throw Object.assign(new Error('Cancelado'), {name:'AbortError'}) }
+  await assert.rejects(request('/clients'), {name:'AbortError'})
+})
 test('HTTP usa cookies e header CSRF em todos os verbos de escrita, nunca na URL',async()=>{
   const calls=[]
   globalThis.fetch=async (url,options)=>{calls.push({url,options});return response(200,url.endsWith('/csrf')?{csrfToken:'test-csrf-memory'}:{ok:true})}
