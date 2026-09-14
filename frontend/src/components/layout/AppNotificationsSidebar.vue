@@ -12,8 +12,6 @@
                 <NotificationSidebarHeader ref="headerRef" @close="close" />
 
                 <NotificationFilters v-model="activeFilter" :filters="filters" />
-                <p v-if="feedback" role="status" class="px-4 py-3 text-sm text-[#166534]">{{ feedback }}</p>
-
                 <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                     <template v-if="groupedNotifications.length">
                         <NotificationGroup v-for="group in groupedNotifications" :key="group.label" :label="group.label"
@@ -43,12 +41,11 @@ import NotificationSidebarHeader from './notifications/NotificationSidebarHeader
 import AccessReviewModal from '@/features/auth/components/AccessReviewModal.vue'
 
 import { getNotifications } from '@/services/paytrack'
-import { perform,apiNotice } from '@/services/api'
+import { perform } from '@/services/api'
 const notifications = ref([])
 const selectedUser = ref(null)
-const feedback = ref('')
 function review(id) { selectedUser.value=id; emit('close') }
-function updated() { feedback.value='Acesso atualizado com sucesso.'; apiNotice.value=feedback.value; perform(async()=>{notifications.value=await getNotifications()}) }
+function updated() { perform(async()=>{notifications.value=await getNotifications()}) }
 import { useNotifications } from '../../composables/useNotifications.js'
 
 const props = defineProps({

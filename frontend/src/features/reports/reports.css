@@ -86,8 +86,6 @@
 .report-legend-label { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 10px; }
 .report-distribution-legend strong { display: block; margin-top: 3px; color: #27272a; font-size: 16px; font-weight: 600; }
 .report-distribution-empty { margin-top: 7px; text-align: center; font-size: 10px; }
-.report-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; margin-bottom: 12px; border-radius: 10px; background: #fef2f2; color: #b91c1c; }
-.report-error button { flex-shrink: 0; text-decoration: underline; }
 .monthly-report :focus-visible { outline: 2px solid #166534; outline-offset: 3px; }
 @media (width < 700px) {
   .report-main, .report-bottom, .report-side { display: contents; }

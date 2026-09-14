@@ -38,6 +38,7 @@ import ClientHistoryModal from '@/features/clients/components/ClientHistoryModal
 import ClientStatusModal from '@/features/clients/components/ClientStatusModal.vue'
 import ClientsGrid from '@/features/clients/components/ClientsGrid.vue'
 import { clientsApi } from '@/services/paytrack'
+import { toast } from '@/composables/useToast'
 import { perform } from '@/services/api'
 import { usePagedList } from '@/composables/usePagedList'
 
@@ -59,6 +60,7 @@ function closeFormModal() { setFormModalOpen(false) }
 function saveClient(form) {
   perform(async () => {
     await clientsApi.save(editingClient.value?.id, form)
+    toast.success('Cliente salvo com sucesso.')
     closeFormModal()
     await reload()
   })
@@ -74,6 +76,7 @@ function closeStatusModal() { setStatusModalOpen(false) }
 function saveStatus(status) {
   perform(async () => {
     await clientsApi.save(selectedClient.value.id, { status })
+    toast.success('Dados atualizados com sucesso.')
     closeStatusModal()
     await reload()
   })

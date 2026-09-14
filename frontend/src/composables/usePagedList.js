@@ -1,5 +1,5 @@
 import { ref,watch,onBeforeUnmount,nextTick } from 'vue'
-import { apiError } from '@/services/api'
+import { toast } from '@/composables/useToast'
 
 export function usePagedList(fetchPage,query) {
   const items=ref([])
@@ -33,7 +33,7 @@ export function usePagedList(fetchPage,query) {
       metadata.value=result
       page++
     } catch (error) {
-      if (current===generation && error.name!=='AbortError') apiError.value=error.message
+      if (current===generation && error.name!=='AbortError') toast.error(error)
       return
     } finally {
       if (current===generation) loading.value=false

@@ -7,29 +7,29 @@
       <option value="">{{ filter ? 'Todas as empresas' : loading ? 'Carregando…' : 'Selecione a empresa' }}</option>
       <option v-for="company in companies" :key="company.id" :value="company.id">{{ company.name }}</option>
     </select>
-    <span v-if="error" role="alert" class="mt-1 block text-xs text-red-800">{{ error }} <button type="button" class="underline" @click="load">Tentar novamente</button></span>
-    <span v-else-if="!loading && !companies.length" class="mt-1 block text-xs text-red-800">Nenhuma empresa disponível. Solicite acesso ao administrador.</span>
   </label>
 </template>
 <script setup>
+import { toast } from '@/composables/useToast'
 import { ref, watch } from 'vue'
 import { request } from '@/services/api'
 import { useAuth } from '@/composables/useAuth'
 const props = defineProps({ modelValue: {type:Number,default:null}, filter:Boolean, active:{type:Boolean,default:true} })
 const emit = defineEmits(['update:modelValue'])
 const { user } = useAuth()
-const companies = ref([]), loading = ref(false), error = ref('')
+const companies = ref([]), loading = ref(false)
 let sequence = 0
 async function load() {
   const version = ++sequence
-  loading.value = true; error.value = ''
+  loading.value = true
   try {
     const result = await request('/companies')
     if (version !== sequence) return
     companies.value = result
+    if (!result.length) toast.warning('Nenhuma empresa disponível. Solicite acesso ao administrador.')
     if (props.modelValue && !result.some(company => company.id === props.modelValue)) emit('update:modelValue',null)
     if (!props.filter && user.value?.role === 'user' && result.length === 1) emit('update:modelValue',result[0].id)
-  } catch (failure) { if (version === sequence) error.value = failure.message }
+  } catch (failure) { if (version === sequence) toast.error(failure, { action: { label: 'Tentar novamente', run: load } }) }
   finally { if (version === sequence) loading.value = false }
 }
 watch(() => props.active, active => { if (active) load() }, { immediate:true })

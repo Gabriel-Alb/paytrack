@@ -38,6 +38,7 @@ import LoanFormModal from '@/features/loans/components/LoanFormModal.vue'
 import LoanInstallmentsModal from '@/features/loans/components/LoanInstallmentsModal.vue'
 import LoansGrid from '@/features/loans/components/LoansGrid.vue'
 import { clientsApi, loansApi } from '@/services/paytrack'
+import { toast } from '@/composables/useToast'
 import { perform } from '@/services/api'
 import { usePagedList } from '@/composables/usePagedList'
 
@@ -79,6 +80,7 @@ function returnToLoan() {
 function createClient(form) {
   perform(async () => {
     const client = await clientsApi.save(null, form)
+    toast.success('Cliente cadastrado com sucesso.')
     clients.value = [client]
     loanDraft.companyId = client.company_id
     loanDraft.clientId = client.id
@@ -89,6 +91,7 @@ function createClient(form) {
 function createLoan(form) {
   perform(async () => {
     await loansApi.create(form)
+    toast.success('Empréstimo cadastrado com sucesso.')
     isLoanModalOpen.value = false
     Object.assign(loanDraft, createEmptyDraft())
     await reload()
@@ -97,6 +100,7 @@ function createLoan(form) {
 function registerLoanPayment({ loanId, payments }) {
   perform(async () => {
     selectedLoan.value = await loansApi.confirm(loanId, selectedLoan.value.revision, payments)
+    toast.success('Pagamentos atualizados com sucesso.')
     isInstallmentsModalOpen.value = false
     await reload()
   })

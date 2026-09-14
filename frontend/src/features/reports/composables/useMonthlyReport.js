@@ -1,3 +1,4 @@
+import { toast } from '@/composables/useToast'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { currentDate, getMonthlyReport } from '@/services/paytrack'
 
@@ -27,7 +28,6 @@ export function useMonthlyReport() {
   const selectedStatus = ref('on-time')
   const data = ref(null)
   const loading = ref(false)
-  const error = ref('')
   let controller
   let generation = 0
 
@@ -79,14 +79,13 @@ export function useMonthlyReport() {
     controller = new AbortController()
     const requestGeneration = ++generation
     loading.value = true
-    error.value = ''
     data.value = null
     try {
       const result = await getMonthlyReport(period.value, controller.signal)
       if (generation === requestGeneration) data.value = result
     } catch (cause) {
       if (generation === requestGeneration && cause.name !== 'AbortError') {
-        error.value = cause.message || 'Não foi possível carregar o relatório.'
+        toast.error(cause.message || 'Não foi possível carregar o relatório.', { action: { label: 'Tentar novamente', run: reload } })
       }
     } finally {
       if (generation === requestGeneration) loading.value = false
@@ -101,7 +100,7 @@ export function useMonthlyReport() {
   onBeforeUnmount(() => { generation++; controller?.abort() })
 
   return {
-    selectedMonth, selectedWeek, selectedDay, selectedStatus, data, loading, error, reload,
+    selectedMonth, selectedWeek, selectedDay, selectedStatus, data, loading, reload,
     weeks, week, days, chartItems, distribution, filteredContracts, daySummary, calendarOffset,
   }
 }

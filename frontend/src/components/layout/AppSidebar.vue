@@ -87,7 +87,7 @@
                             <path :d="mdiAccountKeyOutline" fill="currentColor" />
                         </svg>
 
-                        <span>Controle de acesso</span>
+                        <span>Administração</span>
                     </RouterLink>
 
                     <div class="my-1 border-t border-black/[0.06]" />
