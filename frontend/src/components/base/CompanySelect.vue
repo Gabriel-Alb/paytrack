@@ -2,7 +2,9 @@
   <label class="block min-w-0 text-sm">
     <span :class="filter ? 'sr-only' : 'mb-1.5 block text-xs font-medium text-black/50'">Empresa</span>
     <select aria-label="Empresa" :value="modelValue ?? ''" :required="!filter" :disabled="loading || (!filter && user?.role === 'user' && companies.length === 1)"
-      class="h-10 w-full rounded-[10px] border border-black/[0.09] bg-[#f8f8f8] px-3 text-sm text-[#202124] outline-none focus:border-[#166534] disabled:opacity-70"
+      :class="filter
+        ? 'h-10 w-full rounded-xl border border-black/[0.08] bg-white px-3 text-[13px] font-medium text-[#52525b] outline-none focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]'
+        : 'h-10 w-full rounded-[10px] border border-black/[0.09] bg-[#f8f8f8] px-3 text-sm text-[#202124] outline-none focus:border-[#166534] disabled:opacity-70'"
       @change="$emit('update:modelValue', $event.target.value ? Number($event.target.value) : null)">
       <option value="">{{ filter ? 'Todas as empresas' : loading ? 'Carregando…' : 'Selecione a empresa' }}</option>
       <option v-for="company in companies" :key="company.id" :value="company.id">{{ company.name }}</option>

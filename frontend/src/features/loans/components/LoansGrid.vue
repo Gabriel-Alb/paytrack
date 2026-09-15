@@ -1,11 +1,10 @@
 <template>
     <section>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
-                <div class="relative w-full" :class="searchOnly ? 'sm:max-w-[600px]' : 'sm:max-w-[360px]'">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div class="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-1 sm:flex-row sm:items-center">
+                <div class="relative w-full sm:max-w-[360px]">
                     <input v-model="search" type="search" placeholder="Pesquisar por cliente"
-                        :class="searchOnly ? 'h-11' : 'h-10'"
-                        class="w-full rounded-xl border border-black/[0.08] bg-white pl-4 pr-10 text-[13px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#a1a1aa] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]" />
+                        class="h-10 w-full rounded-xl border border-black/[0.08] bg-white pl-4 pr-10 text-[13px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#a1a1aa] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]" />
 
                     <span
                         class="mdi mdi-magnify pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg text-[#a1a1aa]"
