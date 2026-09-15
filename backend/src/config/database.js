@@ -1,57 +1,42 @@
-import Database from "better-sqlite3";
-import { readFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { env } from "./env.js";
-import { migrate } from "./migrations.js";
-import { migrateAuth, migrateRoles, migrateActionAudit } from './auth-migration.js';
-import { proportionalAmount } from "../shared/utils/money.js";
+import { env } from './env.js';
+import { configurePersistence } from '../application/persistence.js';
+import { createAdapter } from '../infrastructure/persistence/adapter.js';
+import { database, setConnection } from '../infrastructure/persistence/connection.js';
+export { database } from '../infrastructure/persistence/connection.js';
 
-import { migrateCompanies } from './company-migration.js';
-import { installCompanyAccess } from '../shared/middleware/company-access.js';
-let connection;
-const schema = readFileSync(
-  new URL("../../../SQL/schema.sql", import.meta.url),
-  "utf8",
-);
-
-export function openDatabase(path = env.DATABASE_PATH) {
-  if (connection) throw new Error("A conexão SQLite já está aberta.");
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = new Database(path);
+let opened = false;
+export async function openDatabase(pathOrConfig) {
+  if (opened) throw new Error('A persistência já está aberta.');
+  const config = { ...env, ...(typeof pathOrConfig === 'object' ? pathOrConfig : {}) };
+  if (!['postgres','sqlite'].includes(config.DATABASE_CLIENT)) throw new Error('Driver de persistência inválido.');
+  if (env.NODE_ENV === 'production' && config.DATABASE_CLIENT !== 'postgres')
+    throw new Error('Produção exige PostgreSQL.');
+  if (typeof pathOrConfig === 'string') {
+    if (config.DATABASE_CLIENT !== 'sqlite') throw new Error('DATABASE_PATH é exclusivo do SQLite.');
+    config.DATABASE_PATH = pathOrConfig;
+  }
+  opened = true;
+  let adapter;
   try {
-    db.pragma("foreign_keys = ON");
-    db.pragma("journal_mode = WAL");
-    db.pragma("busy_timeout = 5000");
-    db.function("money_share", { deterministic: true }, proportionalAmount);
-    db.pragma("foreign_keys = OFF");
-    db.transaction(() => {
-      const version = db.pragma('user_version', { simple: true });
-      migrate(db, schema);
-      migrateAuth(db);
-      if (version < 3) migrateRoles(db);
-      migrateActionAudit(db);
-      if (version < 5) migrateCompanies(db, schema);
-      db.exec(schema);
-      if (db.pragma("foreign_key_check").length)
-        throw new Error("Banco contém referências inválidas.");
-      db.pragma("user_version = 5");
-    }).immediate();
-    db.pragma("foreign_keys = ON");
-    installCompanyAccess(db);
-    connection = db;
-    return db;
+    const driver = config.DATABASE_CLIENT === 'postgres'
+      ? await (await import('../infrastructure/persistence/postgres.js')).openPostgres(config)
+      : (await import('../infrastructure/persistence/sqlite.js')).openSqlite(config.DATABASE_PATH);
+    adapter = createAdapter(driver, config.DATABASE_CLIENT);
+    setConnection(adapter);
+    const repositories = {};
+    for (const name of ['auth','clients','companies','installments','late-fees','loans','overview','payments','rate-limits'])
+      repositories[name] = await import(`../infrastructure/persistence/repositories/${name}.repository.js`);
+    configurePersistence({ ...repositories, unitOfWork: adapter.transaction });
+    return adapter;
   } catch (error) {
-    db.close();
+    await adapter?.close();
+    opened = false;
+    setConnection(undefined);
     throw error;
   }
 }
-
-export function database() {
-  if (!connection) throw new Error("SQLite não inicializado.");
-  return connection;
-}
-
-export function closeDatabase() {
-  connection?.close();
-  connection = undefined;
+export async function closeDatabase() {
+  if (!opened) return;
+  try { await database().close(); }
+  finally { opened = false; setConnection(undefined); configurePersistence(undefined); }
 }

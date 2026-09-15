@@ -213,3 +213,10 @@ CREATE TRIGGER IF NOT EXISTS clients_company_immutable BEFORE UPDATE OF company_
 WHEN NEW.company_id<>OLD.company_id BEGIN SELECT RAISE(ABORT,'Client company is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS loans_client_immutable BEFORE UPDATE OF client_id ON loans
 WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END;
+
+CREATE INDEX IF NOT EXISTS idx_users_approved_by ON users(approved_by);
+CREATE INDEX IF NOT EXISTS idx_auth_audit_actor ON auth_audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_auth_audit_subject ON auth_audit_logs(subject_id);
+CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
+CREATE INDEX IF NOT EXISTS idx_loans_created_by ON loans(created_by);
+CREATE INDEX IF NOT EXISTS idx_payments_created_by ON payments(created_by);
