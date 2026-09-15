@@ -120,8 +120,7 @@ async function monthlyReport({ start, end }) {
 export async function notifications(includeActivity = false) {
   (await refreshFinancialState());
   const items = (await repository.notifications(today(),includeActivity));
-  if (!includeActivity) return items;
   const timestamp = (value) => Date.parse(value.includes('T') ? value : value.replace(' ','T')+'Z');
-  return [...(await repository.actionNotifications()),...items]
+  return [...(await repository.actionNotifications(includeActivity)),...items]
     .sort((a,b) => timestamp(b.datetime)-timestamp(a.datetime)).slice(0,100);
 }
