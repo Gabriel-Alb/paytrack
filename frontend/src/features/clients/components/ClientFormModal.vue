@@ -10,7 +10,6 @@
                 " @close="emit('close')">
         <form id="client-form" @submit.prevent="submit">
             <div class="grid gap-4 sm:grid-cols-2">
-                <CompanySelect v-if="!client" v-model="form.company_id" :active="modelValue" class="sm:col-span-2" />
                 <label class="sm:col-span-2">
                     <span class="mb-1.5 block text-xs font-medium text-black/50">
                         Nome completo
@@ -88,11 +87,9 @@ import {
     watch,
 } from 'vue'
 
-import CompanySelect from '@/components/base/CompanySelect.vue'
 import BaseModal from '@/components/base/BaseModal.vue'
 
 const props = defineProps({
-    initialCompanyId: { type:Number,default:null },
     modelValue: {
         type: Boolean,
         default: false,
@@ -120,7 +117,6 @@ const secondaryButtonClass =
     'inline-flex min-h-11 items-center justify-center rounded-[10px] border border-black/[0.09] bg-white px-4 text-[13px] font-semibold text-black/55 transition-colors hover:bg-black/[0.02] active:bg-black/[0.04] sm:min-h-[38px]'
 
 const form = reactive({
-    company_id: null,
     name: '',
     cpf: '',
     rg: '',
@@ -131,7 +127,6 @@ const form = reactive({
 
 function resetForm() {
     Object.assign(form, {
-        company_id: props.initialCompanyId,
         name: props.client?.name ?? '',
         cpf: props.client?.cpf ?? '',
         rg: props.client?.rg ?? '',
@@ -142,9 +137,7 @@ function resetForm() {
 }
 
 function submit() {
-    if (!props.client && !form.company_id) return
     emit('save', {
-        ...(!props.client ? {company_id:form.company_id} : {}),
         name: form.name,
         cpf: form.cpf,
         rg: form.rg,

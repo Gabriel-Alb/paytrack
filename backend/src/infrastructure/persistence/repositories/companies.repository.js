@@ -27,3 +27,14 @@ export async function createCompany(name) {
 }
 
 export const companyExists = async id => (await database().prepare('SELECT 1 FROM companies WHERE id=?').get(id));
+
+export async function updateCompany(id, name) {
+  try {
+    const result = await database().prepare('UPDATE companies SET name=? WHERE id=? AND can_access_company(id)').run(name, id);
+    if (!result.changes) throw new AppError(404, 'NOT_FOUND', 'Empresa não encontrada.');
+    return { id, name };
+  } catch (error) {
+    if (error.code === 'PERSISTENCE_UNIQUE') throw new AppError(409, 'COMPANY_EXISTS', 'Já existe uma empresa com este nome.');
+    throw error;
+  }
+}

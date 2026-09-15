@@ -20,7 +20,7 @@ export function loanView(loan) {
     currentLateDays:item.days_late,currentLateFee:fromCents(item.late_fee_amount),
     isOverdue:item.status!=='paid' && item.due_date<currentDate(),
   }))
-  return { ...loan,clientId:loan.client_id,clientName:loan.client_name,amount:fromCents(loan.principal_amount),
+  return { ...loan,companyName:loan.company_name,clientId:loan.client_id,clientName:loan.client_name,amount:fromCents(loan.principal_amount),
     interest:loan.interest_percentage,totalWithInterest:fromCents(loan.total_amount),profit:fromCents(loan.interest_amount),
     installmentCount:loan.installment_count,paidInstallments:loan.paid_installments,
     installmentValue:fromCents(loan.min_installment_amount),

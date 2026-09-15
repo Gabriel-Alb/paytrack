@@ -1,5 +1,5 @@
 // Called inside the initialization transaction with foreign keys temporarily off.
-// Rebuild clients to replace global document uniqueness with company uniqueness.
+// Bridge pre-v5 ownership so the next migration can assign each loan safely.
 export function migrateCompanies(db, schema) {
   const clientColumns = db.pragma('table_info(clients)').map(({name}) => name);
   const hasCompanyColumn = clientColumns.includes('company_id');
@@ -20,13 +20,9 @@ export function migrateCompanies(db, schema) {
         FROM company_migration_roles WHERE id=users.id);
       DROP TABLE company_migration_roles;`);
     db.exec(schema.match(/CREATE TABLE IF NOT EXISTS user_companies \([\s\S]*?\n\);/)[0]);
-    if (!hasCompanyColumn) db.exec("INSERT INTO user_companies(user_id,company_id) SELECT id,1 FROM users WHERE role='user' AND access_status IN ('active','blocked')");
+    if (!hasCompanyColumn && !db.pragma('table_info(loans)').some(({name}) => name === 'company_id')) db.exec("INSERT INTO user_companies(user_id,company_id) SELECT id,1 FROM users WHERE role='user' AND access_status IN ('active','blocked')");
   }
-  if (clientColumns.length && !hasCompanyColumn) {
-    const columns = clientColumns.join(',');
-    const table = schema.match(/CREATE TABLE IF NOT EXISTS clients \([\s\S]*?\n\);/)[0];
-    db.exec(table.replace('clients (', 'clients_migrating ('));
-    db.exec(`INSERT INTO clients_migrating(${columns},company_id) SELECT ${columns},1 FROM clients;
-      DROP TABLE clients; ALTER TABLE clients_migrating RENAME TO clients;`);
+  if (clientColumns.length && !hasCompanyColumn && !db.pragma('table_info(loans)').some(({name}) => name === 'company_id')) {
+    db.exec('ALTER TABLE clients ADD COLUMN company_id INTEGER NOT NULL DEFAULT 1 REFERENCES companies(id)');
   }
 }

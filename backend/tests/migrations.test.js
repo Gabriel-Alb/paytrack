@@ -40,7 +40,7 @@ test('migração preserva pagamentos, multas e referências; reabertura é idemp
     assert.equal((await db.prepare('SELECT amount FROM installments').get()).amount, 1000);
     assert.equal((await db.prepare('SELECT paid_amount FROM late_fees').get()).paid_amount, 100);
     assert.equal((await db.prepare('SELECT status FROM loans').get()).status, 'overdue');
-    assert.equal((await db.pragma('user_version', { simple: true })),5);
+    assert.equal((await db.pragma('user_version', { simple: true })),6);
     assert.deepEqual((await db.pragma('foreign_key_check')), []);
     const payments = (await db.prepare('SELECT * FROM payments').all());
     (await closeDatabase());

@@ -1,6 +1,7 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -16,6 +17,36 @@ import { backendRoot } from '../src/config/env.js';
 
 afterEach(closeDatabase);
 if (process.env.TEST_DATABASE_URL) {
+  test('upgrade PostgreSQL v1 preserva empresas, duplicados legados e histórico', async () => {
+    const schema='paytrack_upgrade_'+randomUUID().replaceAll('-','');
+    const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`});
+    try {
+      await pool.query(`CREATE SCHEMA ${schema}`);
+      const initial=readFileSync(new URL('../src/infrastructure/persistence/postgres/001-initial.sql',import.meta.url),'utf8').replaceAll('\r\n','\n');
+      await pool.query(initial);
+      await pool.query('CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL)');
+      await pool.query('INSERT INTO schema_migrations VALUES(1,$1)',[createHash('sha256').update(initial).digest('hex')]);
+      await pool.query(`SELECT set_config('paytrack.access','{"role":"admin","companyIds":[]}',false);
+        INSERT INTO clients(id,company_id,name,cpf) VALUES(8,1,'Legado A','52998224725'),(9,2,'Legado B','52998224725');
+        INSERT INTO loans(id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
+          VALUES(12,8,1000,1000,1,'2026-01-01','2026-01-02'),(13,9,2000,2000,1,'2026-01-01','2026-01-02');
+        INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(15,13,1,2000,'2026-01-02');
+        INSERT INTO payments(id,installment_id,amount,payment_date) VALUES(20,15,500,'2026-01-02');`);
+      await migratePostgres(pool);
+      await migratePostgres(pool);
+      assert.deepEqual((await pool.query('SELECT id,client_id,company_id FROM loans ORDER BY id')).rows,[
+        {id:'12',client_id:'8',company_id:'1'},{id:'13',client_id:'9',company_id:'2'},
+      ]);
+      assert.equal((await pool.query('SELECT count(*) AS n FROM clients')).rows[0].n,'2');
+      assert.equal((await pool.query('SELECT amount FROM payments WHERE id=20')).rows[0].amount,'500');
+      await pool.query("UPDATE clients SET name='Preservado' WHERE id=9");
+      await assert.rejects(pool.query("INSERT INTO clients(name,cpf) VALUES('Duplicado','52998224725')"),{code:'23505'});
+      await pool.query(`SELECT set_config('paytrack.access','{"role":"user","companyIds":[1]}',false)`);
+      assert.equal((await pool.query('SELECT id FROM scoped_loans')).rows[0].id,'12');
+      assert.equal((await pool.query('SELECT count(*) AS n FROM scoped_payments')).rows[0].n,'0');
+      await assert.rejects(pool.query("UPDATE loans SET notes='Invadido' WHERE id=13"),{code:'23514'});
+    } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
+  });
   test('ambiente production autentica e consulta a API usando PostgreSQL real', async () => {
     const db = await openDatabase();
     const schema = (await db.prepare('SELECT current_schema() AS name').get()).name;
@@ -55,12 +86,12 @@ if (process.env.TEST_DATABASE_URL) {
     try {
       await migratePostgres(pool);
       await migratePostgres(pool);
-      assert.equal((await db.prepare('SELECT count(*) AS n FROM schema_migrations').get()).n,1);
+      assert.equal((await db.prepare('SELECT count(*) AS n FROM schema_migrations').get()).n,2);
       assert.equal((await db.prepare('SELECT count(*) AS n FROM companies').get()).n,2);
       assert.deepEqual(await db.prepare(`SELECT c.conname FROM pg_constraint c
         WHERE c.contype='f' AND c.connamespace=current_schema()::regnamespace
         AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid=c.conrelid AND i.indisvalid AND i.indkey[0]=c.conkey[1])`).all(),[]);
-      assert.equal((await checkSchema(db)).version,1);
+      assert.equal((await checkSchema(db)).version,2);
       await db.prepare("UPDATE schema_migrations SET checksum='invalid'").run();
       await assert.rejects(migratePostgres(pool),/Checksum/);
     } finally { await pool.end(); }
@@ -72,9 +103,9 @@ if (process.env.TEST_DATABASE_URL) {
       (9,'Usuário','user@example.test','outro-hash','user','active');
       UPDATE users SET approved_by=7 WHERE id=9;
       INSERT INTO user_companies(user_id,company_id) VALUES(9,2);
-      INSERT INTO clients(id,company_id,name,cpf,created_by) VALUES(11,2,'Importado','52998224725',9);
-      INSERT INTO loans(id,client_id,principal_amount,interest_percentage,interest_amount,total_amount,installment_count,late_fee_per_day,loan_date,first_due_date,created_by)
-        VALUES(15,11,50000000000,100,50000000000,100000000000,1,125,'2024-02-28','2024-02-29',9);
+      INSERT INTO clients(id,name,cpf,created_by) VALUES(11,'Importado','52998224725',9);
+      INSERT INTO loans(id,company_id,client_id,principal_amount,interest_percentage,interest_amount,total_amount,installment_count,late_fee_per_day,loan_date,first_due_date,created_by)
+        VALUES(15,2,11,50000000000,100,50000000000,100000000000,1,125,'2024-02-28','2024-02-29',9);
       INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(18,15,1,100000000000,'2024-02-29');
       INSERT INTO payments(id,installment_id,amount,late_fee_amount,payment_date,created_by,voided_at)
         VALUES(21,18,50000000000,125,'2024-03-01',9,'2024-03-02 12:00:00');

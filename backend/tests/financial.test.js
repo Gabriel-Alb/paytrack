@@ -12,7 +12,6 @@ import { randomBytes } from 'node:crypto';
 
 let api;
 const clientData = {
-  company_id: 1,
   name: 'Cliente de teste',
   cpf: '529.982.247-25',
   rg: '12.345-X',

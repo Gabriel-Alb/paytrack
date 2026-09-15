@@ -3,6 +3,9 @@
         panel-class="sm:max-w-[780px]" content-class="sm:py-5" @update:model-value="updateModelValue"
         @close="closeModal">
         <div v-if="loan">
+            <p class="mb-4 text-xs leading-5 text-[#71717a] [overflow-wrap:anywhere]">
+                Empresa: <span class="font-medium text-[#3f3f46]">{{ loan.companyName }}</span>
+            </p>
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                 <div class="min-w-0 rounded-xl border border-black/[0.06] bg-[#fafafa] p-3 sm:p-4">
                     <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa] sm:text-[10px]">

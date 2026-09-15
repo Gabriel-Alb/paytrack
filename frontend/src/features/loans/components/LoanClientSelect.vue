@@ -106,7 +106,6 @@ import { clientsApi } from '@/services/paytrack'
 import { toast } from '@/composables/useToast'
 
 const props = defineProps({
-    companyId: {type:Number,default:null},
     modelValue: {
         type: [Number, String],
         default: null,
@@ -129,10 +128,11 @@ const query = ref('')
 const dropdownOpen = ref(false)
 
 const availableClients = ref([])
+const restoredClient = ref(null)
 const selectedClient = computed(() =>
-    [...props.clients, ...availableClients.value].find(
+    [...props.clients, ...availableClients.value, ...(restoredClient.value ? [restoredClient.value] : [])].find(
         (client) =>
-            client.company_id === props.companyId && String(client.id) === String(props.modelValue),
+            String(client.id) === String(props.modelValue),
     ),
 )
 
@@ -141,14 +141,19 @@ let requestVersion = 0
 let searchTimer
 async function searchClients() {
   const version = ++requestVersion
-  if (!props.companyId) { availableClients.value = []; return }
   try {
-    const result = await clientsApi.list({ search:query.value, limit:50, company_id:props.companyId })
+    const result = await clientsApi.list({ search:query.value, limit:50 })
     if (version === requestVersion) availableClients.value = result.items
   } catch (error) { if (version === requestVersion) toast.error(error) }
 }
-watch(() => props.companyId, () => { availableClients.value = []; query.value = ''; searchClients() })
 watch(query, () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchClients, 200) })
+watch(() => props.modelValue, async id => {
+    if (!id || selectedClient.value) return
+    try {
+        const client = await clientsApi.get(id)
+        if (String(props.modelValue) === String(id)) restoredClient.value = client
+    } catch (error) { if (String(props.modelValue) === String(id)) toast.error(error) }
+}, { immediate: true })
 onMounted(searchClients)
 onBeforeUnmount(() => { requestVersion++; clearTimeout(searchTimer) })
 

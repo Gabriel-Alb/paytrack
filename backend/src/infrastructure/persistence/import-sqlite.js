@@ -8,9 +8,9 @@ export async function importSqlite(sourcePath, target) {
   const source = new Database(sourcePath, { readonly:true, fileMustExist:true });
   try {
     source.exec('BEGIN');
-    if (source.pragma('user_version', { simple:true }) !== 5 || source.pragma('foreign_key_check').length ||
+    if (source.pragma('user_version', { simple:true }) !== 6 || source.pragma('foreign_key_check').length ||
       source.pragma('integrity_check')[0].integrity_check !== 'ok')
-      throw new Error('A origem precisa estar no schema SQLite v5, com referências válidas.');
+      throw new Error('A origem precisa estar no schema SQLite v6, com referências válidas.');
     return await target.transaction(async () => {
       await target.exec(`LOCK TABLE ${tables.join(',')} IN ACCESS EXCLUSIVE MODE`);
       for (const table of tables.filter(table => table !== 'companies')) {
@@ -20,6 +20,9 @@ export async function importSqlite(sourcePath, target) {
       if (JSON.stringify(companies) !== JSON.stringify([{id:1,name:'Dinheiro Express'},{id:2,name:'Platinum Finance'}]))
         throw new Error('O destino contém empresas que não pertencem ao bootstrap.');
       await target.exec('DELETE FROM companies');
+      // Legacy duplicates were intentionally preserved by v6. The empty target is
+      // exclusively locked; suspend only document guards during this exact copy.
+      for (const key of ['cpf','rg','cnh']) await target.exec(`ALTER TABLE clients DISABLE TRIGGER clients_${key}_unique`);
       const counts = {};
       for (const table of tables) {
         const rows = source.prepare(`SELECT * FROM ${table}`).safeIntegers(true).all().map(row =>
@@ -46,6 +49,7 @@ export async function importSqlite(sourcePath, target) {
         const value = Math.max(maximum,sequence);
         await target.prepare("SELECT setval(pg_get_serial_sequence(?, 'id'), ?, ?)").get(table,Math.max(1,value),value > 0);
       }
+      for (const key of ['cpf','rg','cnh']) await target.exec(`ALTER TABLE clients ENABLE TRIGGER clients_${key}_unique`);
       return counts;
     });
   } finally { source.close(); }

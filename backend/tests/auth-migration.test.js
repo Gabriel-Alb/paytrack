@@ -38,7 +38,7 @@ test('migration v3 amplia auditoria sem inventar autores, preserva histórico e 
       VALUES('client_created',1,'Nome histórico','client',1,?,2)`).run(JSON.stringify({customer:'Cliente legado'})));
     const history=(await db.prepare('SELECT * FROM auth_audit_logs').all());(await closeDatabase());db=(await openDatabase(path));
     assert.deepEqual((await db.prepare('SELECT * FROM auth_audit_logs').all()),history);
-    assert.equal((await db.pragma('user_version',{simple:true})),5);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
+    assert.equal((await db.pragma('user_version',{simple:true})),6);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true})}
 });
 
@@ -70,7 +70,7 @@ test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e con
     (await assert.rejects(async ()=>(await db.exec('DELETE FROM users WHERE id=2'))));
     (await closeDatabase());db=(await openDatabase(path));
     assert.equal((await db.prepare('SELECT role FROM users WHERE id=2').get()).role,'admin');
-    assert.equal((await db.pragma('user_version',{simple:true})),5);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
+    assert.equal((await db.pragma('user_version',{simple:true})),6);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true})}
 });
 
@@ -105,7 +105,7 @@ test('migration auth sobre legado preserva usuários, finanças e FKs, normaliza
     const users=(await migrated.prepare('SELECT * FROM users').all());(await closeDatabase());
     migrated=(await openDatabase(path));
     assert.deepEqual((await migrated.prepare('SELECT * FROM users').all()),users);
-    assert.deepEqual((await snapshot(migrated)),before);assert.equal((await migrated.pragma('user_version',{simple:true})),5);
+    assert.deepEqual((await snapshot(migrated)),before);assert.equal((await migrated.pragma('user_version',{simple:true})),6);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true})}
 });
 for(const field of ['cpf','rg','cnh','email'])test(`duplicidade normalizada de ${field} aborta toda migration sem mudanças parciais`,async ()=>{

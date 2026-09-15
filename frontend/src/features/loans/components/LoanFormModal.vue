@@ -4,11 +4,11 @@
         @update:model-value="handleModalModelValue">
         <form id="loan-form" class="w-full min-w-0 max-w-full space-y-7 overflow-x-hidden" @submit.prevent="submit"
             @keydown.enter.prevent>
-            <CompanySelect :model-value="form.companyId" :active="open" @update:model-value="changeCompany" />
+            <CompanySelect v-model="form.companyId" :active="open" />
             <section class="min-w-0">
 
                 <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-                    <LoanClientSelect v-model="form.clientId" :clients="clients" :company-id="form.companyId"
+                    <LoanClientSelect v-model="form.clientId" :clients="clients"
                         @select-client="selectedClient = $event"
                         @request-new-client="requestNewClient" />
 
@@ -44,7 +44,7 @@
                                 R$
                             </span>
 
-                            <input v-model.number="form.amount" required min="0" step="0.01" type="number"
+                            <input v-model.number="form.amount" required min="0.01" step="0.01" type="number"
                                 placeholder="0,00"
                                 class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white pl-10 pr-3 text-sm text-[#202124] outline-none transition placeholder:text-black/30 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                         </div>
@@ -271,9 +271,7 @@ function requestNewClient() {
     emit('request-new-client')
 }
 
-function changeCompany(id) {
-    if (form.companyId !== id) { form.companyId = id; form.clientId = null; selectedClient.value = null }
-}
+
 function submit() {
     if (
         !form.companyId ||

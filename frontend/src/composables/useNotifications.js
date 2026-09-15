@@ -2,14 +2,6 @@ import { computed, ref, unref } from 'vue'
 
 const NOTIFICATION_FILTERS = [
   {
-    label: 'Todas',
-    value: 'all',
-  },
-  {
-    label: 'Cadastros',
-    value: 'registration',
-  },
-  {
     label: 'Empréstimos',
     value: 'loan',
   },
@@ -91,13 +83,9 @@ const groupNotifications = (notifications) => {
 }
 
 export const useNotifications = (notifications) => {
-  const activeFilter = ref('all')
+  const activeFilter = ref('loan')
 
   const filteredNotifications = computed(() => {
-    if (activeFilter.value === 'all') {
-      return unref(notifications)
-    }
-
     return unref(notifications).filter((notification) => notification.type === activeFilter.value)
   })
 

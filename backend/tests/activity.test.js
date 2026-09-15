@@ -56,7 +56,9 @@ test('created_by usa a sessão e notificações administrativas preservam nomes 
   assert.equal(notices.find(row=>row.event==='client_updated').responsibleId,adminId);
   const history=(await admin.get(`/api/loans/${loan.id}`).expect(200)).body.payments;
   assert.equal(history[0].registered_by,'Gabriel Albuquerque Silva');assert.equal(history[0].created_by,regularId);
-  assert.ok(!(await regular.get('/api/notifications').expect(200)).body.some(row=>row.event));
+  const regularNotices=(await regular.get('/api/notifications').expect(200)).body;
+  assert.ok(regularNotices.some(row=>row.event==='loan_created'));
+  assert.ok(regularNotices.filter(row=>row.event).every(row=>row.type==='loan' && !row.responsibleId));
   const before=(await events());await admin.get('/api/notifications').expect(200);assert.deepEqual((await events()),before);
 });
 
@@ -89,6 +91,9 @@ test('alterações de contrato e parcelas são auditadas pelo usuário autentica
   loan=(await admin.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,notes:'Nota do contrato'}).expect(200)).body;
   await admin.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,status:'cancelled'}).expect(200);
   for(const event of ['installments_updated','loan_updated','loan_cancelled'])assert.equal((await events()).find(row=>row.event===event).actor_id,adminId);
+  const notices=(await regular.get('/api/notifications').expect(200)).body;
+  for(const event of ['loan_created','installments_updated','loan_updated','loan_cancelled'])
+    assert.ok(notices.some(row=>row.event===event && row.type==='loan' && row.loanId===loan.id));
   assert.equal((await database().prepare('SELECT created_by FROM loans WHERE id=?').get(loan.id)).created_by,regularId);
 });
 

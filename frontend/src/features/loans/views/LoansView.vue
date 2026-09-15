@@ -1,7 +1,7 @@
 <template>
     <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
         <LoansGrid :loans="loans" :search-only="!!fixedStatus" @filter="filters = $event" @open-loan="openLoanInstallments">
-            <template v-if="!fixedStatus" #company-filter>
+            <template #company-filter>
                 <CompanySelect v-if="user?.role === 'admin'" v-model="companyFilter" filter class="w-full sm:w-48 sm:shrink-0" />
             </template>
             <template v-if="!fixedStatus" #toolbar-action>
@@ -20,7 +20,7 @@
         <LoanFormModal :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
             @save="createLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
 
-        <ClientFormModal :model-value="isClientModalOpen" :client="null" :initial-company-id="loanDraft.companyId" @update:model-value="setClientModalOpen"
+        <ClientFormModal :model-value="isClientModalOpen" :client="null" @update:model-value="setClientModalOpen"
             @save="createClient" @close="returnToLoan" />
 
         <LoanInstallmentsModal v-model="isInstallmentsModalOpen" :loan="selectedLoan" @close="clearSelectedLoan"
@@ -49,9 +49,11 @@ const { user } = useAuth()
 const companyFilter = ref(null)
 const route = useRoute()
 const filters = ref({})
-const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => (
-  props.fixedStatus ? { search: {...filters.value,company_id: user.value?.role === 'admin' ? companyFilter.value ?? undefined : undefined}.search, status: props.fixedStatus } : filters.value
-)))
+const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => ({
+  search: filters.value.search,
+  status: props.fixedStatus || (['on-time', 'attention', 'overdue'].includes(filters.value.status) ? filters.value.status : 'active'),
+  company_id: user.value?.role === 'admin' ? companyFilter.value ?? undefined : undefined,
+})))
 const clients = ref([])
 const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)
@@ -82,7 +84,6 @@ function createClient(form) {
     const client = await clientsApi.save(null, form)
     toast.success('Cliente cadastrado com sucesso.')
     clients.value = [client]
-    loanDraft.companyId = client.company_id
     loanDraft.clientId = client.id
     isClientModalOpen.value = false
     isLoanModalOpen.value = true

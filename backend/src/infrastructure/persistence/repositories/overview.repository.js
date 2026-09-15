@@ -172,11 +172,12 @@ export async function notifications(date, includeActivity = false) {
     .all({ date,includeActivity:Number(includeActivity) }));
 }
 
-export async function actionNotifications() {
+export async function actionNotifications(includeActivity = true) {
   return (await database().prepare(`SELECT id,event,actor_id,actor_name,entity_type,entity_id,details,created_at
-    FROM scoped_auth_audit_logs WHERE entity_type IN ('client','loan','payment') ORDER BY id DESC LIMIT 100`).all())
+    FROM scoped_auth_audit_logs WHERE entity_type='loan' OR (@includeActivity=1 AND entity_type IN ('client','payment'))
+    ORDER BY id DESC LIMIT 100`).all({ includeActivity: Number(includeActivity) }))
     .map((row) => ({...JSON.parse(row.details),id:`action-${row.id}`,event:row.event,
       type:{client:'registration',loan:'loan',payment:'payment'}[row.entity_type],
-      entityId:row.entity_id,responsibleId:row.actor_id,responsible:row.actor_name,
+      entityId:row.entity_id,...(includeActivity ? {responsibleId:row.actor_id,responsible:row.actor_name} : {}),
       datetime:new Date(row.created_at).toISOString(),days_late:0}));
 }

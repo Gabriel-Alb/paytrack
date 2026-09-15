@@ -32,7 +32,6 @@ export function validCpf(value) {
 
 export const clientSchema = z
   .object({
-    company_id: idSchema.optional(),
     name: z.string().trim().min(2).max(150),
     cpf: document.refine(validCpf, "CPF inválido."),
     rg: z
@@ -64,7 +63,7 @@ export const clientSchema = z
     notes,
   })
   .strict();
-export const clientPatchSchema = clientSchema.omit({ company_id: true })
+export const clientPatchSchema = clientSchema
   .partial()
   .extend({ status: clientStatus.optional() })
   .strict();

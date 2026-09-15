@@ -6,3 +6,4 @@ export const replaceUserCompanies = (...args) => repository('companies').replace
 export const listCompanies = (...args) => repository('companies').listCompanies(...args);
 export const createCompany = (...args) => repository('companies').createCompany(...args);
 export const companyExists = (...args) => repository('companies').companyExists(...args);
+export const updateCompany = (...args) => repository('companies').updateCompany(...args);
