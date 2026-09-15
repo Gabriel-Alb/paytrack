@@ -8,12 +8,12 @@ import {
 import { pagination } from "../../shared/utils/validation.js";
 import { recordAction } from '../auth/auth.repository.js';
 
-import { resolveCompany } from '../../application/company-access.js';
 
-async function checkDocuments(data, id) {
+
+async function checkDocuments(data, id, previous = {}) {
   const duplicates = (await repository.findDuplicate(data, id));
   for (const key of ["cpf", "rg", "cnh"]) {
-    if (data[key] && duplicates.some((row) => row[key] === data[key])) {
+    if (data[key] && data[key] !== previous[key] && duplicates.some((row) => row[key] === data[key])) {
       conflict(
         `CLIENT_${key.toUpperCase()}_ALREADY_EXISTS`,
         `Já existe um cliente cadastrado com este ${key.toUpperCase()}.`,
@@ -49,7 +49,6 @@ export async function createClient(data, actor) {
         notes: null,
         ...data,
       };
-      client.company_id = (await resolveCompany(data.company_id));
       (await checkDocuments(client));
       const id = (await repository.insertClient(client,actor?.id));
       (await recordAction('client_created',actor,'client',id,{customer:client.name}));
@@ -59,11 +58,12 @@ export async function createClient(data, actor) {
 
 export async function updateClient(id, data, actor) {
   return (await unitOfWork(async () => {
+      const previous = requireRecord((await repository.findClient(id)), "Cliente");
       const client = {
-        ...requireRecord((await repository.findClient(id)), "Cliente"),
+        ...previous,
         ...data,
       };
-      (await checkDocuments(client, id));
+      (await checkDocuments(client, id, previous));
       if (data.status !== undefined)
         client.status_override =
           data.status === "negativado" ? "negativado" : null;

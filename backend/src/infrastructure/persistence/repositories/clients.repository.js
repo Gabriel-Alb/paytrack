@@ -4,17 +4,17 @@ export async function findClient(id) {
   return (await database().prepare("SELECT * FROM scoped_clients WHERE id = ?").get(id));
 }
 
-export async function findDuplicate({ cpf, rg, cnh, company_id }, exceptId = 0) {
+export async function findDuplicate({ cpf, rg, cnh }, exceptId = 0) {
   return (await database()
     .prepare(
-      "SELECT cpf, rg, cnh FROM scoped_clients WHERE company_id = ? AND id <> ? AND (cpf = ? OR rg = ? OR cnh = ?)",
+      "SELECT cpf, rg, cnh FROM scoped_clients WHERE id <> ? AND (cpf = ? OR rg = ? OR cnh = ?)",
     )
-    .all(company_id, exceptId, cpf, rg ?? null, cnh ?? null));
+    .all(exceptId, cpf, rg ?? null, cnh ?? null));
 }
 
 export async function listClients({ search, status, company_id, limit, offset }) {
   const where = `WHERE (ascii_lower(c.name) LIKE ascii_lower(@search) ESCAPE '!' OR ascii_lower(c.cpf) LIKE ascii_lower(@document) ESCAPE '!')
-    AND (CAST(@status AS TEXT) IS NULL OR c.status = @status) AND (CAST(@company AS BIGINT) IS NULL OR c.company_id=@company)`;
+    AND (CAST(@status AS TEXT) IS NULL OR c.status = @status) AND (CAST(@company AS BIGINT) IS NULL OR EXISTS(SELECT 1 FROM scoped_loans l WHERE l.client_id=c.id AND l.company_id=@company))`;
   const params = {
     search: `%${search.replaceAll('!', '!!')}%`,
     document: `%${search.replace(/[.\-\s]/g, "").replaceAll("!", "!!")}%`,
@@ -37,8 +37,8 @@ export async function insertClient(client, actorId = null) {
   return Number(
     (await database()
       .prepare(
-        `INSERT INTO clients (company_id, name, cpf, rg, cnh, phone, email, notes, created_by)
-    VALUES (@company_id, @name, @cpf, @rg, @cnh, @phone, @email, @notes, @actorId)`,
+        `INSERT INTO clients (name, cpf, rg, cnh, phone, email, notes, created_by)
+    VALUES (@name, @cpf, @rg, @cnh, @phone, @email, @notes, @actorId)`,
       )
       .run({...client,actorId})).lastInsertRowid,
   );

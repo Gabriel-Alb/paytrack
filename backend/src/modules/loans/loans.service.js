@@ -120,9 +120,8 @@ export function assertRevision(loan, revision) {
 
 export async function createLoan(data, actor) {
   return (await unitOfWork(async () => {
-      const client = requireRecord((await findClient(data.client_id)), "Cliente");
+      requireRecord((await findClient(data.client_id)), "Cliente");
       const companyId = (await resolveCompany(data.company_id));
-      if (client.company_id !== companyId) throw new AppError(400,'CLIENT_COMPANY_MISMATCH','O cliente deve pertencer à empresa selecionada.');
       const interest = interestAmount(
         data.principal_amount,
         data.interest_percentage,
@@ -156,6 +155,7 @@ export async function createLoan(data, actor) {
       }
       const id = (await repository.insertLoan({
         ...data,
+        company_id: companyId,
         interest_amount: interest,
         total_amount: total,
         notes: data.notes ?? null,
