@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireRole } from '../auth/auth.middleware.js';
 import { atomic, recordAction } from '../auth/auth.repository.js';
-import { createCompany, listCompanies } from './companies.repository.js';
+import { createCompany, listCompanies, updateCompany } from './companies.repository.js';
+import { idSchema } from '../../shared/utils/validation.js';
 
 const schema = z.object({name:z.string().trim().min(2).max(150)}).strict();
 export const companiesRoutes = Router();
@@ -15,4 +16,14 @@ companiesRoutes.post('/', requireRole('admin'), async (req,res) => {
     return result;
   }));
   res.status(201).json(company);
+});
+companiesRoutes.patch('/:id', requireRole('admin'), async (req, res) => {
+  const id = idSchema.parse(req.params.id);
+  const { name } = schema.parse(req.body);
+  const company = await atomic(async () => {
+    const result = await updateCompany(id, name);
+    await recordAction('company_updated', req.user, 'company', id, { name });
+    return result;
+  });
+  res.json(company);
 });

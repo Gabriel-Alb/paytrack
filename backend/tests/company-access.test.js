@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { openDatabase, closeDatabase, database } from './database-helper.js';
+import { injectFailure } from './database-helper.js';
 import { newSession } from '../src/modules/auth/auth.service.js';
 import { insertUser } from '../src/modules/auth/auth.repository.js';
 import { replaceUserCompanies } from '../src/modules/companies/companies.repository.js';
@@ -33,6 +34,9 @@ const snapshot=async ()=>(await Promise.all(['clients','loans','installments','p
 test('empresas dinâmicas, múltiplos vínculos, filtros e documentos únicos por empresa',async()=>{
   const first=await create(a.api,undefined,'Empresa A'),second=await create(b.api,undefined,'Empresa B');
   assert.equal(first.client.company_id,1);assert.equal(second.loan.company_id,2);
+  assert.equal(first.loan.company_name,'Dinheiro Express');
+  assert.equal(second.loan.company_name,'Platinum Finance');
+  assert.deepEqual((await both.api.get('/api/loans').expect(200)).body.items.map(row=>row.company_name),['Platinum Finance','Dinheiro Express']);
   for (const path of ['clients','loans']) {
     assert.equal((await a.api.get(`/api/${path}`).expect(200)).body.total,1);
     assert.equal((await both.api.get(`/api/${path}`).expect(200)).body.total,2);
@@ -70,6 +74,46 @@ test('IDs de outra empresa não permitem ler, editar, pagar, corrigir ou consult
   await both.api.post('/api/loans').send({company_id:1,client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(400);
   await admin.api.patch(`/api/clients/${client.id}`).send({company_id:1}).expect(400);
   assert.deepEqual((await snapshot()),before);
+});
+
+test('editar empresa persiste somente o nome e mantém empréstimos, vínculos e isolamento',async()=>{
+  const {loan}=await create(b.api);
+  const before=await snapshot();
+  const memberships=await database().prepare('SELECT * FROM user_companies ORDER BY user_id,company_id').all();
+  const renamed=(await admin.api.patch('/api/companies/2').send({name:'  Platinum Renomeada  '}).expect(200)).body;
+  assert.deepEqual(renamed,{id:2,name:'Platinum Renomeada'});
+  assert.equal((await database().prepare('SELECT name FROM companies WHERE id=2').get()).name,renamed.name);
+  assert.deepEqual(await snapshot(),before);
+  assert.deepEqual(await database().prepare('SELECT * FROM user_companies ORDER BY user_id,company_id').all(),memberships);
+  for (const api of [admin.api,b.api,both.api]) {
+    assert.equal((await api.get(`/api/loans/${loan.id}`).expect(200)).body.company_name,renamed.name);
+    assert.equal((await api.get('/api/loans?company_id=2').expect(200)).body.items[0].company_name,renamed.name);
+    assert.equal((await api.get('/api/companies').expect(200)).body.find(row=>row.id===2).name,renamed.name);
+  }
+  await a.api.get(`/api/loans/${loan.id}`).expect(404);
+  assert.equal((await a.api.get('/api/loans?company_id=2').expect(200)).body.total,0);
+  const audit=await database().prepare("SELECT * FROM auth_audit_logs WHERE event='company_updated'").get();
+  assert.equal(audit.actor_id,admin.id);assert.equal(audit.entity_id,2);
+});
+
+test('edição de empresa exige administrador, sessão, CSRF e nome válido sem alterar IDs',async()=>{
+  for (const api of [a.api,b.api,both.api]) await api.patch('/api/companies/2').send({name:'Invadida'}).expect(403);
+  await request(app).patch('/api/companies/2').send({name:'Invadida'}).expect(401);
+  await admin.api.patch('/api/companies/2').set('X-CSRF-Token','invalid').send({name:'Invadida'}).expect(403);
+  for (const body of [{},{name:''},{name:'  '},{name:'A'},{name:'A'.repeat(151)},{name:123},{name:'Válido',id:3},{name:'Válido',company_id:1}])
+    await admin.api.patch('/api/companies/2').send(body).expect(400);
+  for (const id of ['0','-1','abc','1.5']) await admin.api.patch(`/api/companies/${id}`).send({name:'Válido'}).expect(400);
+  await admin.api.patch('/api/companies/999').send({name:'Válido'}).expect(404);
+  const duplicate=await admin.api.patch('/api/companies/2').send({name:' dinheiro express '}).expect(409);
+  assert.equal(duplicate.body.error.code,'COMPANY_EXISTS');
+  await admin.api.patch('/api/companies/2').send({name:'Platinum Finance'}).expect(200);
+  assert.equal((await database().prepare('SELECT name FROM companies WHERE id=2').get()).name,'Platinum Finance');
+});
+
+test('falha na auditoria reverte a edição da empresa',async()=>{
+  await injectFailure({name:'fail_company_update',event:'INSERT',table:'auth_audit_logs',condition:"NEW.event='company_updated'"});
+  await admin.api.patch('/api/companies/2').send({name:'Não persistir'}).expect(409);
+  assert.equal((await database().prepare('SELECT name FROM companies WHERE id=2').get()).name,'Platinum Finance');
 });
 
 test('dashboard, relatórios, notificações e históricos incluem somente empresas permitidas',async()=>{
