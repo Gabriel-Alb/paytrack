@@ -50,7 +50,9 @@ const companyFilter = ref(null)
 const route = useRoute()
 const filters = ref({})
 const { items: loans, target, reload } = usePagedList(loansApi.list, computed(() => (
-  props.fixedStatus ? { search: {...filters.value,company_id: user.value?.role === 'admin' ? companyFilter.value ?? undefined : undefined}.search, status: props.fixedStatus } : filters.value
+  props.fixedStatus
+    ? { search: filters.value.search, status: props.fixedStatus }
+    : { ...filters.value, company_id: user.value?.role === 'admin' ? companyFilter.value ?? undefined : undefined }
 )))
 const clients = ref([])
 const isLoanModalOpen = ref(false)

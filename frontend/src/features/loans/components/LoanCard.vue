@@ -21,6 +21,10 @@
                 </span>
             </div>
 
+            <p class=" text-[12px] leading-5 text-[#71717a] [overflow-wrap:anywhere]">
+                Empresa: <span class="font-medium text-[#3f3f46]">{{ loan.companyName }}</span>
+            </p>
+
             <div class="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
                 <div class="min-w-0">
                     <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
