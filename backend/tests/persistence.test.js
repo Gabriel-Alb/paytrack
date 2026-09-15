@@ -64,7 +64,7 @@ test('savepoints aguardam callbacks assíncronos e rollback não descarta outra 
   for (const name of ['Revertida','Não persistir','Leitura revertida']) assert.ok(!names.includes(name));
 });
 test('duas confirmações simultâneas mantêm revisão, saldo e um único recebimento', async () => {
-  const client = await createClient({ company_id:1,name:'Concorrência',cpf:'52998224725' });
+  const client = await createClient({ name:'Concorrência',cpf:'52998224725' });
   const loan = await createLoan({ company_id:1,client_id:client.id,principal_amount:100000000000,
     interest_percentage:'0',installment_count:1,late_fee_per_day:0,loan_date:today(),first_due_date:today() });
   const data = { amount:100000000000,payment_date:today(),revision:loan.revision };
@@ -76,21 +76,21 @@ test('duas confirmações simultâneas mantêm revisão, saldo e um único receb
 });
 test('contextos simultâneos filtram leituras e escritas, sem herdar acesso de conexão reutilizada', async () => {
   const db = database();
-  await createClient({ company_id:1,name:'Empresa um',cpf:'52998224725' });
-  await createClient({ company_id:2,name:'Empresa dois',cpf:'52998224725' });
+  const client = await createClient({name:'Global',cpf:'52998224725'});
+  for (const company_id of [1,2]) await createLoan({company_id,client_id:client.id,principal_amount:100,interest_percentage:'0',installment_count:1,late_fee_per_day:0,loan_date:today(),first_due_date:today()});
   await Promise.all([1,2,1,2,1,2].map(company => withCompanyAccess({role:'user',companyIds:[company]}, async () => {
-    const rows = await db.prepare('SELECT company_id FROM scoped_clients').all();
+    const rows = await db.prepare('SELECT company_id FROM scoped_loans').all();
     assert.deepEqual(rows,[{company_id:company}]);
-    await assert.rejects(db.prepare('UPDATE clients SET name=? WHERE company_id=?').run('Invasão',company===1?2:1));
+    await assert.rejects(db.prepare('UPDATE loans SET notes=? WHERE company_id=?').run('Invasão',company===1?2:1));
   })));
   await withCompanyAccess({role:'user',companyIds:[]}, async () => {
-    assert.deepEqual(await db.prepare('SELECT * FROM scoped_clients').all(),[]);
+    assert.deepEqual(await db.prepare('SELECT * FROM scoped_loans').all(),[]);
   });
-  assert.equal((await db.prepare('SELECT count(*) AS n FROM scoped_clients').get()).n,2);
+  assert.equal((await db.prepare('SELECT count(*) AS n FROM scoped_loans').get()).n,2);
 });
 test('busca com barra e exclamação, comparação NOCASE e ordenação de nulos são compatíveis', async () => {
-  const first = await createClient({company_id:1,name:'Teste \\ especial!',cpf:'52998224725'});
-  const second = await createClient({company_id:1,name:'Outro teste',cpf:'11144477735'});
+  const first = await createClient({name:'Teste \\ especial!',cpf:'52998224725'});
+  const second = await createClient({name:'Outro teste',cpf:'11144477735'});
   assert.equal((await listClients(clientListSchema.parse({search:'\\ especial!'}))).total,1);
   assert.equal((await listClients(clientListSchema.parse({search:'TESTE'}))).total,2);
   const db = database();

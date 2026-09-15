@@ -97,17 +97,19 @@ Execute `npm run dev` no frontend e backend. O Vite escuta em `0.0.0.0`; abra `h
 
 O Controle de Acesso consulta os usuários pendentes persistidos e recebe atualizações por `GET /api/users/events` (SSE, exclusivo de administradores). Solicitação e decisão confirmadas atualizam a lista aberta; reconexões e uma verificação a cada 15 segundos também sincronizam alterações de outro processo.
 
-## Acesso por empresa (schema v5)
+## Acesso por empresa (SQLite v6 / PostgreSQL v2)
 
 Há somente dois papéis: `admin` (Administrador global) e `user` (Usuário padrão). O comando histórico `auth:create-master` agora cria um administrador; não existe mais papel master. Usuários padrão ativos recebem uma ou mais empresas através de `user_companies` (relação muitos-para-muitos).
 
 - `GET /api/companies`: empresas disponíveis na sessão; administradores recebem todas.
 - `POST /api/companies`: somente administradores, corpo `{"name":"Nova empresa"}`.
 - `GET /api/auth/me` e o detalhe de usuário retornam `companies` e `companyIds`.
-- `POST /api/clients` e `POST /api/loans` aceitam `company_id`. Administradores e usuários com várias empresas precisam informar a empresa. Para usuário padrão com uma empresa, a API pode preenchê-la automaticamente.
-- O cliente precisa pertencer à empresa escolhida para o contrato. O mesmo CPF/RG/CNH pode existir em empresas diferentes; a unicidade é por empresa.
+- `POST /api/clients` cadastra um cliente global, sem campo de empresa. `POST /api/loans` aceita `company_id`. Administradores e usuários com várias empresas precisam informar a empresa. Para usuário padrão com uma empresa, a API pode preenchê-la automaticamente.
+- O mesmo cliente pode ter contratos de empresas diferentes. Novos cadastros e alterações de documentos respeitam unicidade global de CPF/RG/CNH. Duplicados legados são preservados, sem fusão automática.
 
-`clients.company_id` é obrigatório. Contratos herdam a empresa de seu cliente, parcelas de seu contrato, e pagamentos/multas da parcela. `scoped_loans` expõe `company_id` derivado. Não há uma coluna redundante em cada nível. A empresa do cliente e o cliente do contrato são imutáveis, evitando mover todo o histórico entre empresas por edição cadastral.
+`loans.company_id` é obrigatório e referencia `companies`. Clientes não pertencem a empresas. Parcelas herdam o escopo de seu contrato, e pagamentos/multas da parcela. A empresa e o cliente do contrato são imutáveis. O histórico e os totais financeiros do cliente incluem apenas contratos autorizados na sessão.
+
+As três listagens usam os status existentes da API: `status=active` reúne contratos `active`/`overdue`; `status=paid` exige quitação do principal e das multas; `status=overdue` usa o limiar de atraso configurado. Somente administradores veem filtros de empresa na interface; parâmetros enviados por usuários nunca ampliam o escopo.
 
 O middleware `companyAccess` cria um contexto por requisição (AsyncLocalStorage), após resolver a sessão no banco. Todos os repositórios financeiros consultam as views `scoped_*`, que filtram antes de agregar ou paginar. Triggers também validam os donos de cada escrita, inclusive reconciliações. Consultas por ID não autorizado retornam 404; criação com empresa não disponível retorna 403. Ao adicionar uma consulta financeira, use as views, nunca uma leitura direta da tabela base. No SQLite, views e guardas são temporárias por conexão. No PostgreSQL, são versionadas no schema, e cada transação recebe o contexto por `set_config(..., true)`; o contexto expira no commit/rollback e não vaza pelo pool. Fora de HTTP, scripts são operações privilegiadas. A credencial PostgreSQL e o arquivo SQLite devem continuar restritos à conta de serviço.
 
@@ -117,9 +119,9 @@ Alterar papel ou empresas com `action: "edit"` preserva a sessão, mas vale já 
 
 A inicialização de bancos SQLite legados aplica `src/infrastructure/persistence/sqlite/company-migration.js` automaticamente dentro de uma transação. Cria Dinheiro Express (ID 1) e Platinum Finance (ID 2) como registros no banco; o frontend não fixa esses nomes.
 
-**Como o banco anterior não identifica a empresa de origem, todos os clientes existentes ficam vinculados à Dinheiro Express; todo o histórico financeiro os acompanha.** Usuários padrão ativos ou bloqueados recebem vínculo com essa empresa. Solicitações pendentes continuam aguardando a escolha do administrador. Papéis antigos `master` viram `admin`; administradores existentes continuam globais. IDs, senhas, sessões, autoria, parcelas, pagamentos, multas e auditoria são preservados. Reabrir o banco não recria vínculos removidos nem ressemeia empresas.
+Bancos anteriores à v5 recebem a atribuição legada à Dinheiro Express antes da transferência da empresa para os empréstimos. A v6 copia `clients.company_id` para cada contrato e remove a coluna do cliente. No PostgreSQL, `002-loan-companies.sql` faz a mesma transformação sem alterar o checksum da migration inicial. IDs, dados cadastrais, saldos, autoria, pagamentos, sessões e vínculos são preservados.
 
-A reconstrução de clientes remove a unicidade global dos documentos. A inicialização desativa chaves estrangeiras somente nessa conexão, verifica todas as referências antes do commit e reativa a fiscalização antes de atender HTTP. Em falha, a transação reverte a migração. Faça backup consistente e valide uma cópia do banco antes de iniciar a versão nova em produção. A atribuição inicial precisa corresponder à operação real; redistribuição de dados legados, se necessária, deve ser planejada antes da migração.
+A reconstrução preserva inclusive clientes legados com documentos repetidos. Guardas de documentos impedem novos duplicados e permitem editar os demais campos desses registros. A inicialização desativa chaves estrangeiras somente nessa conexão, verifica todas as referências antes do commit e reativa a fiscalização antes de atender HTTP. Em falha, a transação reverte a migração. Faça backup consistente e valide uma cópia do banco antes de iniciar a versão nova em produção. A atribuição inicial precisa corresponder à operação real; redistribuição de dados legados, se necessária, deve ser planejada antes da migração.
 
 ## PostgreSQL em produção
 
@@ -148,7 +150,7 @@ Comandos dentro de `backend`:
 - `npm run auth:create-master`: bootstrap interativo, sem senha padrão, válido nos dois bancos.
 - `npm run seed`: dados demonstrativos opcionais, idempotentes e recusados em produção, inclusive por chamada direta à função.
 
-A migration PostgreSQL `src/infrastructure/persistence/postgres/001-initial.sql` cria as 11 tabelas, índices de FKs, unicidade normalizada, empresas iniciais, views, funções e guardas. `schema_migrations` registra versão, checksum SHA-256 e data; aplicação é transacional e usa lock entre processos. Versões futuras e checksums divergentes são recusados. Não edite uma migration já aplicada: crie a próxima versão e registre-a no runner. SQLite mantém a versão 5 e suas migrations legadas, preservando IDs e dados existentes.
+A migration PostgreSQL `src/infrastructure/persistence/postgres/001-initial.sql` cria as 11 tabelas, índices de FKs, unicidade normalizada, empresas iniciais, views, funções e guardas. `schema_migrations` registra versão, checksum SHA-256 e data; aplicação é transacional e usa lock entre processos. Versões futuras e checksums divergentes são recusados. Não edite uma migration já aplicada: crie a próxima versão e registre-a no runner. SQLite usa a versão 6 e suas migrations legadas, preservando IDs e dados existentes.
 
 ### Tipos e concorrência
 
@@ -161,9 +163,9 @@ Uma transação `pg` usa um único client do pool até commit/rollback, conforme
 ### Transferência SQLite → PostgreSQL
 
 1. Pare as escritas da aplicação antiga e faça backup consistente do SQLite, incluindo o conteúdo do WAL. Trabalhe com uma cópia, nunca com o único arquivo original.
-2. Se a cópia for anterior à v5, inicialize-a com NODE_ENV=development, DATABASE_CLIENT=sqlite e DATABASE_PATH apontando para a cópia; execute `npm run db:migrate` e `npm run db:check`. Valide a atribuição das empresas legadas descrita acima.
+2. Se a cópia for anterior à v6, inicialize-a com NODE_ENV=development, DATABASE_CLIENT=sqlite e DATABASE_PATH apontando para a cópia; execute `npm run db:migrate` e `npm run db:check`. Valide a atribuição das empresas legadas descrita acima.
 3. Prepare um PostgreSQL vazio com as configurações de produção e execute `npm run db:migrate`. Para a transferência offline, instale também as dependências de desenvolvimento (`npm ci --include=dev`), pois o leitor SQLite é necessário apenas nesse comando.
-4. Execute `npm run db:import-sqlite -- /caminho/da/copia-v5.db`, mantendo o destino configurado como PostgreSQL. O comando abre a origem somente para leitura, valida versão/integridade/FKs, recusa destino com dados ou empresas alteradas e importa todas as tabelas em uma transação. Preserva usuários, senhas/hashes, sessões, vínculos, autoria, pagamentos estornados, auditoria e rate limits. Ajusta as sequences considerando também IDs antigos já removidos.
+4. Execute `npm run db:import-sqlite -- /caminho/da/copia-v6.db`, mantendo o destino configurado como PostgreSQL. O comando abre a origem somente para leitura, valida versão/integridade/FKs, recusa destino com dados ou empresas alteradas e importa todas as tabelas em uma transação. Preserva usuários, senhas/hashes, sessões, vínculos, autoria, pagamentos estornados, auditoria e rate limits. Ajusta as sequences considerando também IDs antigos já removidos.
 5. Execute `npm run db:check`, compare contagens e valide login, empresas e saldos antes de liberar escritas na nova API. Mantenha o backup original. Uma segunda importação no mesmo destino é recusada; erros revertem os registros e permitem repetir no destino vazio.
 
 A mudança de configuração não transfere dados automaticamente. A importação não mescla bancos e não modifica o arquivo original. Após a transferência, o runtime pode voltar a `npm ci --omit=dev`.

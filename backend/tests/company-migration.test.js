@@ -6,6 +6,38 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { openDatabase,closeDatabase } from '../src/config/database.js';
 
+test('v5 transfere empresas aos contratos, preserva duplicados legados e sequências ao reabrir', async () => {
+  const directory=mkdtempSync(join(tmpdir(),'paytrack-global-clients-')),path=join(directory,'legacy.db');
+  try {
+    const old=new Database(path);
+    old.exec(readFileSync(new URL('./fixtures/schema-v5.sql',import.meta.url),'utf8'));
+    old.exec(`PRAGMA user_version=5;
+      INSERT INTO companies(id,name) VALUES(1,'Primeira'),(2,'Segunda');
+      INSERT INTO clients(id,company_id,name,cpf,rg) VALUES(8,1,'Original A','52998224725','RG1'),(9,2,'Original B','52998224725','RG1');
+      INSERT INTO loans(id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
+        VALUES(12,8,1000,1000,1,'2026-01-01','2026-01-02'),(13,9,2000,2000,1,'2026-01-01','2026-01-02');
+      INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(15,13,1,2000,'2026-01-02');
+      INSERT INTO payments(id,installment_id,amount,payment_date) VALUES(20,15,500,'2026-01-02');
+      UPDATE sqlite_sequence SET seq=500 WHERE name IN ('clients','loans');`);
+    const before=old.prepare('SELECT * FROM payments').all();
+    old.close();
+    let db=await openDatabase(path);
+    assert.deepEqual(await db.prepare('SELECT id,client_id,company_id FROM loans ORDER BY id').all(),[
+      {id:12,client_id:8,company_id:1},{id:13,client_id:9,company_id:2},
+    ]);
+    assert.equal((await db.prepare('SELECT count(*) AS n FROM clients').get()).n,2);
+    assert.deepEqual(await db.prepare('SELECT * FROM payments').all(),before);
+    await db.prepare('UPDATE clients SET name=? WHERE id=9').run('Dados preservados');
+    await assert.rejects(db.prepare("INSERT INTO clients(name,cpf) VALUES('Duplicado','52998224725')").run());
+    await closeDatabase(); db=await openDatabase(path);
+    const client=await db.prepare("INSERT INTO clients(name,cpf) VALUES('Novo','11144477735')").run();
+    assert.equal(client.lastInsertRowid,501);
+    const loan=await db.prepare("INSERT INTO loans(client_id,company_id,principal_amount,total_amount,installment_count,loan_date,first_due_date) VALUES(8,2,100,100,1,'2026-01-01','2026-01-02')").run();
+    assert.equal(loan.lastInsertRowid,501);
+    assert.deepEqual(await db.pragma('foreign_key_check'),[]);
+  } finally { await closeDatabase(); rmSync(directory,{recursive:true,force:true}); }
+});
+
 test('schema atual aplicado manualmente inicializa sem perder empresas já vinculadas',async ()=>{
   const directory=mkdtempSync(join(tmpdir(),'paytrack-company-schema-')),path=join(directory,'schema.db');
   try {
@@ -21,7 +53,7 @@ test('schema atual aplicado manualmente inicializa sem perder empresas já vincu
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });
 
-test('v5 preserva histórico, converte master, associa legado e não recria vínculos removidos',async ()=>{
+test('v6 preserva histórico, converte master, associa legado e não recria vínculos removidos',async ()=>{
   const directory=mkdtempSync(join(tmpdir(),'paytrack-company-migration-')),path=join(directory,'legacy.db');
   try {
     const old=new Database(path);
@@ -41,20 +73,19 @@ test('v5 preserva histórico, converte master, associa legado e não recria vín
     const tables=['loans','installments','payments','auth_audit_logs'];
     const before=(await Promise.all(tables.map(async table=>(await old.prepare(`SELECT * FROM ${table}`).all()))));(await old.close());
     let db=(await openDatabase(path));
-    assert.deepEqual((await Promise.all(tables.map(async table=>(await db.prepare(`SELECT * FROM ${table}`).all())))),before);
-    assert.equal((await db.prepare('SELECT company_id FROM clients WHERE id=8').get()).company_id,1);
+    assert.deepEqual((await Promise.all(tables.map(async table=>(await db.prepare(`SELECT * FROM ${table}`).all()).map(row=>{const copy={...row};delete copy.company_id;return copy})))),before);
+    assert.ok(!(await db.pragma('table_info(clients)')).some(column=>column.name==='company_id'));
     assert.equal((await db.prepare('SELECT company_id FROM scoped_loans WHERE id=12').get()).company_id,1);
     assert.equal((await db.prepare('SELECT role FROM users WHERE id=1').get()).role,'admin');
     assert.deepEqual((await db.prepare('SELECT * FROM user_companies ORDER BY user_id').all()),[{user_id:2,company_id:1},{user_id:3,company_id:1}]);
     (await assert.rejects(async ()=>(await db.exec("UPDATE users SET role='master' WHERE id=1"))));
-    (await db.exec("INSERT INTO clients(name,cpf,company_id) VALUES('Outra empresa','52998224725',2)"));
-    (await assert.rejects(async ()=>(await db.exec("INSERT INTO clients(name,cpf,company_id) VALUES('Duplicado','52998224725',1)"))));
+    (await assert.rejects(async ()=>(await db.exec("INSERT INTO clients(name,cpf) VALUES('Duplicado','52998224725')"))));
     (await db.exec('UPDATE user_companies SET company_id=2 WHERE user_id=2'));
     (await closeDatabase());db=(await openDatabase(path));
     assert.deepEqual((await db.prepare('SELECT company_id FROM user_companies WHERE user_id=2').all()),[{company_id:2}]);
     assert.equal((await db.prepare('SELECT COUNT(*) n FROM companies').get()).n,2);
     assert.deepEqual((await db.pragma('foreign_key_check')),[]);
     assert.equal((await db.pragma('foreign_keys',{simple:true})),1);
-    assert.equal((await db.pragma('user_version',{simple:true})),5);
+    assert.equal((await db.pragma('user_version',{simple:true})),6);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });

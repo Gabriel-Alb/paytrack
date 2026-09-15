@@ -12,7 +12,7 @@ import { env } from '../src/config/env.js';
 import { authConfig } from '../src/config/auth.js';
 import { today, addDays } from '../src/shared/utils/dates.js';
 
-let admin, a, b, both;
+let admin, a, b, both, clientIndex;
 async function account(role, companies=[]) {
   const id=(await insertUser({name:`Pessoa ${Math.random()}`,email:`${Math.random()}@example.test`,cpf:null,passwordHash:'offline-test'},role,'active'));
   (await replaceUserCompanies(id,companies));
@@ -20,24 +20,60 @@ async function account(role, companies=[]) {
   const api=request.agent(app).set('Cookie',`${authConfig.cookieName}=${session.token}`).set('Origin',env.FRONTEND_ORIGIN).set('X-CSRF-Token',session.csrfToken);
   return {id,api};
 }
-beforeEach(async () => {(await openDatabase(':memory:')); admin=(await account('admin')); a=(await account('user',[1])); b=(await account('user',[2])); both=(await account('user',[1,2]));});
+beforeEach(async () => {(await openDatabase(':memory:')); clientIndex=0; admin=(await account('admin')); a=(await account('user',[1])); b=(await account('user',[2])); both=(await account('user',[1,2]));});
 afterEach(closeDatabase);
 const clientBody={name:'Cliente isolado',cpf:'52998224725'};
 async function create(api,company_id,name='Cliente isolado') {
-  const client=(await api.post('/api/clients').send({...clientBody,name,company_id}).expect(201)).body;
+  const client=(await api.post('/api/clients').send({...clientBody,name,cpf:['52998224725','11144477735','12345678909'][clientIndex++]}).expect(201)).body;
   const loan=(await api.post('/api/loans').send({company_id,client_id:client.id,principal_amount:10000,interest_percentage:'10',installment_count:2,
     loan_date:addDays(today(),-10),first_due_date:addDays(today(),-2),late_fee_per_day:100}).expect(201)).body;
   return {client,loan};
 }
 const snapshot=async ()=>(await Promise.all(['clients','loans','installments','payments','late_fees'].map(async table=>(await database().prepare(`SELECT * FROM ${table}`).all()))));
 
-test('empresas dinâmicas, múltiplos vínculos, filtros e documentos únicos por empresa',async()=>{
+test('cliente global, criação por empresa e listas ativas, quitadas e negativadas persistem isoladamente', async () => {
+  const client = (await admin.api.post('/api/clients').send(clientBody).expect(201)).body;
+  assert.equal(client.company_id, undefined);
+  const body = { client_id:client.id, principal_amount:10000, installment_count:1, loan_date:today(), first_due_date:today() };
+  await admin.api.post('/api/loans').send(body).expect(400);
+  await both.api.post('/api/loans').send(body).expect(400);
+  await a.api.post('/api/loans').send({...body,company_id:2}).expect(403);
+  await admin.api.post('/api/loans').send({...body,company_id:999}).expect(403);
+  const withoutAccess = await account('user');
+  await withoutAccess.api.post('/api/loans').send({...body,company_id:1}).expect(403);
+  const first = (await a.api.post('/api/loans').send(body).expect(201)).body;
+  const second = (await admin.api.post('/api/loans').send({...body,company_id:2}).expect(201)).body;
+  assert.deepEqual((await database().prepare('SELECT client_id,company_id FROM loans ORDER BY id').all()), [
+    {client_id:client.id,company_id:1}, {client_id:client.id,company_id:2},
+  ]);
+  assert.equal((await a.api.get(`/api/clients/${client.id}`).expect(200)).body.loans.length,1);
+  assert.equal((await b.api.get(`/api/clients/${client.id}`).expect(200)).body.loans[0].id,second.id);
+  await a.api.post(`/api/installments/${first.installments[0].id}/payments`).send({revision:first.revision,amount:10000,payment_date:today()}).expect(201);
+  assert.equal((await database().prepare('SELECT status FROM loans WHERE id=?').get(first.id)).status,'paid');
+  assert.equal((await a.api.get('/api/loans?status=active').expect(200)).body.total,0);
+  assert.equal((await a.api.get('/api/loans?status=paid').expect(200)).body.items[0].id,first.id);
+  assert.equal((await b.api.get('/api/loans?status=paid').expect(200)).body.total,0);
+  const negative = (await b.api.post('/api/loans').send({...body,loan_date:addDays(today(),-10),first_due_date:addDays(today(),-5)}).expect(201)).body;
+  assert.equal((await admin.api.get('/api/loans?status=overdue&company_id=2').expect(200)).body.items[0].id,negative.id);
+  assert.equal((await a.api.get('/api/loans?status=overdue&company_id=2').expect(200)).body.total,0);
+  assert.equal((await admin.api.get('/api/loans?status=paid&company_id=2').expect(200)).body.total,0);
+  assert.equal((await admin.api.get('/api/loans?status=active').expect(200)).body.total,2);
+  assert.equal((await a.api.get(`/api/loans/${first.id}`).expect(200)).body.payments.length,1);
+  await b.api.get(`/api/loans/${first.id}`).expect(404);
+  assert.equal((await b.api.get(`/api/loans/${second.id}`).expect(200)).body.payments.length,0);
+  await withCompanyAccess({role:'user',companyIds:[1]},async () => {
+    await assert.rejects(database().prepare('UPDATE loans SET company_id=1 WHERE id=?').run(second.id));
+  });
+  await assert.rejects(database().prepare('UPDATE loans SET company_id=2 WHERE id=?').run(first.id));
+});
+
+test('empresas dinâmicas, múltiplos vínculos, filtros e clientes globais e documentos únicos',async()=>{
   const first=await create(a.api,undefined,'Empresa A'),second=await create(b.api,undefined,'Empresa B');
-  assert.equal(first.client.company_id,1);assert.equal(second.loan.company_id,2);
+  assert.equal(first.client.company_id,undefined);assert.equal(second.loan.company_id,2);
   assert.equal(first.loan.company_name,'Dinheiro Express');
   assert.equal(second.loan.company_name,'Platinum Finance');
   assert.deepEqual((await both.api.get('/api/loans').expect(200)).body.items.map(row=>row.company_name),['Platinum Finance','Dinheiro Express']);
-  for (const path of ['clients','loans']) {
+  for (const path of ['loans']) {
     assert.equal((await a.api.get(`/api/${path}`).expect(200)).body.total,1);
     assert.equal((await both.api.get(`/api/${path}`).expect(200)).body.total,2);
     assert.equal((await admin.api.get(`/api/${path}`).expect(200)).body.total,2);
@@ -45,8 +81,8 @@ test('empresas dinâmicas, múltiplos vínculos, filtros e documentos únicos po
     assert.equal((await a.api.get(`/api/${path}?company_id=2`).expect(200)).body.total,0);
   }
   await a.api.post('/api/clients').send(clientBody).expect(409);
-  await admin.api.post('/api/clients').send(clientBody).expect(400);
-  await both.api.post('/api/clients').send(clientBody).expect(400);
+  await admin.api.post('/api/clients').send(clientBody).expect(409);
+  await both.api.post('/api/clients').send(clientBody).expect(409);
   await a.api.post('/api/companies').send({name:'Não permitido'}).expect(403);
   const company=(await admin.api.post('/api/companies').send({name:'Terceira empresa'}).expect(201)).body;
   await admin.api.post('/api/companies').send({name:' terceira empresa '}).expect(409);
@@ -60,18 +96,16 @@ test('empresas dinâmicas, múltiplos vínculos, filtros e documentos únicos po
 test('IDs de outra empresa não permitem ler, editar, pagar, corrigir ou consultar multas',async()=>{
   const {client,loan}=await create(b.api);
   const before=(await snapshot()), installment=loan.installments[0], fee=installment.late_fee_id;
-  for(const path of [`clients/${client.id}`,`loans/${loan.id}`,`loans/${loan.id}/installments`,`late-fees/${fee}`]) await a.api.get(`/api/${path}`).expect(404);
-  await a.api.patch(`/api/clients/${client.id}`).send({name:'Invadido'}).expect(404);
-  await a.api.put(`/api/clients/${client.id}`).send({status:'negativado'}).expect(404);
+  for(const path of [`loans/${loan.id}`,`loans/${loan.id}/installments`,`late-fees/${fee}`]) await a.api.get(`/api/${path}`).expect(404);
   await a.api.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,status:'cancelled'}).expect(404);
   await a.api.patch(`/api/loans/${loan.id}/installments`).send({revision:loan.revision,installments:[5500,5500]}).expect(404);
   await a.api.post(`/api/installments/${installment.id}/payments`).send({revision:loan.revision,amount:100,payment_date:today()}).expect(404);
   await a.api.post(`/api/installments/${installment.id}/payment-preview`).send({payment_date:today()}).expect(404);
   await a.api.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[]}).expect(404);
   await a.api.post(`/api/late-fees/${fee}/payments`).send({revision:loan.revision,amount:100,payment_date:today()}).expect(404);
-  await a.api.post('/api/clients').send({...clientBody,company_id:2}).expect(403);
-  await a.api.post('/api/loans').send({company_id:1,client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(404);
-  await both.api.post('/api/loans').send({company_id:1,client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(400);
+  await a.api.post('/api/clients').send({...clientBody,company_id:2}).expect(400);
+  await a.api.post('/api/loans').send({company_id:2,client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(403);
+  await both.api.post('/api/loans').send({client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(400);
   await admin.api.patch(`/api/clients/${client.id}`).send({company_id:1}).expect(400);
   assert.deepEqual((await snapshot()),before);
 });
@@ -130,32 +164,31 @@ test('dashboard, relatórios, notificações e históricos incluem somente empre
 });
 
 test('aprovação valida empresas; mudanças de empresa e papel valem na sessão existente',async()=>{
-  const {client}=await create(b.api);
+  const {loan}=await create(b.api);
   const pending=(await insertUser({name:'Pendente',email:'pending@example.test',cpf:null,passwordHash:'offline'},'user','pending'));
   for(const body of [{action:'approve'},{action:'approve',role:'user',companyIds:[]},{action:'approve',role:'user',companyIds:[999]},{action:'approve',role:'master'}])
     await admin.api.patch(`/api/users/${pending}/access`).send(body).expect(400);
   await admin.api.patch(`/api/users/${pending}/access`).send({action:'approve',companyIds:[1,2]}).expect(200);
   assert.equal((await database().prepare('SELECT role FROM users WHERE id=?').get(pending)).role,'user');
   await admin.api.patch(`/api/users/${both.id}/access`).send({action:'edit',role:'user',companyIds:[1]}).expect(200);
-  await both.api.get(`/api/clients/${client.id}`).expect(404);
+  await both.api.get(`/api/loans/${loan.id}`).expect(404);
   await admin.api.patch(`/api/users/${both.id}/access`).send({action:'edit',role:'admin'}).expect(200);
-  await both.api.get(`/api/clients/${client.id}`).expect(200);
+  await both.api.get(`/api/loans/${loan.id}`).expect(200);
   await both.api.get('/api/users').expect(200);
   await admin.api.patch(`/api/users/${both.id}/access`).send({action:'edit',role:'user',companyIds:[1]}).expect(200);
-  await both.api.get(`/api/clients/${client.id}`).expect(404);
+  await both.api.get(`/api/loans/${loan.id}`).expect(404);
   await both.api.get('/api/users').expect(403);
   await a.api.patch(`/api/users/${a.id}/access`).send({action:'edit',role:'admin'}).expect(403);
   await admin.api.patch(`/api/users/${a.id}/access`).send({action:'edit',role:'user',companyIds:[]}).expect(400);
 });
 
 test('guardas de banco impedem mutações fora do escopo e contexto não vaza entre requisições',async()=>{
-  const {client,loan}=await create(b.api);
+  const {loan}=await create(b.api);
   await withCompanyAccess({role:'user',companyIds:[1]},async ()=>{
-    (await assert.rejects(async ()=>(await database().prepare('UPDATE clients SET name=? WHERE id=?').run('Invasão',client.id))));
     (await assert.rejects(async ()=>(await database().prepare('DELETE FROM loans WHERE id=?').run(loan.id))));
     (await assert.rejects(async ()=>(await database().prepare('INSERT INTO payments(installment_id,amount,payment_date) VALUES(?,100,?)').run(loan.installments[0].id,today()))));
   });
-  const results=await Promise.all(Array.from({length:12},(_,i)=>(i%2 ? b.api : a.api).get('/api/clients')));
+  const results=await Promise.all(Array.from({length:12},(_,i)=>(i%2 ? b.api : a.api).get('/api/loans')));
   results.forEach((result,i)=>assert.equal(result.body.total,i%2 ? 1 : 0));
   await request(app).get('/api/clients').expect(401);
 });
