@@ -1,8 +1,9 @@
+import { injectFailure } from './database-helper.js';
 import { beforeEach, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { openDatabase, closeDatabase, database } from '../src/config/database.js';
+import { openDatabase, closeDatabase, database } from './database-helper.js';
 import { today, addDays } from '../src/shared/utils/dates.js';
 import { env } from '../src/config/env.js';
 import { seedDevelopment } from '../database/seed.js';
@@ -18,7 +19,7 @@ const clientData = {
   cnh: '12345678901',
 };
 beforeEach(async () => {
-  openDatabase(':memory:');
+  (await openDatabase(':memory:'));
   const password=randomBytes(15).toString('base64url');
   await createMaster({name:'Test Master',email:'master@example.test',cpf:'12345678909',password});
   api=request.agent(app);
@@ -76,10 +77,10 @@ async function confirm(l, payments, status = 200) {
       .expect(status)
   ).body;
 }
-function snapshot() {
-  return ['clients', 'loans', 'installments', 'payments', 'late_fees'].map((table) =>
-    database().prepare(`SELECT * FROM ${table}`).all(),
-  );
+async function snapshot() {
+  return (await Promise.all(['clients', 'loans', 'installments', 'payments', 'late_fees'].map(async (table) =>
+    (await database().prepare(`SELECT * FROM ${table}`).all()),
+  )));
 }
 
 test('cria cliente e normaliza documentos e campos opcionais', async () => {
@@ -191,7 +192,7 @@ test('rejeita soma incorreta e personalização inválida sem criar contrato', a
       .send({ ...data, ...extra })
       .expect(400);
   }
-  assert.equal(database().prepare('SELECT COUNT(*) n FROM loans').get().n, 0);
+  assert.equal((await database().prepare('SELECT COUNT(*) n FROM loans').get()).n, 0);
 });
 test('pagamento parcial, complementação e quitação atualizam todos os status', async () => {
   let l = await loan({ installment_count: 1 });
@@ -243,9 +244,9 @@ test('limiar de atenção centralizado: dois dias e acima', async () => {
   });
   assert.equal(l.display_status, 'attention');
   assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'ativo');
-  database()
+  (await database()
     .prepare('UPDATE installments SET due_date=?')
-    .run(addDays(today(), -env.ATTENTION_DAYS - 1));
+    .run(addDays(today(), -env.ATTENTION_DAYS - 1)));
   assert.equal((await api.get(`/api/loans/${l.id}`)).body.display_status, 'overdue');
   assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'negativado');
 });
@@ -276,10 +277,10 @@ test('confirmação corrige data e multa sem destruir recebimentos', async () =>
 test('duas telas não sobrescrevem pagamentos: revisão antiga retorna 409', async () => {
   const l = await loan();
   await confirm(l, [select(1)]);
-  const before = snapshot();
+  const before = (await snapshot());
   const error = await confirm(l, [], 409);
   assert.equal(error.error.code, 'STALE_LOAN');
-  assert.deepEqual(snapshot(), before);
+  assert.deepEqual((await snapshot()), before);
 });
 test('valida excesso de pagamento, multa e cronologia', async () => {
   let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
@@ -297,16 +298,14 @@ test('valida excesso de pagamento, multa e cronologia', async () => {
 });
 test('rollback integral quando a segunda parcela falha na confirmação', async () => {
   const l = await loan();
-  const before = snapshot();
+  const before = (await snapshot());
   await confirm(l, [select(1), select(2, 999)], 409);
-  assert.deepEqual(snapshot(), before);
+  assert.deepEqual((await snapshot()), before);
 });
 test('rollback de empréstimo se INSERT de parcela falhar', async () => {
   const c = await client();
-  database().exec(
-    "CREATE TRIGGER fail_installment BEFORE INSERT ON installments WHEN NEW.installment_number=2 BEGIN SELECT RAISE(ABORT,'injected failure'); END",
-  );
-  const before = snapshot();
+  (await injectFailure({"name":"fail_installment","event":"INSERT","table":"installments","condition":"NEW.installment_number=2"}));
+  const before = (await snapshot());
   await api
     .post('/api/loans')
     .send({
@@ -318,19 +317,17 @@ test('rollback de empréstimo se INSERT de parcela falhar', async () => {
       first_due_date: today(),
     })
     .expect(409);
-  assert.deepEqual(snapshot(), before);
+  assert.deepEqual((await snapshot()), before);
 });
 test('rollback de pagamento se atualização de status falhar', async () => {
   const l = await loan({ installment_count: 1 });
-  database().exec(
-    "CREATE TRIGGER fail_status BEFORE UPDATE OF status ON loans WHEN NEW.status='paid' BEGIN SELECT RAISE(ABORT,'injected failure'); END",
-  );
-  const before = snapshot();
+  (await injectFailure({"name":"fail_status","event":"UPDATE OF status","table":"loans","condition":"NEW.status='paid'"}));
+  const before = (await snapshot());
   await api
     .post(`/api/installments/${l.installments[0].id}/payments`)
     .send({ amount: 11000, payment_date: today(), revision: l.revision })
     .expect(409);
-  assert.deepEqual(snapshot(), before);
+  assert.deepEqual((await snapshot()), before);
 });
 test('cancelamento preserva contratos, bloqueia recebimento e histórico financeiro', async () => {
   const l = await loan();
@@ -416,11 +413,11 @@ test('recebimentos estornados não entram no dashboard, mas continuam bloqueando
     .send({ revision: l.revision, status: 'cancelled' })
     .expect(409);
 });
-test('seed é atômico, idempotente e inclui todos os cenários', () => {
-  assert.equal(seedDevelopment(), 6);
-  const before = snapshot();
-  assert.equal(seedDevelopment(), 0);
-  assert.deepEqual(snapshot(), before);
+test('seed é atômico, idempotente e inclui todos os cenários', async () => {
+  assert.equal((await seedDevelopment()), 6);
+  const before = (await snapshot());
+  assert.equal((await seedDevelopment()), 0);
+  assert.deepEqual((await snapshot()), before);
   assert.ok(before[1].some((l) => l.status === 'paid'));
   assert.ok(before[2].some((i) => i.status === 'partial'));
   assert.ok(before[4].some((f) => f.amount > f.paid_amount));

@@ -4,16 +4,16 @@ import { AppError } from '../../shared/errors/AppError.js';
 import * as service from './auth.service.js';
 import { touch } from './auth.repository.js';
 
-export function loadSession(req,_res,next) {
+export async function loadSession(req,_res,next) {
   const cookie = req.headers.cookie?.split(';').map((part)=>part.trim()).find((part)=>part.startsWith(`${authConfig.cookieName}=`));
-  const resolved = service.resolveSession(cookie?.slice(authConfig.cookieName.length+1));
+  const resolved = (await service.resolveSession(cookie?.slice(authConfig.cookieName.length+1)));
   req.authSession = resolved?.session;
   req.user = resolved?.user;
   next();
 }
-export function requireAuth(req,_res,next) {
+export async function requireAuth(req,_res,next) {
   if (!req.user) return next(new AppError(401,'UNAUTHENTICATED','Entre para continuar.'));
-  if (Date.now()-req.authSession.last_seen_at>60000) touch(req.authSession.id,Date.now());
+  if (Date.now()-req.authSession.last_seen_at>60000) (await touch(req.authSession.id,Date.now()));
   next();
 }
 export const requireRole = (...roles) => (req,_res,next) => {

@@ -1,4 +1,4 @@
-import { database } from "../../config/database.js";
+import { unitOfWork } from '../../application/persistence.js';
 import { env } from "../../config/env.js";
 import { today, addDays, visualStatus } from "../../shared/utils/dates.js";
 import { interestAmount } from "../../shared/utils/money.js";
@@ -18,14 +18,14 @@ import {
 import { listPayments } from "../payments/payments.repository.js";
 import { recordAction } from '../auth/auth.repository.js';
 
-import { resolveCompany } from '../../shared/middleware/company-access.js';
+import { resolveCompany } from '../../application/company-access.js';
 
-function auditLoan(event, actor, loan) {
-  recordAction(event,actor,'loan',loan.id,{
+async function auditLoan(event, actor, loan) {
+  (await recordAction(event,actor,'loan',loan.id,{
     customer:loan.client_name,amount:loan.principal_amount,loanId:loan.id,
     installment_count:loan.installment_count,loan_date:loan.loan_date,
     end_date:loan.installments.at(-1)?.due_date,
-  });
+  }));
 }
 
 function presentLoan(loan) {
@@ -37,23 +37,23 @@ function presentLoan(loan) {
   };
 }
 
-export function getLoan(id) {
-  refreshFinancialState();
-  const loan = requireRecord(repository.findLoan(id, today()), "Empréstimo");
+export async function getLoan(id) {
+  (await refreshFinancialState());
+  const loan = requireRecord((await repository.findLoan(id, today())), "Empréstimo");
   return {
     ...presentLoan(loan),
-    installments: installments.listInstallments(id),
-    payments: listPayments(id),
+    installments: (await installments.listInstallments(id)),
+    payments: (await listPayments(id)),
   };
 }
 
-export function listLoans(query) {
-  refreshFinancialState();
-  const result = repository.listLoans(
+export async function listLoans(query) {
+  (await refreshFinancialState());
+  const result = (await repository.listLoans(
     pagination(query),
     today(),
     env.ATTENTION_DAYS,
-  );
+  ));
   return {
     ...result,
     items: result.items.map(presentLoan),
@@ -118,11 +118,10 @@ export function assertRevision(loan, revision) {
     );
 }
 
-export function createLoan(data, actor) {
-  return database()
-    .transaction(() => {
-      const client = requireRecord(findClient(data.client_id), "Cliente");
-      const companyId = resolveCompany(data.company_id);
+export async function createLoan(data, actor) {
+  return (await unitOfWork(async () => {
+      const client = requireRecord((await findClient(data.client_id)), "Cliente");
+      const companyId = (await resolveCompany(data.company_id));
       if (client.company_id !== companyId) throw new AppError(400,'CLIENT_COMPANY_MISMATCH','O cliente deve pertencer à empresa selecionada.');
       const interest = interestAmount(
         data.principal_amount,
@@ -155,58 +154,53 @@ export function createLoan(data, actor) {
             );
         }
       }
-      const id = repository.insertLoan({
+      const id = (await repository.insertLoan({
         ...data,
         interest_amount: interest,
         total_amount: total,
         notes: data.notes ?? null,
-      },actor?.id);
-      values.forEach((amount, index) =>
-        installments.insertInstallment({
+      },actor?.id));
+      for (const [index, amount] of values.entries())
+        (await installments.insertInstallment({
           loan_id: id,
           installment_number: index + 1,
           amount,
           due_date: addDays(data.first_due_date, index),
-        }),
-      );
-      refreshFinancialState(id);
-      const result = getLoan(id);
-      auditLoan('loan_created',actor,result);
+        }));
+      (await refreshFinancialState(id));
+      const result = (await getLoan(id));
+      (await auditLoan('loan_created',actor,result));
       return result;
-    })
-    .immediate();
+    }));
 }
 
-export function updateLoan(id, data, actor) {
-  return database()
-    .transaction(() => {
-      const loan = getLoan(id);
+export async function updateLoan(id, data, actor) {
+  return (await unitOfWork(async () => {
+      const loan = (await getLoan(id));
       assertRevision(loan, data.revision);
-      if (data.status === "cancelled" && repository.hasReceipts(id)) {
+      if (data.status === "cancelled" && (await repository.hasReceipts(id))) {
         conflict(
           "LOAN_HAS_PAYMENTS",
           "Não é possível cancelar um contrato com histórico de pagamentos.",
         );
       }
-      repository.updateLoan(
+      (await repository.updateLoan(
         id,
         data.notes === undefined ? loan.notes : data.notes,
         data.status ?? loan.status,
-      );
-      refreshClient(loan.client_id);
-      const result = getLoan(id);
-      auditLoan(data.status==='cancelled' ? 'loan_cancelled' : 'loan_updated',actor,result);
+      ));
+      (await refreshClient(loan.client_id));
+      const result = (await getLoan(id));
+      (await auditLoan(data.status==='cancelled' ? 'loan_cancelled' : 'loan_updated',actor,result));
       return result;
-    })
-    .immediate();
+    }));
 }
 
-export function updateInstallments(id, data, actor) {
-  return database()
-    .transaction(() => {
-      const loan = getLoan(id);
+export async function updateInstallments(id, data, actor) {
+  return (await unitOfWork(async () => {
+      const loan = (await getLoan(id));
       assertRevision(loan, data.revision);
-      if (loan.status === "cancelled" || repository.hasReceipts(id))
+      if (loan.status === "cancelled" || (await repository.hasReceipts(id)))
         conflict(
           "INSTALLMENTS_LOCKED",
           "As parcelas só podem ser reajustadas antes de registrar pagamentos.",
@@ -216,17 +210,16 @@ export function updateInstallments(id, data, actor) {
         loan.installment_count,
         loan.total_amount,
       );
-      installments.updateAmounts(
+      (await installments.updateAmounts(
         loan.installments.map((item, index) => ({
           id: item.id,
           amount: data.installments[index],
         })),
-      );
-      repository.bumpRevision(id);
-      refreshFinancialState(id);
-      const result = getLoan(id);
-      auditLoan('installments_updated',actor,result);
+      ));
+      (await repository.bumpRevision(id));
+      (await refreshFinancialState(id));
+      const result = (await getLoan(id));
+      (await auditLoan('installments_updated',actor,result));
       return result;
-    })
-    .immediate();
+    }));
 }

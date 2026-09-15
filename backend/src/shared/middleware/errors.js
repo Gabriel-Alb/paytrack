@@ -28,10 +28,8 @@ export function errorHandler(error, _req, res, _next) {
       .status(error.status)
       .json({ error: { code: error.code, message: error.message } });
   }
-  if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
-    const document = ["cpf", "rg", "cnh"].find((key) =>
-      error.message.includes(`clients.${key}`),
-    );
+  if (error.code === "PERSISTENCE_UNIQUE") {
+    const document = error.document;
     return res.status(409).json({
       error: {
         code: document
@@ -43,7 +41,7 @@ export function errorHandler(error, _req, res, _next) {
       },
     });
   }
-  if (error.code?.startsWith("SQLITE_CONSTRAINT")) {
+  if (error.code === "PERSISTENCE_CONSTRAINT") {
     return res
       .status(409)
       .json({
@@ -66,7 +64,7 @@ export function errorHandler(error, _req, res, _next) {
         },
       });
   }
-  // Never log error objects: SQLite/validation errors can contain input or secrets.
+  // Never log error objects: persistence/validation errors can contain secrets.
   console.error("Falha interna na API.");
   return res
     .status(500)

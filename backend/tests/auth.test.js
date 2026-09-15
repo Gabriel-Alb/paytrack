@@ -1,10 +1,11 @@
+import { injectFailure } from './database-helper.js';
 import { beforeEach,afterEach,test,mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { openDatabase,closeDatabase,database } from '../src/config/database.js';
+import { openDatabase,closeDatabase,database } from './database-helper.js';
 import { env,backendRoot } from '../src/config/env.js';
 import { authConfig } from '../src/config/auth.js';
 import { createMaster,hashPassword,hashToken,verifyPassword } from '../src/modules/auth/auth.service.js';
@@ -17,11 +18,11 @@ import { accessEvents } from '../src/modules/auth/auth.events.js';
 let password,master;
 const data = () => ({name:'Pessoa teste',email:'person@example.test',cpf:'529.982.247-25',rg:'12.345-x',cnh:'12345678901',password});
 beforeEach(async()=>{
-  openDatabase(':memory:');
+  (await openDatabase(':memory:'));
   password=randomBytes(15).toString('base64url');
   master=await createMaster({name:'Master teste',email:'master@example.test',cpf:'11144477735',password});
 });
-afterEach(()=>{mock.restoreAll();closeDatabase()});
+afterEach(async ()=>{mock.restoreAll();(await closeDatabase())});
 async function browser() {
   const agent=request.agent(app);
   const csrf=await agent.get('/api/auth/csrf').expect(200);
@@ -36,10 +37,10 @@ async function signIn(email='master@example.test',secret=password,status=200) {
 }
 async function user(status='pending',overrides={}) {
   const input={...data(),...overrides};
-  const id=repo.insertUser({...input,cpf:input.cpf.replace(/\D/g,''),rg:input.rg.replace(/[^a-z\d]/gi,'').toUpperCase(),passwordHash:await hashPassword(input.password)},'user',status);
-  return repo.byId(id);
+  const id=(await repo.insertUser({...input,cpf:input.cpf.replace(/\D/g,''),rg:input.rg.replace(/[^a-z\d]/gi,'').toUpperCase(),passwordHash:await hashPassword(input.password)},'user',status));
+  return (await repo.byId(id));
 }
-const count=()=>database().prepare('SELECT count(*) n FROM users').get().n;
+const count=async ()=>(await database().prepare('SELECT count(*) n FROM users').get()).n;
 
 test('assinante com falha não transforma cadastro persistido ou aprovação em erro, nem impede outros assinantes', async () => {
   const admin = await signIn(), visitor = await browser();
@@ -51,7 +52,7 @@ test('assinante com falha não transforma cadastro persistido ou aprovação em 
   accessEvents.on('changed', healthy);
   try {
     await visitor.agent.post('/api/auth/request-access').send({...data(),rg:'',cnh:''}).expect(202);
-    const saved = repo.byEmail(data().email);
+    const saved = (await repo.byEmail(data().email));
     assert.equal(saved.access_status, 'pending');
     assert.equal(saved.rg, null);
     assert.equal(saved.cnh, null);
@@ -59,8 +60,8 @@ test('assinante com falha não transforma cadastro persistido ou aprovação em 
     assert.equal((await admin.agent.get('/api/users?status=pending').expect(200)).body.items[0].id, saved.id);
     await admin.agent.patch(`/api/users/${saved.id}/access`).send({action:'approve',role:'user',companyIds:[1]}).expect(200);
     assert.equal(received, 2);
-    assert.equal(repo.byId(saved.id).access_status, 'active');
-    assert.deepEqual(database().prepare('SELECT company_id FROM user_companies WHERE user_id=?').all(saved.id), [{company_id:1}]);
+    assert.equal((await repo.byId(saved.id)).access_status, 'active');
+    assert.deepEqual((await database().prepare('SELECT company_id FROM user_companies WHERE user_id=?').all(saved.id)), [{company_id:1}]);
     await signIn(data().email);
   } finally {
     accessEvents.off('changed', failing);
@@ -73,17 +74,17 @@ test('cadastro explica validação sem expor valores, não grava falhas e aceita
   const invalid = await agent.post('/api/auth/request-access').send({...data(),cpf:'11111111111'}).expect(400);
   assert.equal(invalid.body.error.message, 'Informe um CPF válido.');
   assert.ok(!JSON.stringify(invalid.body).includes('11111111111'));
-  assert.equal(count(), 1);
+  assert.equal((await count()), 1);
   await agent.post('/api/auth/request-access').send(data()).expect(202);
   await agent.post('/api/auth/request-access').send(data()).expect(409);
-  assert.equal(count(), 2);
-  assert.equal(database().prepare("SELECT count(*) n FROM auth_audit_logs WHERE event='access_requested'").get().n, 1);
+  assert.equal((await count()), 2);
+  assert.equal((await database().prepare("SELECT count(*) n FROM auth_audit_logs WHERE event='access_requested'").get()).n, 1);
 });
 
 test('pré-cadastro normaliza documentos/e-mail, persiste Argon2id e não autentica',async()=>{
   const {agent}=await browser();
   const result=await agent.post('/api/auth/request-access').send({...data(),email:' PERSON@EXAMPLE.TEST '}).expect(202);
-  const saved=repo.byEmail('person@example.test');
+  const saved=(await repo.byEmail('person@example.test'));
   assert.equal(saved.role,'user');assert.equal(saved.access_status,'pending');
   assert.equal(saved.cpf,'52998224725');assert.equal(saved.rg,'12345X');
   assert.ok(saved.password_hash.startsWith('$argon2id$v=19$'));
@@ -92,8 +93,8 @@ test('pré-cadastro normaliza documentos/e-mail, persiste Argon2id e não autent
   assert.ok(!JSON.stringify(saved).includes(password));
   assert.deepEqual(Object.keys(result.body),['message']);
   await agent.get('/api/auth/me').expect(401);
-  assert.equal(database().prepare('SELECT count(*) n FROM auth_sessions WHERE user_id IS NOT NULL').get().n,0);
-  assert.equal(database().prepare("SELECT count(*) n FROM auth_audit_logs WHERE event='access_requested'").get().n,1);
+  assert.equal((await database().prepare('SELECT count(*) n FROM auth_sessions WHERE user_id IS NOT NULL').get()).n,0);
+  assert.equal((await database().prepare("SELECT count(*) n FROM auth_audit_logs WHERE event='access_requested'").get()).n,1);
 });
 
 for (const length of [5,6,20,21]) test(`senha de ${length} caracteres em cadastro, login, troca e master`,async()=>{
@@ -103,7 +104,7 @@ for (const length of [5,6,20,21]) test(`senha de ${length} caracteres em cadastr
   await agent.post('/api/auth/login').send({email:data().email,password:secret}).expect(valid ? 403 : 400);
   const admin=await signIn();
   await admin.agent.post('/api/auth/change-password').send({currentPassword:password,newPassword:secret}).expect(valid ? 200 : 400);
-  await assert.rejects(createMaster({...data(),password:secret}),valid ? {code:'MASTER_EXISTS'} : {name:'ZodError'});
+  await assert.rejects((async () => await createMaster({...data(),password:secret})),valid ? {code:'MASTER_EXISTS'} : {name:'ZodError'});
 });
 
 test('solicitação pela API aparece na lista do master e emite evento após commit; aprovação/rejeição atualizam as listas',async()=>{
@@ -127,7 +128,7 @@ test('solicitação pela API aparece na lista do master e emite evento após com
       assert.match(new TextDecoder().decode(notification.value),/data: refresh/);
       const list=(await admin.agent.get('/api/users?status=pending').expect(200)).body;
       assert.equal(list.total,1);assert.equal(list.items[0].email,input.email);
-      const saved=repo.byEmail(input.email);
+      const saved=(await repo.byEmail(input.email));
       assert.equal(saved.access_status,'pending');
       await admin.agent.patch(`/api/users/${saved.id}/access`).send(action==='approve' ? {action,role:'user',companyIds:[1]} : {action}).expect(200);
       assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
@@ -148,7 +149,7 @@ test('solicitação pela API aparece na lista do master e emite evento após com
 
 test('origens locais usam a mesma política no CORS, preflight, Referer e escritas com CSRF',async()=>{
   const hosts=['localhost','127.0.0.1',...Object.values(networkInterfaces()).flat().filter((entry)=>entry.family==='IPv4' && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address)).map(({address})=>address)];
-  for (const host of new Set(hosts)) {
+  for (const host of new Set(env.NODE_ENV === 'development' ? hosts : [new URL(env.FRONTEND_ORIGIN).hostname])) {
     const origin=new URL(env.FRONTEND_ORIGIN);origin.hostname=host;
     const agent=request.agent(app);
     const preflight=await agent.options('/api/auth/login').set('Origin',origin.origin).set('Access-Control-Request-Method','POST').expect(204);
@@ -175,7 +176,7 @@ for (const field of ['role','access_status','approved_by','password_hash'])
   test(`cadastro rejeita mass assignment de ${field}`,async()=>{
     const {agent}=await browser();
     await agent.post('/api/auth/request-access').send({...data(),[field]:field==='role'?'master':'active'}).expect(400);
-    assert.equal(count(),1);
+    assert.equal((await count()),1);
   });
 test('valida CPF, email, tipo, comprimento e payload; permite espaços e Unicode',async()=>{
   assert.equal(passwordSchema.parse('😀'.repeat(10)),'😀'.repeat(10));
@@ -194,8 +195,8 @@ for(const key of ['email','cpf','rg','cnh'])
     await agent.post('/api/auth/request-access').send(data()).expect(202);
     const second={...data(),email:'other@example.test',cpf:'12345678909',rg:'54321X',cnh:'10987654321',[key]:key==='email'?'PERSON@EXAMPLE.TEST':data()[key]};
     const result=await agent.post('/api/auth/request-access').send(second).expect(409);
-    assert.equal(result.body.error.code,'ACCESS_REQUEST_CONFLICT');assert.equal(count(),2);
-    assert.equal(repo.byEmail('other@example.test'),undefined);
+    assert.equal(result.body.error.code,'ACCESS_REQUEST_CONFLICT');assert.equal((await count()),2);
+    assert.equal((await repo.byEmail('other@example.test')),undefined);
   });
 for(const status of ['pending','rejected','blocked'])
   test(`${status} não recebe sessão, estado só é revelado após senha correta`,async()=>{
@@ -213,9 +214,9 @@ test('login ativo gera cookie novo opaco; banco só contém hash e API minimiza 
   assert.match(cookie,/HttpOnly/);assert.match(cookie,/SameSite=Strict/);assert.match(cookie,/Path=\//);
   const raw=cookie.split(';')[0].split('=')[1];
   assert.equal(Buffer.from(raw,'base64url').length,32);
-  const session=repo.sessionByHash(hashToken(raw));
+  const session=(await repo.sessionByHash(hashToken(raw)));
   assert.ok(session.user_id);assert.notEqual(session.token_hash,raw);
-  assert.ok(!JSON.stringify(database().prepare('SELECT * FROM auth_sessions').all()).includes(raw));
+  assert.ok(!JSON.stringify((await database().prepare('SELECT * FROM auth_sessions').all())).includes(raw));
   assert.ok(!JSON.stringify(result.body).includes(raw));
   assert.notEqual(cookie.split(';')[0],anonymous);
   const me=await agent.get('/api/auth/me').expect(200);
@@ -231,7 +232,7 @@ test('senha incorreta, inexistente e email de SQL injection não autenticam',asy
   await agent.post('/api/auth/login').send({email:"' OR 1=1 --",password}).expect(400);
   await agent.post('/api/auth/login').send({email:"'or'1'='1@example.test",password}).expect(400);
   await agent.post('/api/auth/login').send({email:'person@example.test',password:"' OR 1=1 --"}).expect(401);
-  assert.equal(count(),2);
+  assert.equal((await count()),2);
 });
 test('rate limit por conta soma IPs e sobrevive a novos agentes',async()=>{
   for(let n=0;n<env.AUTH_LOGIN_ACCOUNT_LIMIT;n++) await signIn('missing@example.test','errada',401);
@@ -249,13 +250,13 @@ test('limita solicitação de acesso',async()=>{
   const {agent}=await browser();
   for(let n=0;n<env.AUTH_REQUEST_IP_LIMIT;n++) await agent.post('/api/auth/request-access').send({...data(),email:`test${n}@example.test`}).expect(n===0 ? 202 : 409);
   await agent.post('/api/auth/request-access').send({...data(),email:'new@example.test'}).expect(429);
-  database().exec('UPDATE auth_rate_limits SET reset_at=1');
+  (await database().exec('UPDATE auth_rate_limits SET reset_at=1'));
   await agent.post('/api/auth/request-access').send({...data(),email:'new@example.test'}).expect(409);
 });
 test('login pode ser tentado novamente após janela, sem bloqueio permanente',async()=>{
   for(let n=0;n<env.AUTH_LOGIN_ACCOUNT_LIMIT;n++)await signIn('master@example.test','errada',401);
   await signIn('master@example.test',password,429);
-  database().exec('UPDATE auth_rate_limits SET reset_at=1');
+  (await database().exec('UPDATE auth_rate_limits SET reset_at=1'));
   await signIn();
 });
 for(const method of ['post','put','patch','delete'])test(`CSRF protege ${method.toUpperCase()} autenticado`,async()=>{
@@ -276,7 +277,7 @@ for(const reason of ['absolute','idle','revoked'])
   test(`sessão ${reason} é recusada`,async()=>{
     const {agent}=await signIn();
     const sql={absolute:'UPDATE auth_sessions SET expires_at=1',idle:'UPDATE auth_sessions SET last_seen_at=1',revoked:'UPDATE auth_sessions SET revoked_at=1'}[reason];
-    database().exec(sql);
+    (await database().exec(sql));
     await agent.get('/api/auth/me').expect(401);
   });
 test('usuário comum não lista, avalia, aprova a si mesmo nem altera role',async()=>{
@@ -286,7 +287,7 @@ test('usuário comum não lista, avalia, aprova a si mesmo nem altera role',asyn
   await agent.get('/api/users/events').expect(403);
   await agent.get(`/api/users/${person.id}`).expect(403);
   await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role:'master'}).expect(403);
-  assert.equal(repo.byId(person.id).role,'user');
+  assert.equal((await repo.byId(person.id)).role,'user');
 });
 
 test('perfil lê documentos reais, salva só o próprio email e mantém troca de senha e login',async()=>{
@@ -297,7 +298,7 @@ test('perfil lê documentos reais, salva só o próprio email e mantém troca de
   const saved=(await agent.patch('/api/auth/me').send({email:' UPDATED@EXAMPLE.TEST '}).expect(200)).body.user;
   assert.equal(saved.email,'updated@example.test');assert.equal(saved.id,person.id);
   assert.equal(saved.cpf,person.cpf);assert.equal(saved.rg,person.rg);assert.equal(saved.role,'user');
-  assert.equal(repo.byId(person.id).email,saved.email);assert.equal(repo.byId(master.id).email,master.email);
+  assert.equal((await repo.byId(person.id)).email,saved.email);assert.equal((await repo.byId(master.id)).email,master.email);
   assert.equal((await agent.get('/api/auth/me').expect(200)).body.user.email,saved.email);
   await signIn(person.email,password,401);
   const second=await signIn(saved.email);
@@ -309,21 +310,21 @@ test('perfil lê documentos reais, salva só o próprio email e mantém troca de
 
 test('API de perfil rejeita campos protegidos, email inválido/duplicado e escritas sem autenticação/CSRF',async()=>{
   const person=await user('active');const {agent}=await signIn(person.email);
-  const before=repo.byId(person.id);
+  const before=(await repo.byId(person.id));
   for (const payload of [{},{email:'invalid'},{email:null},...['cpf','rg','role','id','name','cnh','access_status','accessStatus','approved_by','password_hash'].map((field)=>({email:'changed@example.test',[field]:field==='role'?'admin':'changed'}))])
     await agent.patch('/api/auth/me').send(payload).expect(400);
   const duplicate=await agent.patch('/api/auth/me').send({email:' MASTER@EXAMPLE.TEST '}).expect(409);
   assert.equal(duplicate.body.error.code,'EMAIL_CONFLICT');
   await agent.patch('/api/auth/me').set('X-CSRF-Token','invalid').send({email:'changed@example.test'}).expect(403);
   await request(app).patch('/api/auth/me').send({email:'changed@example.test'}).expect(401);
-  assert.deepEqual(repo.byId(person.id),before);
+  assert.deepEqual((await repo.byId(person.id)),before);
   await agent.patch('/api/auth/me').send({email:person.email.toUpperCase()}).expect(200);
 });
 
 for (const role of ['user','admin']) test(`aprovação persiste ${role} e backend aplica suas permissões em cada requisição`,async()=>{
   const person=await user();const owner=await signIn();
   const approved=(await owner.agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role,companyIds:role==='user'?[1]:[]}).expect(200)).body;
-  assert.equal(approved.role,role);assert.equal(repo.byId(person.id).role,role);
+  assert.equal(approved.role,role);assert.equal((await repo.byId(person.id)).role,role);
   const {agent,result}=await signIn(person.email);assert.equal(result.body.user.role,role);
   const pending=await user('pending',{email:'next@example.test',cpf:'12345678909',rg:'67890',cnh:'10987654321'});
   const expected=role==='admin'?200:403;
@@ -343,7 +344,7 @@ for (const role of ['user','admin']) test(`aprovação persiste ${role} e backen
       const stream=await fetch(`http://127.0.0.1:${server.address().port}/api/users/events`,{headers:{Cookie:result.headers['set-cookie'][0].split(';')[0]},signal:abort.signal});
       assert.equal(stream.status,200);const reader=stream.body.getReader();
       assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
-      database().prepare("UPDATE users SET role='user' WHERE id=?").run(person.id);
+      (await database().prepare("UPDATE users SET role='user' WHERE id=?").run(person.id));
       accessEvents.emit('changed');assert.equal((await reader.read()).done,true);
     } finally {abort.abort();server.closeAllConnections();await new Promise((resolve)=>server.close(resolve))}
     await agent.get('/api/users').expect(403);
@@ -360,7 +361,7 @@ test('aprovação exige user/admin, rejeita elevação a master e role fora da a
     await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role}).expect(400);
   for (const action of ['reject','block','unblock'])
     await agent.patch(`/api/users/${person.id}/access`).send({action,role:'admin'}).expect(400);
-  assert.equal(repo.byId(person.id).role,'user');assert.equal(repo.byId(person.id).access_status,'pending');
+  assert.equal((await repo.byId(person.id)).role,'user');assert.equal((await repo.byId(person.id)).access_status,'pending');
 });
 test('master aprova, registra responsável, atualiza notificação e bloqueia/revoga/desbloqueia',async()=>{
   const pending=await user();
@@ -371,7 +372,7 @@ test('master aprova, registra responsável, atualiza notificação e bloqueia/re
   const review=(await agent.get(`/api/users/${pending.id}`).expect(200)).body;
   assert.equal(review.cpf,pending.cpf);assert.equal(review.password_hash,undefined);
   await agent.patch(`/api/users/${pending.id}/access`).send({action:'approve',role:'user',companyIds:[1]}).expect(200);
-  const approved=repo.byId(pending.id);assert.equal(approved.approved_by,master.id);assert.ok(approved.approved_at);
+  const approved=(await repo.byId(pending.id));assert.equal(approved.approved_by,master.id);assert.ok(approved.approved_at);
   notifications=(await agent.get('/api/notifications')).body;
   assert.ok(!notifications.some((row)=>row.userId===pending.id));
   const regular=await signIn(pending.email);
@@ -387,15 +388,15 @@ test('master rejeita, exige transição válida e impede alteração do próprio
   await agent.patch(`/api/users/${person.id}/access`).send({action:'reject'}).expect(200);
   await agent.patch(`/api/users/${person.id}/access`).send({action:'approve',role:'user',companyIds:[1]}).expect(409);
   await agent.patch(`/api/users/${master.id}/access`).send({action:'block'}).expect(409);
-  assert.throws(()=>database().prepare('DELETE FROM users WHERE id=?').run(master.id));
-  assert.throws(()=>database().prepare("UPDATE users SET role='user' WHERE id=?").run(master.id));
+  (await assert.rejects(async ()=>(await database().prepare('DELETE FROM users WHERE id=?').run(master.id))));
+  (await assert.rejects(async ()=>(await database().prepare("UPDATE users SET role='user' WHERE id=?").run(master.id))));
 });
 test('falha de auditoria desfaz bloqueio e revogação na mesma transação, sem vazar erro',async()=>{
   const person=await user('active');const regular=await signIn(person.email);const {agent}=await signIn();
-  database().exec("CREATE TRIGGER fail_audit BEFORE INSERT ON auth_audit_logs WHEN NEW.event='user_blocked' BEGIN SELECT RAISE(ABORT,'private internals'); END");
+  (await injectFailure({"name":"fail_audit","event":"INSERT","table":"auth_audit_logs","condition":"NEW.event='user_blocked'"}));
   const response=await agent.patch(`/api/users/${person.id}/access`).send({action:'block'}).expect(409);
   assert.ok(!JSON.stringify(response.body).includes('private internals'));
-  assert.equal(repo.byId(person.id).access_status,'active');
+  assert.equal((await repo.byId(person.id)).access_status,'active');
   await regular.agent.get('/api/auth/me').expect(200);
 });
 test('CSRF ausente, inválido, Unicode e de outra sessão são recusados; Origin e CORS restritos',async()=>{
@@ -419,7 +420,7 @@ for(const [method,path] of [
 });
 for(const status of ['pending','rejected','blocked'])test(`status ${status} invalida cookie antigo mesmo sem revogação explícita`,async()=>{
   const person=await user('active');const {agent}=await signIn(person.email);
-  database().prepare('UPDATE users SET access_status=? WHERE id=?').run(status,person.id);
+  (await database().prepare('UPDATE users SET access_status=? WHERE id=?').run(status,person.id));
   await agent.get('/api/auth/me').expect(401);
 });
 test('trocar senha exige senha atual, revoga todas as sessões e nova senha funciona',async()=>{
@@ -430,18 +431,18 @@ test('trocar senha exige senha atual, revoga todas as sessões e nova senha func
   await first.agent.get('/api/auth/me').expect(401);await second.agent.get('/api/auth/me').expect(401);
   await signIn('master@example.test',password,401);
   await signIn('master@example.test',next);
-  assert.ok(repo.byId(master.id).password_changed_at);
+  assert.ok((await repo.byId(master.id)).password_changed_at);
 });
 test('bootstrap não cria múltiplos masters nem aceita senha ausente ou argumentos CLI',async()=>{
-  await assert.rejects(createMaster({...data(),email:'second@example.test'}),{code:'MASTER_EXISTS'});
-  await assert.rejects(createMaster({...data(),password:undefined}));
+  await assert.rejects((async () => await createMaster({...data(),email:'second@example.test'})),{code:'MASTER_EXISTS'});
+  await assert.rejects((async () => await createMaster({...data(),password:undefined})));
   const output=spawnSync(process.execPath,['database/create-master.js','--password'],{cwd:backendRoot,encoding:'utf8'});
-  assert.equal(output.status,1);assert.match(output.stderr,/sem argumentos/);assert.equal(count(),1);
+  assert.equal(output.status,1);assert.match(output.stderr,/sem argumentos/);assert.equal((await count()),1);
 });
 test('auditoria e erros não registram documentos, hashes, tokens ou senha',async()=>{
   const {agent}=await signIn();
   await agent.post('/api/auth/logout').expect(200);
-  const audit=JSON.stringify(database().prepare('SELECT * FROM auth_audit_logs').all());
+  const audit=JSON.stringify((await database().prepare('SELECT * FROM auth_audit_logs').all()));
   for(const secret of [password,'11144477735','password_hash','csrf_token','token_hash'])assert.ok(!audit.includes(secret));
   const messages=[];mock.method(console,'error',(...args)=>messages.push(args.join(' ')));
   let payload;
@@ -451,8 +452,8 @@ test('auditoria e erros não registram documentos, hashes, tokens ou senha',asyn
   assert.equal(payload.stack,undefined);
 });
 test('produção exige HTTPS, configuração explícita e cookie __Host- com todas as flags',()=>{
-  const code=`const {app}=await import('./src/app.js'); const {openDatabase}=await import('./src/config/database.js');
-    openDatabase(':memory:'); const request=(await import('supertest')).default;
+  const code=`const {app}=await import('./src/app.js'); const {configurePersistence}=await import('./src/application/persistence.js');
+    configurePersistence({auth:{insertSession:async()=>{}},'rate-limits':{increment:async()=>({hits:1,reset_at:Date.now()+60000})}}); const request=(await import('supertest')).default;
     const assert=(await import('node:assert/strict')).default;
     for (const origin of ['http://localhost:5173','http://192.168.1.10:5173','https://evil.example']) {
       const rejected=await request(app).get('/api/auth/csrf').set('X-Forwarded-Proto','https').set('Origin',origin);
@@ -466,7 +467,7 @@ test('produção exige HTTPS, configuração explícita e cookie __Host- com tod
     console.log(JSON.stringify({denied:denied.status,allowed:allowed.status,host:cookie.startsWith('__Host-paytrack_session='),
       secure:cookie.includes('; Secure'),httpOnly:cookie.includes('; HttpOnly'),sameSite:cookie.includes('SameSite=Strict'),
       path:cookie.includes('Path=/'),domain:cookie.includes('Domain='),hsts:!!allowed.headers['strict-transport-security']}));`;
-  const output=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:backendRoot,encoding:'utf8',env:{...process.env,NODE_ENV:'production',FRONTEND_ORIGIN:'https://paytrack.example',TRUST_PROXY:'loopback'}});
+  const output=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:backendRoot,encoding:'utf8',env:{...process.env,NODE_ENV:'production',DATABASE_CLIENT:'postgres',DATABASE_URL:'postgresql://localhost/paytrack',FRONTEND_ORIGIN:'https://paytrack.example',TRUST_PROXY:'loopback'}});
   assert.equal(output.status,0,output.stderr);
   assert.deepEqual(JSON.parse(output.stdout.trim()),{denied:400,allowed:200,host:true,secure:true,httpOnly:true,sameSite:true,path:true,domain:false,hsts:true});
   const insecure=spawnSync(process.execPath,['--input-type=module','-e',"await import('./src/config/env.js')"],{cwd:backendRoot,encoding:'utf8',env:{...process.env,NODE_ENV:'production',FRONTEND_ORIGIN:'http://paytrack.example'}});
@@ -474,10 +475,10 @@ test('produção exige HTTPS, configuração explícita e cookie __Host- com tod
 });
 test('GET financeiro não modifica dados de negócio; health público responde sem cookie',async()=>{
   const {agent}=await signIn();
-  const snapshot=()=>JSON.stringify(['clients','loans','payments','installments','late_fees'].map((table)=>database().prepare(`SELECT * FROM ${table}`).all()));
-  const before=snapshot();
+  const snapshot=async ()=>JSON.stringify((await Promise.all(['clients','loans','payments','installments','late_fees'].map(async (table)=>(await database().prepare(`SELECT * FROM ${table}`).all())))));
+  const before=(await snapshot());
   await agent.get('/api/clients').expect(200);await agent.get('/api/loans').expect(200);await agent.get('/api/dashboard/summary').expect(200);
-  assert.equal(snapshot(),before);
+  assert.equal((await snapshot()),before);
   const health=await request(app).get('/api/health').expect(200);assert.equal(health.headers['set-cookie'],undefined);
   assert.ok(authConfig.absoluteMs<=86400000);
 });

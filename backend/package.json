@@ -11,21 +11,26 @@
     "start": "node src/server.js",
     "seed": "node database/seed.js",
     "auth:create-master": "node database/create-master.js",
-    "test": "node --test --test-concurrency=1",
-    "lint": "eslint src database tests"
+    "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
+    "lint": "eslint src database tests",
+    "test:postgres": "node database/test-postgres.js",
+    "db:migrate": "node database/migrate.js",
+    "db:check": "node database/check.js",
+    "db:import-sqlite": "node database/import-sqlite.js"
   },
   "dependencies": {
     "argon2": "^0.45.1",
-    "better-sqlite3": "^12.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.1.0",
+    "pg": "^8.23.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "better-sqlite3": "^12.0.0",
     "eslint": "^9.0.0",
     "globals": "^16.0.0",
     "supertest": "^7.0.0"

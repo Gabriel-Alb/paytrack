@@ -1,4 +1,4 @@
-import { database } from "../../config/database.js";
+import { unitOfWork } from '../../application/persistence.js';
 import * as repository from "./clients.repository.js";
 import { requireRecord, conflict } from "../../shared/errors/AppError.js";
 import {
@@ -8,10 +8,10 @@ import {
 import { pagination } from "../../shared/utils/validation.js";
 import { recordAction } from '../auth/auth.repository.js';
 
-import { resolveCompany } from '../../shared/middleware/company-access.js';
+import { resolveCompany } from '../../application/company-access.js';
 
-function checkDocuments(data, id) {
-  const duplicates = repository.findDuplicate(data, id);
+async function checkDocuments(data, id) {
+  const duplicates = (await repository.findDuplicate(data, id));
   for (const key of ["cpf", "rg", "cnh"]) {
     if (data[key] && duplicates.some((row) => row[key] === data[key])) {
       conflict(
@@ -22,26 +22,25 @@ function checkDocuments(data, id) {
   }
 }
 
-export function getClient(id) {
-  refreshFinancialState();
+export async function getClient(id) {
+  (await refreshFinancialState());
   return {
-    ...requireRecord(repository.findClient(id), "Cliente"),
-    loans: repository.clientHistory(id),
+    ...requireRecord((await repository.findClient(id)), "Cliente"),
+    loans: (await repository.clientHistory(id)),
   };
 }
 
-export function listClients(query) {
-  refreshFinancialState();
+export async function listClients(query) {
+  (await refreshFinancialState());
   return {
-    ...repository.listClients(pagination(query)),
+    ...(await repository.listClients(pagination(query))),
     page: query.page,
     limit: query.limit,
   };
 }
 
-export function createClient(data, actor) {
-  return database()
-    .transaction(() => {
+export async function createClient(data, actor) {
+  return (await unitOfWork(async () => {
       const client = {
         rg: null,
         cnh: null,
@@ -50,38 +49,35 @@ export function createClient(data, actor) {
         notes: null,
         ...data,
       };
-      client.company_id = resolveCompany(data.company_id);
-      checkDocuments(client);
-      const id = repository.insertClient(client,actor?.id);
-      recordAction('client_created',actor,'client',id,{customer:client.name});
-      return getClient(id);
-    })
-    .immediate();
+      client.company_id = (await resolveCompany(data.company_id));
+      (await checkDocuments(client));
+      const id = (await repository.insertClient(client,actor?.id));
+      (await recordAction('client_created',actor,'client',id,{customer:client.name}));
+      return (await getClient(id));
+    }));
 }
 
-export function updateClient(id, data, actor) {
-  return database()
-    .transaction(() => {
+export async function updateClient(id, data, actor) {
+  return (await unitOfWork(async () => {
       const client = {
-        ...requireRecord(repository.findClient(id), "Cliente"),
+        ...requireRecord((await repository.findClient(id)), "Cliente"),
         ...data,
       };
-      checkDocuments(client, id);
+      (await checkDocuments(client, id));
       if (data.status !== undefined)
         client.status_override =
           data.status === "negativado" ? "negativado" : null;
-      repository.updateClient(client);
-      refreshFinancialState();
-      refreshClient(id);
-      const result = getClient(id);
+      (await repository.updateClient(client));
+      (await refreshFinancialState());
+      (await refreshClient(id));
+      const result = (await getClient(id));
       if (data.status && result.status !== data.status) {
         conflict(
           "CLIENT_STATUS_CONFLICT",
           "O status escolhido não corresponde aos contratos e pendências deste cliente.",
         );
       }
-      recordAction('client_updated',actor,'client',id,{customer:result.name,fields:Object.keys(data)});
+      (await recordAction('client_updated',actor,'client',id,{customer:result.name,fields:Object.keys(data)}));
       return result;
-    })
-    .immediate();
+    }));
 }

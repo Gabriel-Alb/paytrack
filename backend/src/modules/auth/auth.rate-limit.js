@@ -1,27 +1,24 @@
 import { createHash } from 'node:crypto';
 import { rateLimit } from 'express-rate-limit';
-import { database } from '../../config/database.js';
+import { repository } from '../../application/persistence.js';
 import { env } from '../../config/env.js';
 import { authConfig } from '../../config/auth.js';
 
-// Shared SQLite counters survive restarts and concurrent workers using the same DB.
-class SqliteRateStore {
+// Shared persistent counters survive restarts and concurrent workers using the same DB.
+class PersistentRateStore {
   constructor(prefix) { this.prefix=prefix; }
   init(options) { this.windowMs=options.windowMs; }
   key(value) { return this.prefix+createHash('sha256').update(value).digest('hex'); }
   async increment(value) {
     const now=Date.now();
-    const row=database().prepare(`INSERT INTO auth_rate_limits(key,hits,reset_at) VALUES (?,1,?)
-      ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN reset_at<=? THEN 1 ELSE hits+1 END,
-      reset_at=CASE WHEN reset_at<=? THEN excluded.reset_at ELSE reset_at END RETURNING hits,reset_at`)
-      .get(this.key(value),now+this.windowMs,now,now);
+    const row=await repository('rate-limits').increment(this.key(value),now,this.windowMs);
     return {totalHits:row.hits,resetTime:new Date(row.reset_at)};
   }
-  async decrement(value) { database().prepare('UPDATE auth_rate_limits SET hits=max(0,hits-1) WHERE key=?').run(this.key(value)); }
-  async resetKey(value) { database().prepare('DELETE FROM auth_rate_limits WHERE key=?').run(this.key(value)); }
+  async decrement(value) { await repository('rate-limits').decrement(this.key(value)); }
+  async resetKey(value) { await repository('rate-limits').resetKey(this.key(value)); }
 }
 function limiter(prefix,limit,keyGenerator) {
-  return rateLimit({windowMs:env.AUTH_WINDOW_MS,limit,store:new SqliteRateStore(prefix),
+  return rateLimit({windowMs:env.AUTH_WINDOW_MS,limit,store:new PersistentRateStore(prefix),
     standardHeaders:false,legacyHeaders:false,...(keyGenerator ? {keyGenerator} : {}),
     message:{error:{code:'TOO_MANY_ATTEMPTS',message:'Muitas tentativas. Aguarde alguns minutos e tente novamente.'}},
   });

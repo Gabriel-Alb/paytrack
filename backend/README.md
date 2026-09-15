@@ -1,6 +1,6 @@
 # PayTrack API
 
-Node.js 22.18+ (ou 24+) e SQLite via better-sqlite3.
+Node.js 22.18+ (ou 24+). PostgreSQL é obrigatório em produção; SQLite via better-sqlite3 é usado apenas em desenvolvimento local e testes.
 
 ```sh
 npm ci
@@ -10,7 +10,7 @@ npm start
 
 O seed é opcional, destinado ao desenvolvimento e idempotente por CPF. Ele cria clientes sem contrato, contratos ativos, parcelas personalizadas, pagamento parcial, atraso, multa pendente e contrato quitado. Executá-lo novamente não repõe pagamentos alterados nem duplica registros.
 
-Configuração em `.env`, conforme `.env.example`. O banco padrão é `backend/database/paytrack.db`; os testes usam bancos isolados. O frontend Vite encaminha `/api` para `http://127.0.0.1:3000`.
+Configuração conforme `.env.example`. O `.env` local é carregado somente no desenvolvimento; produção recebe variáveis do processo e os testes definem seu próprio ambiente. O banco local padrão é `backend/database/paytrack.db`; os testes usam bancos isolados. O frontend Vite encaminha `/api` para `http://127.0.0.1:3000`.
 
 ## Autenticação e produção
 
@@ -41,7 +41,7 @@ Não há rota de criação pública de administrador. Solicitações gravadas re
 
 ## Organização
 
-`src/modules/{clients,loans,installments,payments,late-fees,overview}` segue rota → controller → service → repository → SQLite. Os endpoints de pagamentos ficam nas rotas de contratos, parcelas e multas. `src/config` inicializa SQLite e aplica migrations; `src/shared` contém validações, datas e erros. As funções monetárias comuns ficam em `../shared/money.js`.
+Os módulos mantêm rota → controller → service → contrato de repository. Os arquivos `src/modules/*/*.repository.js` são contratos assíncronos; os services não importam drivers, executam SQL ou selecionam banco. `src/application/persistence.js` fornece as portas de repositories e unidade de trabalho, configuradas somente no bootstrap `src/config/database.js`. A implementação SQL única por módulo fica em `src/infrastructure/persistence/repositories`; os adapters PostgreSQL e SQLite implementam a mesma interface. `src/shared` mantém validações, datas e erros; funções monetárias comuns continuam em `../shared/money.js`.
 
 `../SQL/schema.sql` é a fonte do schema. Inicialização e migrações são transacionais, preservam os pagamentos existentes e verificam as chaves estrangeiras antes de confirmar. A migração antiga de pagamentos lê a definição da tabela desse mesmo arquivo.
 
@@ -80,7 +80,7 @@ Listas aceitam `page`, `limit` (até 100), `search` e `status`. Clientes e empr�
 - O modal envia a seleção completa de parcelas quitadas. Retirar uma parcela quitada estorna seus recebimentos com `voided_at`; nenhum pagamento é apagado. Parcelas parciais não selecionadas permanecem intactas.
 - A multa diária é independente da parcela e para de crescer na data de quitação da parcela. Contrato só fica quitado quando parcela e multa estiverem liquidadas.
 - O limiar de pequeno atraso é definido somente por `ATTENTION_DAYS` (padrão: 2). Negativação manual usa `status_override`; os demais status derivam dos contratos.
-- Operações financeiras usam transação SQLite imediata; falhas desfazem pagamentos, parcelas, multas, status e revisão juntos.
+- Operações financeiras usam unidade de trabalho assíncrona; falhas desfazem pagamentos, parcelas, multas, status e revisão juntos.
 
 ## Validação
 
@@ -89,7 +89,7 @@ npm test
 npm run lint
 ```
 
-Testes cobrem documentos duplicados, valores e parcelas, pagamentos, multa, status, concorrência, estorno, relatórios, seed, migração e rollback por falhas injetadas no SQLite. O frontend tem `npm run lint` e `npm run build` próprios.
+Testes cobrem documentos duplicados, valores e parcelas, pagamentos, multa, status, concorrência, estorno, relatórios, seed, migrations, isolamento de empresas e rollback com falhas injetadas em ambos os bancos. O frontend tem `npm run lint` e `npm run build` próprios.
 
 ## Desenvolvimento na rede local
 
@@ -109,14 +109,65 @@ Há somente dois papéis: `admin` (Administrador global) e `user` (Usuário padr
 
 `clients.company_id` é obrigatório. Contratos herdam a empresa de seu cliente, parcelas de seu contrato, e pagamentos/multas da parcela. `scoped_loans` expõe `company_id` derivado. Não há uma coluna redundante em cada nível. A empresa do cliente e o cliente do contrato são imutáveis, evitando mover todo o histórico entre empresas por edição cadastral.
 
-O middleware `companyAccess` cria um contexto por requisição (AsyncLocalStorage), após resolver a sessão no banco. Todos os repositórios financeiros consultam as views temporárias `scoped_*`, que filtram antes de agregar ou paginar. Triggers temporárias também validam os donos de cada escrita, inclusive reconciliações. Consultas por ID não autorizado retornam 404; criação com empresa não disponível retorna 403. Ao adicionar uma consulta financeira, use as views, nunca uma leitura direta da tabela base. Fora de HTTP, seed e migrations são operações locais privilegiadas; acesso direto ao arquivo SQLite deve continuar restrito à conta de serviço.
+O middleware `companyAccess` cria um contexto por requisição (AsyncLocalStorage), após resolver a sessão no banco. Todos os repositórios financeiros consultam as views `scoped_*`, que filtram antes de agregar ou paginar. Triggers também validam os donos de cada escrita, inclusive reconciliações. Consultas por ID não autorizado retornam 404; criação com empresa não disponível retorna 403. Ao adicionar uma consulta financeira, use as views, nunca uma leitura direta da tabela base. No SQLite, views e guardas são temporárias por conexão. No PostgreSQL, são versionadas no schema, e cada transação recebe o contexto por `set_config(..., true)`; o contexto expira no commit/rollback e não vaza pelo pool. Fora de HTTP, scripts são operações privilegiadas. A credencial PostgreSQL e o arquivo SQLite devem continuar restritos à conta de serviço.
 
 Alterar papel ou empresas com `action: "edit"` preserva a sessão, mas vale já na próxima requisição: papel e vínculos são lidos novamente do banco. Bloqueio continua revogando as sessões. A SPA atualiza o perfil na navegação e consulta novamente as empresas ao abrir o cadastro.
 
 ### Migração dos dados existentes
 
-A inicialização da API aplica `src/config/company-migration.js` automaticamente dentro de uma transação. Cria Dinheiro Express (ID 1) e Platinum Finance (ID 2) como registros no banco; o frontend não fixa esses nomes.
+A inicialização de bancos SQLite legados aplica `src/infrastructure/persistence/sqlite/company-migration.js` automaticamente dentro de uma transação. Cria Dinheiro Express (ID 1) e Platinum Finance (ID 2) como registros no banco; o frontend não fixa esses nomes.
 
 **Como o banco anterior não identifica a empresa de origem, todos os clientes existentes ficam vinculados à Dinheiro Express; todo o histórico financeiro os acompanha.** Usuários padrão ativos ou bloqueados recebem vínculo com essa empresa. Solicitações pendentes continuam aguardando a escolha do administrador. Papéis antigos `master` viram `admin`; administradores existentes continuam globais. IDs, senhas, sessões, autoria, parcelas, pagamentos, multas e auditoria são preservados. Reabrir o banco não recria vínculos removidos nem ressemeia empresas.
 
 A reconstrução de clientes remove a unicidade global dos documentos. A inicialização desativa chaves estrangeiras somente nessa conexão, verifica todas as referências antes do commit e reativa a fiscalização antes de atender HTTP. Em falha, a transação reverte a migração. Faça backup consistente e valide uma cópia do banco antes de iniciar a versão nova em produção. A atribuição inicial precisa corresponder à operação real; redistribuição de dados legados, se necessária, deve ser planejada antes da migração.
+
+## PostgreSQL em produção
+
+Injete no ambiente do processo:
+
+```dotenv
+NODE_ENV=production
+DATABASE_CLIENT=postgres
+DATABASE_URL=postgresql://paytrack:senha@host:5432/paytrack
+DATABASE_SSL=verify-full
+DATABASE_POOL_MAX=10
+DATABASE_CONNECT_TIMEOUT_MS=10000
+DATABASE_IDLE_TIMEOUT_MS=30000
+DATABASE_STATEMENT_TIMEOUT_MS=30000
+FRONTEND_ORIGIN=https://seu-dominio
+```
+
+`DATABASE_SSL_CA` permite informar um arquivo PEM para CA privada. A validação do certificado permanece ativa. Use `DATABASE_SSL=disable` apenas quando TLS não for usado na conexão explicitamente configurada (por exemplo, PostgreSQL de teste em loopback). Não misture parâmetros SSL na URL. Sem `DATABASE_CLIENT`, produção seleciona PostgreSQL e desenvolvimento/teste selecionam SQLite. Produção recusa SQLite e caminhos como `:memory:`; URL ausente/inválida e configurações numéricas inválidas interrompem a inicialização. Não há fallback silencioso.
+
+`npm ci --omit=dev` instala o runtime de produção com `pg`; `better-sqlite3` é dependência de desenvolvimento e carregada dinamicamente somente pelo adapter SQLite. O banco PostgreSQL deve existir, e a credencial de implantação precisa criar tabelas, funções, views, triggers e índices no schema `public`. Não é necessária extensão nem credencial superuser. Após as migrations, um usuário de runtime pode receber privilégios de uso do schema, funções, sequências e DML nas tabelas; como o bootstrap verifica/cria a tabela de versões, o procedimento mais simples nesta versão é manter a mesma credencial de implantação, com acesso limitado ao banco PayTrack.
+
+Comandos dentro de `backend`:
+
+- `npm run db:migrate`: aplica migrations e encerra; a inicialização da API também as aplica antes de aceitar requisições.
+- `npm run db:check`: inicializa/migra e verifica tabelas, versão, integridade/FKs do SQLite e constraints validadas no PostgreSQL.
+- `npm run auth:create-master`: bootstrap interativo, sem senha padrão, válido nos dois bancos.
+- `npm run seed`: dados demonstrativos opcionais, idempotentes e recusados em produção, inclusive por chamada direta à função.
+
+A migration PostgreSQL `src/infrastructure/persistence/postgres/001-initial.sql` cria as 11 tabelas, índices de FKs, unicidade normalizada, empresas iniciais, views, funções e guardas. `schema_migrations` registra versão, checksum SHA-256 e data; aplicação é transacional e usa lock entre processos. Versões futuras e checksums divergentes são recusados. Não edite uma migration já aplicada: crie a próxima versão e registre-a no runner. SQLite mantém a versão 5 e suas migrations legadas, preservando IDs e dados existentes.
+
+### Tipos e concorrência
+
+IDs, referências, centavos e horários em milissegundos usam BIGINT no PostgreSQL; percentuais usam NUMERIC. O parser do pool retorna números para preservar os contratos JSON e recusa valores além de Number.MAX_SAFE_INTEGER. Datas civis permanecem TEXT ISO `YYYY-MM-DD` e timestamps textuais UTC, preservando importações e o formato da API; a validação de calendário permanece no Zod. `day_number` converte datas para cálculo de dias sem fuso; `utc_now` preserva timestamps UTC. Rateio usa inteiros BigInt no SQLite e NUMERIC exato no PostgreSQL. Não há ponto flutuante intermediário nos cálculos de centavos.
+
+As queries comuns usam GROUP BY explícito, CASE para contagens condicionais, comparações ASCII equivalentes ao NOCASE original, escape explícito nas buscas, ordenação de nulos definida e aliases com aspas e funções equivalentes nos adapters. Parâmetros são vinculados, inclusive valores nulos; o binder só converte placeholders e não reescreve regras SQL.
+
+Uma transação `pg` usa um único client do pool até commit/rollback, conforme a [documentação do driver](https://node-postgres.com/features/transactions). Savepoints preservam operações aninhadas e consultas financeiras revertidas. SQLite serializa operações na conexão com BEGIN IMMEDIATE. Como a reconciliação existente atualiza o portfólio acessível inteiro, as unidades de trabalho PostgreSQL usam um advisory lock comum antes das leituras de negócio; isso preserva a revisão otimista e evita pagamentos concorrentes duplicados entre processos. É uma escolha conservadora: unidades financeiras são serializadas, e eventual paralelismo por contrato exige primeiro reduzir o alcance da reconciliação. Rate limit continua usando UPSERT atômico independente. Sequences PostgreSQL podem ter lacunas após rollback, como é normal nesse banco.
+
+### Transferência SQLite → PostgreSQL
+
+1. Pare as escritas da aplicação antiga e faça backup consistente do SQLite, incluindo o conteúdo do WAL. Trabalhe com uma cópia, nunca com o único arquivo original.
+2. Se a cópia for anterior à v5, inicialize-a com NODE_ENV=development, DATABASE_CLIENT=sqlite e DATABASE_PATH apontando para a cópia; execute `npm run db:migrate` e `npm run db:check`. Valide a atribuição das empresas legadas descrita acima.
+3. Prepare um PostgreSQL vazio com as configurações de produção e execute `npm run db:migrate`. Para a transferência offline, instale também as dependências de desenvolvimento (`npm ci --include=dev`), pois o leitor SQLite é necessário apenas nesse comando.
+4. Execute `npm run db:import-sqlite -- /caminho/da/copia-v5.db`, mantendo o destino configurado como PostgreSQL. O comando abre a origem somente para leitura, valida versão/integridade/FKs, recusa destino com dados ou empresas alteradas e importa todas as tabelas em uma transação. Preserva usuários, senhas/hashes, sessões, vínculos, autoria, pagamentos estornados, auditoria e rate limits. Ajusta as sequences considerando também IDs antigos já removidos.
+5. Execute `npm run db:check`, compare contagens e valide login, empresas e saldos antes de liberar escritas na nova API. Mantenha o backup original. Uma segunda importação no mesmo destino é recusada; erros revertem os registros e permitem repetir no destino vazio.
+
+A mudança de configuração não transfere dados automaticamente. A importação não mescla bancos e não modifica o arquivo original. Após a transferência, o runtime pode voltar a `npm ci --omit=dev`.
+
+### Validação com PostgreSQL real
+
+`npm test` executa a suíte local com SQLite isolado e testes de arquitetura/configuração. Defina `TEST_DATABASE_URL` no ambiente para um PostgreSQL exclusivo de testes e execute `npm run test:postgres`. O runner recusa URL ausente. Os testes criam schemas aleatórios e removem somente esses schemas ao terminar; a credencial precisa de CREATE SCHEMA. A suíte reutiliza os mesmos fluxos HTTP de autenticação, acesso, empresas, finanças e relatórios, além de transações, concorrência, schema, migrations e importação. Não use um banco de produção para testes.

@@ -9,9 +9,9 @@ function setCookie(res,token,authenticated) {
   res.cookie(authConfig.cookieName,token,{...cookieOptions,maxAge:authenticated ? authConfig.absoluteMs : authConfig.anonymousMs});
 }
 const clearCookie = (res) => res.clearCookie(authConfig.cookieName,cookieOptions);
-export function csrf(req,res) {
+export async function csrf(req,res) {
   if (req.authSession) return res.json({csrfToken:req.authSession.csrf_token});
-  const session=service.newSession();
+  const session=(await service.newSession());
   setCookie(res,session.token,false);
   res.json({csrfToken:session.csrfToken});
 }
@@ -25,10 +25,10 @@ export async function login(req,res) {
   setCookie(res,result.token,true);
   res.json({user:result.user,csrfToken:result.csrfToken});
 }
-export const me = (req,res) => res.json({user:service.profileUser(req.user)});
-export const updateProfile = (req,res) => res.json({user:service.updateProfile(req.user,req.body)});
-export function logout(req,res) {
-  service.logout(req.authSession,req.user,req.path==='/logout-all');
+export const me = async (req,res) => res.json({user:(await service.profileUser(req.user))});
+export const updateProfile = async (req,res) => res.json({user:(await service.updateProfile(req.user,req.body))});
+export async function logout(req,res) {
+  (await service.logout(req.authSession,req.user,req.path==='/logout-all'));
   clearCookie(res);
   res.json({message:'Sessão encerrada.'});
 }
@@ -37,14 +37,17 @@ export async function changePassword(req,res) {
   clearCookie(res);
   res.json({message:'Senha alterada. Entre novamente.'});
 }
-export const listUsers = (req,res) => res.json(service.listUsers(validator.usersQuerySchema.parse(req.query)));
+export const listUsers = async (req,res) => res.json((await service.listUsers(validator.usersQuerySchema.parse(req.query))));
 export function watchUsers(req,res) {
   res.set({'Content-Type':'text/event-stream','X-Accel-Buffering':'no'});
   res.flushHeaders();
-  const refresh = () => {
-    loadSession(req,res,() => {});
-    if (!['admin'].includes(req.user?.role)) { res.end(); return; }
-    res.write('data: refresh\n\n');
+  const refresh = async () => {
+    try {
+      await loadSession(req,res,() => {});
+      if (res.destroyed || res.writableEnded) return;
+      if (!['admin'].includes(req.user?.role)) { res.end(); return; }
+      res.write('data: refresh\n\n');
+    } catch { res.end(); }
   };
   accessEvents.on('changed',refresh);
   // Recheck the session and refresh after reconnects or changes by another process.
@@ -52,5 +55,5 @@ export function watchUsers(req,res) {
   res.on('close',() => { clearInterval(heartbeat);accessEvents.off('changed',refresh); });
   refresh();
 }
-export const reviewUser = (req,res) => res.json(service.reviewUser(idSchema.parse(req.params.id)));
-export const changeAccess = (req,res) => res.json(service.changeAccess(req.user,idSchema.parse(req.params.id),req.body));
+export const reviewUser = async (req,res) => res.json((await service.reviewUser(idSchema.parse(req.params.id))));
+export const changeAccess = async (req,res) => res.json((await service.changeAccess(req.user,idSchema.parse(req.params.id),req.body)));

@@ -1,9 +1,10 @@
+import { injectFailure, removeFailure } from './database-helper.js';
 import {beforeEach,afterEach,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 import request from 'supertest';
 import {app} from '../src/app.js';
-import {openDatabase,closeDatabase,database} from '../src/config/database.js';
+import {openDatabase,closeDatabase,database} from './database-helper.js';
 import {env} from '../src/config/env.js';
 import {today,addDays} from '../src/shared/utils/dates.js';
 import {hashPassword} from '../src/modules/auth/auth.service.js';
@@ -11,14 +12,14 @@ import {insertUser} from '../src/modules/auth/auth.repository.js';
 
 let regular,admin,regularId,adminId;
 const clientData={name:'Maria José',cpf:'52998224725'};
-const events=()=>database().prepare('SELECT * FROM auth_audit_logs WHERE entity_type IS NOT NULL ORDER BY id').all();
-const snapshot=()=>['clients','loans','installments','payments','late_fees','auth_audit_logs'].map(table=>database().prepare(`SELECT * FROM ${table}`).all());
+const events=async ()=>(await database().prepare('SELECT * FROM auth_audit_logs WHERE entity_type IS NOT NULL ORDER BY id').all());
+const snapshot=async ()=>(await Promise.all(['clients','loans','installments','payments','late_fees','auth_audit_logs'].map(async table=>(await database().prepare(`SELECT * FROM ${table}`).all()))));
 beforeEach(async()=>{
-  openDatabase(':memory:');
+  (await openDatabase(':memory:'));
   const password=randomBytes(12).toString('base64url'),passwordHash=await hashPassword(password);
-  regularId=insertUser({name:'Gabriel Albuquerque Silva',email:'gabriel@example.test',cpf:'11144477735',passwordHash},'user','active');
-  database().prepare('INSERT INTO user_companies(user_id,company_id) VALUES(?,1)').run(regularId);
-  adminId=insertUser({name:'Administrador teste',email:'admin@example.test',cpf:'12345678909',passwordHash},'admin','active');
+  regularId=(await insertUser({name:'Gabriel Albuquerque Silva',email:'gabriel@example.test',cpf:'11144477735',passwordHash},'user','active'));
+  (await database().prepare('INSERT INTO user_companies(user_id,company_id) VALUES(?,1)').run(regularId));
+  adminId=(await insertUser({name:'Administrador teste',email:'admin@example.test',cpf:'12345678909',passwordHash},'admin','active'));
   async function login(email) {
     const agent=request.agent(app),csrf=(await agent.get('/api/auth/csrf').expect(200)).body.csrfToken;
     const result=await agent.post('/api/auth/login').set('Origin',env.FRONTEND_ORIGIN).set('X-CSRF-Token',csrf).send({email,password}).expect(200);
@@ -41,9 +42,9 @@ test('created_by usa a sessão e notificações administrativas preservam nomes 
   assert.equal(client.created_by,regularId);assert.equal(loan.created_by,regularId);
   const response=(await regular.post(`/api/installments/${loan.installments[0].id}/payments`).send({amount:1000,payment_date:today(),revision:loan.revision}).expect(201)).body;
   assert.equal(response.payment.created_by,regularId);assert.equal(response.payment.registered_by,'Gabriel Albuquerque Silva');
-  assert.deepEqual(events().map(row=>row.event),['client_created','loan_created','payment_created']);
-  assert.ok(events().every(row=>row.actor_id===regularId && row.actor_name==='Gabriel Albuquerque Silva'));
-  database().prepare('UPDATE users SET name=? WHERE id=?').run('Nome posterior',regularId);
+  assert.deepEqual((await events()).map(row=>row.event),['client_created','loan_created','payment_created']);
+  assert.ok((await events()).every(row=>row.actor_id===regularId && row.actor_name==='Gabriel Albuquerque Silva'));
+  (await database().prepare('UPDATE users SET name=? WHERE id=?').run('Nome posterior',regularId));
   await admin.patch(`/api/clients/${client.id}`).send({name:'Maria atualizada'}).expect(200);
   const notices=(await admin.get('/api/notifications').expect(200)).body;
   const created=notices.find(row=>row.event==='client_created'),borrowed=notices.find(row=>row.event==='loan_created'),paid=notices.find(row=>row.event==='payment_created');
@@ -56,7 +57,7 @@ test('created_by usa a sessão e notificações administrativas preservam nomes 
   const history=(await admin.get(`/api/loans/${loan.id}`).expect(200)).body.payments;
   assert.equal(history[0].registered_by,'Gabriel Albuquerque Silva');assert.equal(history[0].created_by,regularId);
   assert.ok(!(await regular.get('/api/notifications').expect(200)).body.some(row=>row.event));
-  const before=events();await admin.get('/api/notifications').expect(200);assert.deepEqual(events(),before);
+  const before=(await events());await admin.get('/api/notifications').expect(200);assert.deepEqual((await events()),before);
 });
 
 test('correção, estorno e multa registram seus autores sem sobrescrever quem lançou originalmente',async()=>{
@@ -66,17 +67,17 @@ test('correção, estorno e multa registram seus autores sem sobrescrever quem l
   loan=(await admin.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[selection()]}).expect(200)).body;
   const previous=loan.payments.find(row=>row.id===original.id),corrected=loan.payments.find(row=>!row.voided_at);
   assert.ok(previous.voided_at);assert.equal(previous.created_by,regularId);assert.equal(corrected.created_by,adminId);
-  assert.ok(events().some(row=>row.event==='payment_voided' && row.entity_id===original.id && row.actor_id===adminId));
-  assert.ok(events().some(row=>row.event==='payment_corrected' && row.entity_id===corrected.id && row.actor_id===adminId));
-  const count=events().length;
+  assert.ok((await events()).some(row=>row.event==='payment_voided' && row.entity_id===original.id && row.actor_id===adminId));
+  assert.ok((await events()).some(row=>row.event==='payment_corrected' && row.entity_id===corrected.id && row.actor_id===adminId));
+  const count=(await events()).length;
   loan=(await admin.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[selection()]}).expect(200)).body;
-  assert.equal(events().length,count);
-  const feeId=database().prepare('SELECT id FROM late_fees WHERE installment_id=?').get(loan.installments[0].id).id;
+  assert.equal((await events()).length,count);
+  const feeId=(await database().prepare('SELECT id FROM late_fees WHERE installment_id=?').get(loan.installments[0].id)).id;
   loan=(await regular.post(`/api/late-fees/${feeId}/payments`).send({amount:100,payment_date:today(),revision:loan.revision}).expect(201)).body.loan;
   const feePayment=loan.payments.find(row=>row.late_fee_amount===100);assert.equal(feePayment.created_by,regularId);
   loan=(await admin.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[]}).expect(200)).body;
   assert.ok(loan.payments.every(row=>row.voided_at));
-  assert.ok(events().some(row=>row.event==='payment_voided' && row.entity_id===feePayment.id && row.actor_id===adminId));
+  assert.ok((await events()).some(row=>row.event==='payment_voided' && row.entity_id===feePayment.id && row.actor_id===adminId));
   const notices=(await admin.get('/api/notifications').expect(200)).body;
   assert.ok(notices.some(row=>row.event==='payment_corrected' && row.responsibleId===adminId));
   assert.ok(notices.some(row=>row.event==='payment_voided' && row.responsibleId===adminId));
@@ -87,16 +88,16 @@ test('alterações de contrato e parcelas são auditadas pelo usuário autentica
   loan=(await admin.patch(`/api/loans/${loan.id}/installments`).send({revision:loan.revision,installments:[50000,70000]}).expect(200)).body;
   loan=(await admin.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,notes:'Nota do contrato'}).expect(200)).body;
   await admin.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,status:'cancelled'}).expect(200);
-  for(const event of ['installments_updated','loan_updated','loan_cancelled'])assert.equal(events().find(row=>row.event===event).actor_id,adminId);
-  assert.equal(database().prepare('SELECT created_by FROM loans WHERE id=?').get(loan.id).created_by,regularId);
+  for(const event of ['installments_updated','loan_updated','loan_cancelled'])assert.equal((await events()).find(row=>row.event===event).actor_id,adminId);
+  assert.equal((await database().prepare('SELECT created_by FROM loans WHERE id=?').get(loan.id)).created_by,regularId);
 });
 
 test('payload não pode forjar responsável em cadastros, contratos, pagamentos, multas ou confirmação',async()=>{
   const {client,loan,input}=await createLoan();
-  const feeId=database().prepare('SELECT id FROM late_fees WHERE installment_id=?').get(loan.installments[0].id).id;
+  const feeId=(await database().prepare('SELECT id FROM late_fees WHERE installment_id=?').get(loan.installments[0].id)).id;
   for(const field of ['created_by','createdBy','user_id','responsible','registeredBy','actor_id']) {
     const injected={[field]:adminId};
-    const before=snapshot();
+    const before=(await snapshot());
     await regular.post('/api/clients').send({...clientData,...injected}).expect(400);
     await regular.patch(`/api/clients/${client.id}`).send(injected).expect(400);
     await regular.post('/api/loans').send({...input,...injected}).expect(400);
@@ -105,22 +106,22 @@ test('payload não pode forjar responsável em cadastros, contratos, pagamentos,
     await regular.post(`/api/late-fees/${feeId}/payments`).send({amount:100,payment_date:today(),revision:loan.revision,...injected}).expect(400);
     await regular.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[{...selection(),...injected}]}).expect(400);
     await regular.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[selection()],...injected}).expect(400);
-    assert.deepEqual(snapshot(),before);
+    assert.deepEqual((await snapshot()),before);
   }
 });
 
 test('falha da auditoria reverte lançamentos, correções e cadastros sem notificação fantasma',async()=>{
   let {loan}=await createLoan({installment_count:1});
-  database().exec("CREATE TRIGGER fail_activity BEFORE INSERT ON auth_audit_logs WHEN NEW.entity_type IS NOT NULL BEGIN SELECT RAISE(ABORT,'audit failed'); END");
-  let before=snapshot();
+  (await injectFailure({"name":"fail_activity","event":"INSERT","table":"auth_audit_logs","condition":"NEW.entity_type IS NOT NULL"}));
+  let before=(await snapshot());
   await regular.post(`/api/installments/${loan.installments[0].id}/payments`).send({amount:100,payment_date:today(),revision:loan.revision}).expect(409);
-  assert.deepEqual(snapshot(),before);
+  assert.deepEqual((await snapshot()),before);
   await regular.post('/api/clients').send({name:'Outro cliente',cpf:'98765432100'}).expect(409);
-  assert.deepEqual(snapshot(),before);
-  database().exec('DROP TRIGGER fail_activity');
+  assert.deepEqual((await snapshot()),before);
+  (await removeFailure('fail_activity'));
   loan=(await regular.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[selection(addDays(today(),-1))]}).expect(200)).body;
-  database().exec("CREATE TRIGGER fail_correction BEFORE INSERT ON auth_audit_logs WHEN NEW.event='payment_corrected' BEGIN SELECT RAISE(ABORT,'audit failed'); END");
-  before=snapshot();
+  (await injectFailure({"name":"fail_correction","event":"INSERT","table":"auth_audit_logs","condition":"NEW.event='payment_corrected'"}));
+  before=(await snapshot());
   await admin.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[selection()]}).expect(409);
-  assert.deepEqual(snapshot(),before);
+  assert.deepEqual((await snapshot()),before);
 });
