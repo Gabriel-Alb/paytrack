@@ -34,9 +34,9 @@ export async function migratePostgres(pool) {
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
     const latest = (await client.query('SELECT MAX(version) AS version FROM schema_migrations')).rows[0].version;
-    if (latest > 1) throw new Error('Versão PostgreSQL mais recente que a aplicação.');
-    for (const version of [1]) {
-      const sql = readFileSync(new URL(`./postgres/00${version}-initial.sql`, import.meta.url), 'utf8').replaceAll('\r\n','\n');
+    if (latest > 2) throw new Error('Versão PostgreSQL mais recente que a aplicação.');
+    for (const [version, file] of [[1, '001-initial.sql'], [2, '002-loan-companies.sql']]) {
+      const sql = readFileSync(new URL(`./postgres/${file}`, import.meta.url), 'utf8').replaceAll('\r\n','\n');
       const checksum = createHash('sha256').update(sql).digest('hex');
       const applied = (await client.query('SELECT checksum FROM schema_migrations WHERE version=$1', [version])).rows[0];
       if (applied && applied.checksum !== checksum) throw new Error('Checksum da migration PostgreSQL divergente.');

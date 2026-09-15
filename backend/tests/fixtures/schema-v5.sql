@@ -80,6 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_user_companies_company ON user_companies(company_
 
 CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
     name TEXT NOT NULL,
     cpf TEXT NOT NULL,
     rg TEXT,
@@ -93,6 +94,9 @@ CREATE TABLE IF NOT EXISTS clients (
     status_override TEXT CHECK (status_override IS NULL OR status_override = 'negativado'),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id,cpf),
+    UNIQUE(company_id,rg),
+    UNIQUE(company_id,cnh),
     FOREIGN KEY (created_by) REFERENCES users(id)
         ON UPDATE CASCADE
         ON DELETE SET NULL
@@ -101,7 +105,6 @@ CREATE TABLE IF NOT EXISTS clients (
 CREATE TABLE IF NOT EXISTS loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
-    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
     principal_amount INTEGER NOT NULL CHECK (principal_amount > 0),
     interest_percentage NUMERIC NOT NULL DEFAULT 0 CHECK (interest_percentage >= 0),
     interest_amount INTEGER NOT NULL DEFAULT 0 CHECK (interest_amount >= 0),
@@ -206,8 +209,8 @@ CREATE INDEX IF NOT EXISTS idx_payments_payment_date
 CREATE INDEX IF NOT EXISTS idx_late_fees_status
     ON late_fees(status);
 
-CREATE TRIGGER IF NOT EXISTS loans_company_immutable BEFORE UPDATE OF company_id ON loans
-WHEN NEW.company_id<>OLD.company_id BEGIN SELECT RAISE(ABORT,'Loan company is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS clients_company_immutable BEFORE UPDATE OF company_id ON clients
+WHEN NEW.company_id<>OLD.company_id BEGIN SELECT RAISE(ABORT,'Client company is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS loans_client_immutable BEFORE UPDATE OF client_id ON loans
 WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END;
 
@@ -217,29 +220,3 @@ CREATE INDEX IF NOT EXISTS idx_auth_audit_subject ON auth_audit_logs(subject_id)
 CREATE INDEX IF NOT EXISTS idx_clients_created_by ON clients(created_by);
 CREATE INDEX IF NOT EXISTS idx_loans_created_by ON loans(created_by);
 CREATE INDEX IF NOT EXISTS idx_payments_created_by ON payments(created_by);
-
-CREATE INDEX IF NOT EXISTS idx_loans_company ON loans(company_id, status);
-
-CREATE TRIGGER IF NOT EXISTS clients_cpf_insert BEFORE INSERT ON clients
-WHEN NEW.cpf IS NOT NULL AND EXISTS(SELECT 1 FROM clients WHERE cpf=NEW.cpf)
-BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: clients.cpf'); END;
-CREATE TRIGGER IF NOT EXISTS clients_cpf_update BEFORE UPDATE OF cpf ON clients
-WHEN NEW.cpf IS NOT OLD.cpf AND EXISTS(SELECT 1 FROM clients WHERE cpf=NEW.cpf AND id<>OLD.id)
-BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: clients.cpf'); END;
-CREATE INDEX IF NOT EXISTS idx_clients_cpf ON clients(cpf);
-
-CREATE TRIGGER IF NOT EXISTS clients_rg_insert BEFORE INSERT ON clients
-WHEN NEW.rg IS NOT NULL AND EXISTS(SELECT 1 FROM clients WHERE rg=NEW.rg)
-BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: clients.rg'); END;
-CREATE TRIGGER IF NOT EXISTS clients_rg_update BEFORE UPDATE OF rg ON clients
-WHEN NEW.rg IS NOT OLD.rg AND EXISTS(SELECT 1 FROM clients WHERE rg=NEW.rg AND id<>OLD.id)
-BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: clients.rg'); END;
-CREATE INDEX IF NOT EXISTS idx_clients_rg ON clients(rg);
-
-CREATE TRIGGER IF NOT EXISTS clients_cnh_insert BEFORE INSERT ON clients
-WHEN NEW.cnh IS NOT NULL AND EXISTS(SELECT 1 FROM clients WHERE cnh=NEW.cnh)
-BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: clients.cnh'); END;
-CREATE TRIGGER IF NOT EXISTS clients_cnh_update BEFORE UPDATE OF cnh ON clients
-WHEN NEW.cnh IS NOT OLD.cnh AND EXISTS(SELECT 1 FROM clients WHERE cnh=NEW.cnh AND id<>OLD.id)
-BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: clients.cnh'); END;
-CREATE INDEX IF NOT EXISTS idx_clients_cnh ON clients(cnh);

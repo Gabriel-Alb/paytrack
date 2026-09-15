@@ -23,7 +23,7 @@ export async function seedDevelopment() {
       ];
       let created = 0;
       for (const [index, example] of examples.entries()) {
-        if ((await database().prepare('SELECT id FROM clients WHERE company_id=1 AND cpf=?').get(example.cpf))) continue;
+        if ((await database().prepare('SELECT id FROM clients WHERE cpf=?').get(example.cpf))) continue;
         const client = (await createClient(
           clientSchema.parse({
             name: example.name,
@@ -37,6 +37,7 @@ export async function seedDevelopment() {
         if (example.noLoan) continue;
         const loan = (await createLoan(
           loanSchema.parse({
+            company_id: 1,
             client_id: client.id,
             principal_amount: 30000,
             interest_percentage: '10',
