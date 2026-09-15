@@ -2,7 +2,7 @@ import { beforeEach, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { openDatabase, closeDatabase, database } from '../src/config/database.js';
+import { openDatabase, closeDatabase, database } from './database-helper.js';
 import { newSession } from '../src/modules/auth/auth.service.js';
 import { insertUser } from '../src/modules/auth/auth.repository.js';
 import { replaceUserCompanies } from '../src/modules/companies/companies.repository.js';
@@ -12,14 +12,14 @@ import { authConfig } from '../src/config/auth.js';
 import { today, addDays } from '../src/shared/utils/dates.js';
 
 let admin, a, b, both;
-function account(role, companies=[]) {
-  const id=insertUser({name:`Pessoa ${Math.random()}`,email:`${Math.random()}@example.test`,cpf:null,passwordHash:'offline-test'},role,'active');
-  replaceUserCompanies(id,companies);
-  const session=newSession(id);
+async function account(role, companies=[]) {
+  const id=(await insertUser({name:`Pessoa ${Math.random()}`,email:`${Math.random()}@example.test`,cpf:null,passwordHash:'offline-test'},role,'active'));
+  (await replaceUserCompanies(id,companies));
+  const session=(await newSession(id));
   const api=request.agent(app).set('Cookie',`${authConfig.cookieName}=${session.token}`).set('Origin',env.FRONTEND_ORIGIN).set('X-CSRF-Token',session.csrfToken);
   return {id,api};
 }
-beforeEach(() => {openDatabase(':memory:'); admin=account('admin'); a=account('user',[1]); b=account('user',[2]); both=account('user',[1,2]);});
+beforeEach(async () => {(await openDatabase(':memory:')); admin=(await account('admin')); a=(await account('user',[1])); b=(await account('user',[2])); both=(await account('user',[1,2]));});
 afterEach(closeDatabase);
 const clientBody={name:'Cliente isolado',cpf:'52998224725'};
 async function create(api,company_id,name='Cliente isolado') {
@@ -28,7 +28,7 @@ async function create(api,company_id,name='Cliente isolado') {
     loan_date:addDays(today(),-10),first_due_date:addDays(today(),-2),late_fee_per_day:100}).expect(201)).body;
   return {client,loan};
 }
-const snapshot=()=>['clients','loans','installments','payments','late_fees'].map(table=>database().prepare(`SELECT * FROM ${table}`).all());
+const snapshot=async ()=>(await Promise.all(['clients','loans','installments','payments','late_fees'].map(async table=>(await database().prepare(`SELECT * FROM ${table}`).all()))));
 
 test('empresas dinâmicas, múltiplos vínculos, filtros e documentos únicos por empresa',async()=>{
   const first=await create(a.api,undefined,'Empresa A'),second=await create(b.api,undefined,'Empresa B');
@@ -55,7 +55,7 @@ test('empresas dinâmicas, múltiplos vínculos, filtros e documentos únicos po
 
 test('IDs de outra empresa não permitem ler, editar, pagar, corrigir ou consultar multas',async()=>{
   const {client,loan}=await create(b.api);
-  const before=snapshot(), installment=loan.installments[0], fee=installment.late_fee_id;
+  const before=(await snapshot()), installment=loan.installments[0], fee=installment.late_fee_id;
   for(const path of [`clients/${client.id}`,`loans/${loan.id}`,`loans/${loan.id}/installments`,`late-fees/${fee}`]) await a.api.get(`/api/${path}`).expect(404);
   await a.api.patch(`/api/clients/${client.id}`).send({name:'Invadido'}).expect(404);
   await a.api.put(`/api/clients/${client.id}`).send({status:'negativado'}).expect(404);
@@ -69,7 +69,7 @@ test('IDs de outra empresa não permitem ler, editar, pagar, corrigir ou consult
   await a.api.post('/api/loans').send({company_id:1,client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(404);
   await both.api.post('/api/loans').send({company_id:1,client_id:client.id,principal_amount:100,installment_count:1,loan_date:today(),first_due_date:today()}).expect(400);
   await admin.api.patch(`/api/clients/${client.id}`).send({company_id:1}).expect(400);
-  assert.deepEqual(snapshot(),before);
+  assert.deepEqual((await snapshot()),before);
 });
 
 test('dashboard, relatórios, notificações e históricos incluem somente empresas permitidas',async()=>{
@@ -87,11 +87,11 @@ test('dashboard, relatórios, notificações e históricos incluem somente empre
 
 test('aprovação valida empresas; mudanças de empresa e papel valem na sessão existente',async()=>{
   const {client}=await create(b.api);
-  const pending=insertUser({name:'Pendente',email:'pending@example.test',cpf:null,passwordHash:'offline'},'user','pending');
+  const pending=(await insertUser({name:'Pendente',email:'pending@example.test',cpf:null,passwordHash:'offline'},'user','pending'));
   for(const body of [{action:'approve'},{action:'approve',role:'user',companyIds:[]},{action:'approve',role:'user',companyIds:[999]},{action:'approve',role:'master'}])
     await admin.api.patch(`/api/users/${pending}/access`).send(body).expect(400);
   await admin.api.patch(`/api/users/${pending}/access`).send({action:'approve',companyIds:[1,2]}).expect(200);
-  assert.equal(database().prepare('SELECT role FROM users WHERE id=?').get(pending).role,'user');
+  assert.equal((await database().prepare('SELECT role FROM users WHERE id=?').get(pending)).role,'user');
   await admin.api.patch(`/api/users/${both.id}/access`).send({action:'edit',role:'user',companyIds:[1]}).expect(200);
   await both.api.get(`/api/clients/${client.id}`).expect(404);
   await admin.api.patch(`/api/users/${both.id}/access`).send({action:'edit',role:'admin'}).expect(200);
@@ -106,10 +106,10 @@ test('aprovação valida empresas; mudanças de empresa e papel valem na sessão
 
 test('guardas de banco impedem mutações fora do escopo e contexto não vaza entre requisições',async()=>{
   const {client,loan}=await create(b.api);
-  withCompanyAccess({role:'user',companyIds:[1]},()=>{
-    assert.throws(()=>database().prepare('UPDATE clients SET name=? WHERE id=?').run('Invasão',client.id));
-    assert.throws(()=>database().prepare('DELETE FROM loans WHERE id=?').run(loan.id));
-    assert.throws(()=>database().prepare('INSERT INTO payments(installment_id,amount,payment_date) VALUES(?,100,?)').run(loan.installments[0].id,today()));
+  await withCompanyAccess({role:'user',companyIds:[1]},async ()=>{
+    (await assert.rejects(async ()=>(await database().prepare('UPDATE clients SET name=? WHERE id=?').run('Invasão',client.id))));
+    (await assert.rejects(async ()=>(await database().prepare('DELETE FROM loans WHERE id=?').run(loan.id))));
+    (await assert.rejects(async ()=>(await database().prepare('INSERT INTO payments(installment_id,amount,payment_date) VALUES(?,100,?)').run(loan.installments[0].id,today()))));
   });
   const results=await Promise.all(Array.from({length:12},(_,i)=>(i%2 ? b.api : a.api).get('/api/clients')));
   results.forEach((result,i)=>assert.equal(result.body.total,i%2 ? 1 : 0));
