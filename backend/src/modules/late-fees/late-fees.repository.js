@@ -1,5 +1,4 @@
-import { database } from "../../config/database.js";
+import { repository } from '../../application/persistence.js';
 
-export function findFee(id) {
-  return database().prepare("SELECT * FROM scoped_late_fees WHERE id=?").get(id);
-}
+// Asynchronous repository contract; implementations are supplied at bootstrap.
+export const findFee = (...args) => repository('late-fees').findFee(...args);

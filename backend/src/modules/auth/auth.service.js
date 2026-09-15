@@ -18,41 +18,41 @@ export async function verifyPassword(hash,password) {
 }
 import { userCompanies, replaceUserCompanies } from '../companies/companies.repository.js';
 
-export const safeUser = (user) => {
-  const companies = userCompanies(user.id);
+export const safeUser = async (user) => {
+  const companies = (await userCompanies(user.id));
   return {id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status,companies,companyIds:companies.map(company=>company.id)};
 };
-export const profileUser = (user) => ({...safeUser(user),cpf:user.cpf,rg:user.rg});
-export function updateProfile(user,input) {
+export const profileUser = async (user) => ({...(await safeUser(user)),cpf:user.cpf,rg:user.rg});
+export async function updateProfile(user,input) {
   const {email} = profileSchema.parse(input);
   let result;
   try {
-    result = repo.atomic(() => {
-      repo.saveEmail(user.id,email);
-      repo.audit('profile_updated',user.id,user.id);
-      return profileUser(repo.byId(user.id));
-    });
+    result = (await repo.atomic(async () => {
+      (await repo.saveEmail(user.id,email));
+      (await repo.audit('profile_updated',user.id,user.id));
+      return (await profileUser((await repo.byId(user.id))));
+    }));
   } catch (error) {
-    if (error.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error;
+    if (error.code !== 'PERSISTENCE_UNIQUE') throw error;
     throw new AppError(409,'EMAIL_CONFLICT','Este e-mail já está cadastrado.');
   }
   notifyAccessChanged();
   return result;
 }
 const invalidCredentials = () => new AppError(401,'INVALID_CREDENTIALS','E-mail ou senha inválidos.');
-export function newSession(userId=null) {
+export async function newSession(userId=null) {
   const token = randomBytes(32).toString('base64url');
   const csrfToken = randomBytes(32).toString('base64url');
   const now = Date.now();
-  repo.insertSession({userId,tokenHash:hashToken(token),csrfToken,now,expiresAt:now+(userId ? authConfig.absoluteMs : authConfig.anonymousMs)});
+  (await repo.insertSession({userId,tokenHash:hashToken(token),csrfToken,now,expiresAt:now+(userId ? authConfig.absoluteMs : authConfig.anonymousMs)}));
   return {token,csrfToken};
 }
-export function resolveSession(token) {
+export async function resolveSession(token) {
   if (!token || !/^[\w-]{43}$/.test(token)) return null;
-  const session = repo.sessionByHash(hashToken(token));
+  const session = (await repo.sessionByHash(hashToken(token)));
   const now = Date.now();
   if (!session || session.revoked_at || session.expires_at<=now || session.last_seen_at+authConfig.idleMs<=now) return null;
-  const user = session.user_id ? repo.byId(session.user_id) : null;
+  const user = session.user_id ? (await repo.byId(session.user_id)) : null;
   if (session.user_id && user?.access_status!=='active') return null;
   return {session,user};
 }
@@ -62,92 +62,92 @@ export function validCsrf(session, token) {
 export async function requestAccess(data) {
   const passwordHash = await hashPassword(data.password);
   try {
-    repo.atomic(() => {
-      const id = repo.insertUser({...data,passwordHash},'user','pending');
-      repo.audit('access_requested',null,id);
-    });
+    (await repo.atomic(async () => {
+      const id = (await repo.insertUser({...data,passwordHash},'user','pending'));
+      (await repo.audit('access_requested',null,id));
+    }));
   } catch (error) {
-    if (error.code!=='SQLITE_CONSTRAINT_UNIQUE') throw error;
+    if (error.code!=='PERSISTENCE_UNIQUE') throw error;
     throw new AppError(409,'ACCESS_REQUEST_CONFLICT','Não foi possível registrar a solicitação: e-mail ou documento já cadastrado. Confira seus dados ou entre em contato com o administrador.');
   }
   notifyAccessChanged();
 }
 export async function createMaster(input) {
   const data = requestSchema.parse(input);
-  if (repo.hasMaster()) throw new AppError(409,'MASTER_EXISTS','Já existe um administrador.');
+  if ((await repo.hasMaster())) throw new AppError(409,'MASTER_EXISTS','Já existe um administrador.');
   const passwordHash = await hashPassword(data.password);
-  return repo.atomic(() => {
-    if (repo.hasMaster()) throw new AppError(409,'MASTER_EXISTS','Já existe um administrador.');
-    const id = repo.insertUser({...data,passwordHash},'admin','active');
-    repo.audit('admin_created',id,id);
-    return safeUser(repo.byId(id));
-  });
+  return (await repo.atomic(async () => {
+    if ((await repo.hasMaster())) throw new AppError(409,'MASTER_EXISTS','Já existe um administrador.');
+    const id = (await repo.insertUser({...data,passwordHash},'admin','active'));
+    (await repo.audit('admin_created',id,id));
+    return (await safeUser((await repo.byId(id))));
+  }));
 }
 export async function login(data,oldSession) {
-  const user = repo.byEmail(data.email);
+  const user = (await repo.byEmail(data.email));
   if (!await verifyPassword(user?.password_hash,data.password)) {
-    repo.audit('login_failure');
+    (await repo.audit('login_failure'));
     throw invalidCredentials();
   }
-  return repo.atomic(() => {
-    const current = repo.byId(user.id);
+  return (await repo.atomic(async () => {
+    const current = (await repo.byId(user.id));
     if (current.password_hash!==user.password_hash) throw invalidCredentials();
     const messages = {pending:'Sua solicitação ainda está aguardando aprovação.',rejected:'Sua solicitação de acesso foi rejeitada.',blocked:'Seu acesso está bloqueado.'};
     if (current.access_status!=='active') {
-      repo.audit('login_failure',null,user.id);
+      (await repo.audit('login_failure',null,user.id));
       return {denied:new AppError(403,`ACCESS_${current.access_status.toUpperCase()}`,messages[current.access_status])};
     }
-    if (oldSession) repo.revoke(oldSession.id);
-    const session = newSession(user.id);
-    repo.lastLogin(user.id);
-    repo.audit('login_success',user.id,user.id);
-    return {...session,user:safeUser(current)};
-  });
+    if (oldSession) (await repo.revoke(oldSession.id));
+    const session = (await newSession(user.id));
+    (await repo.lastLogin(user.id));
+    (await repo.audit('login_success',user.id,user.id));
+    return {...session,user:(await safeUser(current))};
+  }));
 }
-export function logout(session,user,all=false) {
-  repo.atomic(() => {
-    if (all) repo.revokeAll(user.id); else repo.revoke(session.id);
-    repo.audit(all ? 'sessions_revoked' : 'logout',user.id,user.id);
-  });
+export async function logout(session,user,all=false) {
+  (await repo.atomic(async () => {
+    if (all) (await repo.revokeAll(user.id)); else (await repo.revoke(session.id));
+    (await repo.audit(all ? 'sessions_revoked' : 'logout',user.id,user.id));
+  }));
 }
 export async function changePassword(user,session,data) {
-  const original = repo.byId(user.id);
+  const original = (await repo.byId(user.id));
   if (!await verifyPassword(original.password_hash,data.currentPassword)) throw invalidCredentials();
   const hash = await hashPassword(data.newPassword);
-  repo.atomic(() => {
-    const current = repo.byId(user.id);
-    const currentSession = repo.sessionByHash(session.token_hash);
+  (await repo.atomic(async () => {
+    const current = (await repo.byId(user.id));
+    const currentSession = (await repo.sessionByHash(session.token_hash));
     if (current.password_hash!==original.password_hash || current.access_status!=='active' || !currentSession || currentSession.revoked_at || currentSession.expires_at<=Date.now() || currentSession.last_seen_at+authConfig.idleMs<=Date.now())
       throw new AppError(401,'UNAUTHENTICATED','Entre novamente para continuar.');
-    repo.savePassword(user.id,hash);
-    repo.revokeAll(user.id);
-    repo.audit('password_changed',user.id,user.id);
-    repo.audit('sessions_revoked',user.id,user.id);
-  });
+    (await repo.savePassword(user.id,hash));
+    (await repo.revokeAll(user.id));
+    (await repo.audit('password_changed',user.id,user.id));
+    (await repo.audit('sessions_revoked',user.id,user.id));
+  }));
 }
-export function reviewUser(id) {
-  const user = requireRecord(repo.byId(id),'Usuário');
-  return {...safeUser(user),cpf:user.cpf,rg:user.rg,cnh:user.cnh,createdAt:user.created_at};
+export async function reviewUser(id) {
+  const user = requireRecord((await repo.byId(id)),'Usuário');
+  return {...(await safeUser(user)),cpf:user.cpf,rg:user.rg,cnh:user.cnh,createdAt:user.created_at};
 }
-export function changeAccess(actor,id,input) {
+export async function changeAccess(actor,id,input) {
   if (actor.role !== 'admin') throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
   const {action,role,companyIds} = accessSchema.parse(input);
-  const result = repo.atomic(() => {
-    const user = requireRecord(repo.byId(id),'Usuário');
+  const result = (await repo.atomic(async () => {
+    const user = requireRecord((await repo.byId(id)),'Usuário');
     const expected = {approve:'pending',reject:'pending',block:'active',unblock:'blocked'}[action];
     if (action === 'edit' ? !['active','blocked'].includes(user.access_status) : user.access_status!==expected) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
     if (user.id===actor.id) throw new AppError(409,'SELF_ACCESS_CHANGE','Não é possível alterar o próprio acesso.');
-    if (user.role === 'admin' && user.access_status === 'active' && (action === 'block' || (action === 'edit' && role === 'user')) && !repo.hasOtherActiveAdmin(id))
+    if (user.role === 'admin' && user.access_status === 'active' && (action === 'block' || (action === 'edit' && role === 'user')) && !(await repo.hasOtherActiveAdmin(id)))
       throw new AppError(409,'LAST_ADMIN','Mantenha pelo menos um administrador ativo.');
-    if (action === 'approve' || action === 'edit') replaceUserCompanies(id, companyIds);
-    if (action === 'unblock' && user.role === 'user' && !userCompanies(id).length)
+    if (action === 'approve' || action === 'edit') (await replaceUserCompanies(id, companyIds));
+    if (action === 'unblock' && user.role === 'user' && !(await userCompanies(id)).length)
       throw new AppError(400,'COMPANY_REQUIRED','Vincule pelo menos uma empresa antes de desbloquear.');
-    repo.setAccess(id,action,actor.id,role);
-    if (action !== 'edit') repo.revokeAll(id);
-    repo.audit({edit:'access_updated',approve:'access_approved',reject:'access_rejected',block:'user_blocked',unblock:'user_unblocked'}[action],actor.id,id);
-    if (action !== 'edit') repo.audit('sessions_revoked',actor.id,id);
-    return safeUser(repo.byId(id));
-  });
+    (await repo.setAccess(id,action,actor.id,role));
+    if (action !== 'edit') (await repo.revokeAll(id));
+    (await repo.audit({edit:'access_updated',approve:'access_approved',reject:'access_rejected',block:'user_blocked',unblock:'user_unblocked'}[action],actor.id,id));
+    if (action !== 'edit') (await repo.audit('sessions_revoked',actor.id,id));
+    return (await safeUser((await repo.byId(id))));
+  }));
   notifyAccessChanged();
   return result;
 }

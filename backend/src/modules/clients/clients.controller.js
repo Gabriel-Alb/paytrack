@@ -7,17 +7,17 @@ import {
 } from "./clients.validator.js";
 import { idSchema } from "../../shared/utils/validation.js";
 
-export const list = (req, res) =>
-  res.json(readFinancial(() => service.listClients(clientListSchema.parse(req.query))));
-export const get = (req, res) =>
-  res.json(readFinancial(() => service.getClient(idSchema.parse(req.params.id))));
-export const create = (req, res) =>
-  res.status(201).json(service.createClient(clientSchema.parse(req.body),req.user));
-export const update = (req, res) =>
+export const list = async (req, res) =>
+  res.json((await readFinancial(async () => (await service.listClients(clientListSchema.parse(req.query))))));
+export const get = async (req, res) =>
+  res.json((await readFinancial(async () => (await service.getClient(idSchema.parse(req.params.id))))));
+export const create = async (req, res) =>
+  res.status(201).json((await service.createClient(clientSchema.parse(req.body),req.user)));
+export const update = async (req, res) =>
   res.json(
-    service.updateClient(
+    (await service.updateClient(
       idSchema.parse(req.params.id),
       clientPatchSchema.parse(req.body),
       req.user,
-    ),
+    )),
   );

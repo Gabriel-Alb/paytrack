@@ -1,4 +1,4 @@
-import { database } from "../../config/database.js";
+import { unitOfWork } from '../../application/persistence.js';
 import { requireRecord, conflict } from "../../shared/errors/AppError.js";
 import { refreshFinancialState } from "../installments/installments.service.js";
 import { findInstallment } from "../installments/installments.repository.js";
@@ -15,17 +15,16 @@ import {
 import { findFee } from "./late-fees.repository.js";
 import { daysLate } from "../../shared/utils/dates.js";
 
-export function getFee(id) {
-  refreshFinancialState();
-  return requireRecord(findFee(id), "Multa");
+export async function getFee(id) {
+  (await refreshFinancialState());
+  return requireRecord((await findFee(id)), "Multa");
 }
 
-export function payFee(id, data, actor) {
-  return database()
-    .transaction(() => {
-      const fee = getFee(id);
-      const installment = findInstallment(fee.installment_id);
-      const loan = getLoan(installment.loan_id);
+export async function payFee(id, data, actor) {
+  return (await unitOfWork(async () => {
+      const fee = (await getFee(id));
+      const installment = (await findInstallment(fee.installment_id));
+      const loan = (await getLoan(installment.loan_id));
       assertRevision(loan, data.revision);
       assertPayable(loan);
       validatePaymentDate(data.payment_date, loan.loan_date);
@@ -36,7 +35,7 @@ export function payFee(id, data, actor) {
             ? installment.paid_at
             : data.payment_date,
         ) * loan.late_fee_per_day;
-      const previousDate = lastPaymentDate(installment.id);
+      const previousDate = (await lastPaymentDate(installment.id));
       if (previousDate && data.payment_date < previousDate)
         conflict(
           "PAYMENT_DATE_CONFLICT",
@@ -51,15 +50,14 @@ export function payFee(id, data, actor) {
           "O pagamento excede o saldo da multa na data informada.",
         );
       }
-      insertPayment({
+      (await insertPayment({
         ...data,
         installment_id: installment.id,
         amount: 0,
         late_fee_amount: data.amount,
-      },actor);
-      refreshFinancialState(loan.id);
-      bumpRevision(loan.id);
-      return { fee: getFee(id), loan: getLoan(loan.id) };
-    })
-    .immediate();
+      },actor));
+      (await refreshFinancialState(loan.id));
+      (await bumpRevision(loan.id));
+      return { fee: (await getFee(id)), loan: (await getLoan(loan.id)) };
+    }));
 }

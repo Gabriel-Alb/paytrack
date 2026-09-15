@@ -9,26 +9,26 @@ function variation(current, previous) {
   return previous ? ((current - previous) / previous) * 100 : null;
 }
 
-export function dashboard() {
-  refreshFinancialState();
+export async function dashboard() {
+  (await refreshFinancialState());
   const date = today();
   const monthStart = date.slice(0, 7) + "-01";
   const previousEnd = addDays(monthStart, -1);
   const previousStart = previousEnd.slice(0, 7) + "-01";
-  const portfolio = repository.portfolioAt(date);
-  const receipts = repository.receipts(monthStart, date);
-  const status = repository.portfolioStatus(date, env.ATTENTION_DAYS);
-  const days = repository.receiptDays(addDays(date, -6), date);
+  const portfolio = (await repository.portfolioAt(date));
+  const receipts = (await repository.receipts(monthStart, date));
+  const status = (await repository.portfolioStatus(date, env.ATTENTION_DAYS));
+  const days = (await repository.receiptDays(addDays(date, -6), date));
   return {
     today: date,
     portfolio,
     active_loans: status.total,
-    portfolio_change: variation(portfolio, repository.portfolioAt(previousEnd)),
+    portfolio_change: variation(portfolio, (await repository.portfolioAt(previousEnd))),
     received: receipts.amount,
     payment_count: receipts.count,
     received_change: variation(
       receipts.amount,
-      repository.receipts(previousStart, previousEnd).amount,
+      (await repository.receipts(previousStart, previousEnd)).amount,
     ),
     portfolio_status: status,
     receipt_chart: Array.from({ length: 7 }, (_, index) => {
@@ -38,15 +38,15 @@ export function dashboard() {
         value: days.find((item) => item.date === day)?.value ?? 0,
       };
     }),
-    upcoming: repository.upcoming(date),
+    upcoming: (await repository.upcoming(date)),
   };
 }
 
-export function report(query) {
-  refreshFinancialState();
-  if (query.mode === "month") return monthlyReport(query);
-  const result = repository.report(pagination(query), today());
-  const receipts = repository.receiptDays(query.start, query.end);
+export async function report(query) {
+  (await refreshFinancialState());
+  if (query.mode === "month") return (await monthlyReport(query));
+  const result = (await repository.report(pagination(query), today()));
+  const receipts = (await repository.receiptDays(query.start, query.end));
   const chart = [];
   const groupSize = 1;
   for (
@@ -69,9 +69,9 @@ export function report(query) {
   return { ...result, chart, page: query.page, limit: query.limit };
 }
 
-function monthlyReport({ start, end }) {
+async function monthlyReport({ start, end }) {
   const date = today();
-  const { installments, contracts, cash } = repository.monthlyReport(start, end, date);
+  const { installments, contracts, cash } = (await repository.monthlyReport(start, end, date));
   const summary = { capital: 0, ...cash, pending: 0, expectedProfit: 0 };
   for (const contract of contracts) summary.capital += contract.amount;
   const agenda = new Map();
@@ -99,7 +99,7 @@ function monthlyReport({ start, end }) {
     if (row.pending && !due.representative.pending) due.representative = row;
     dueByContract.set(row.contractId, due);
   }
-  const contractStatuses = loansDueInPeriod(start, end, date).map((loan) => {
+  const contractStatuses = (await loansDueInPeriod(start, end, date)).map((loan) => {
     const due = dueByContract.get(loan.id);
     return {
       id: loan.id, client: loan.client_name,
@@ -113,15 +113,15 @@ function monthlyReport({ start, end }) {
     agenda: [...agenda.values()].map((day) => ({
       ...day, status: day.status === 'on-time' && day.pending > 0 && day.date > date ? 'pending' : day.status,
     })),
-    receiptDays: repository.receiptDays(start, end),
+    receiptDays: (await repository.receiptDays(start, end)),
   };
 }
 
-export function notifications(includeActivity = false) {
-  refreshFinancialState();
-  const items = repository.notifications(today(),includeActivity);
+export async function notifications(includeActivity = false) {
+  (await refreshFinancialState());
+  const items = (await repository.notifications(today(),includeActivity));
   if (!includeActivity) return items;
   const timestamp = (value) => Date.parse(value.includes('T') ? value : value.replace(' ','T')+'Z');
-  return [...repository.actionNotifications(),...items]
+  return [...(await repository.actionNotifications()),...items]
     .sort((a,b) => timestamp(b.datetime)-timestamp(a.datetime)).slice(0,100);
 }
