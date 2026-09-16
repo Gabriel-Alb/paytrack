@@ -1,0 +1,134 @@
+name: paytrack
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-api: &api
+  image: ${BACKEND_IMAGE:-paytrack-backend}:${IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  init: true
+  user: node
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+  environment: &api-env
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: "3000"
+    DATABASE_CLIENT: postgres
+    DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL}
+    DATABASE_SSL: ${DATABASE_SSL:-disable}
+    DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-5}
+    DATABASE_CONNECT_TIMEOUT_MS: ${DATABASE_CONNECT_TIMEOUT_MS:-5000}
+    DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+    DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-30000}
+    FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Defina a origem HTTPS}
+    TRUST_PROXY: loopback,172.30.0.2/32
+    COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-strict}
+    SESSION_MAX_AGE: ${SESSION_MAX_AGE:-86400}
+    SESSION_IDLE_AGE: ${SESSION_IDLE_AGE:-7200}
+    AUTH_WINDOW_MS: ${AUTH_WINDOW_MS:-900000}
+    AUTH_LOGIN_IP_LIMIT: ${AUTH_LOGIN_IP_LIMIT:-30}
+    AUTH_LOGIN_ACCOUNT_LIMIT: ${AUTH_LOGIN_ACCOUNT_LIMIT:-10}
+    AUTH_REQUEST_IP_LIMIT: ${AUTH_REQUEST_IP_LIMIT:-5}
+    TIME_ZONE: ${TIME_ZONE:-America/Sao_Paulo}
+    ATTENTION_DAYS: ${ATTENTION_DAYS:-2}
+  networks: [database]
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    user: postgres
+    command: [postgres, -c, log_statement=none, -c, log_min_error_statement=panic, -c, log_error_verbosity=terse, -c, log_parameter_max_length_on_error=0]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sh:/docker-entrypoint-initdb.d/90-paytrack-role.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+
+  migrate:
+    <<: *api
+    command: [node, database/migrate.js]
+    healthcheck:
+      disable: true
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    <<: *api
+    networks:
+      application:
+        ipv4_address: 172.30.0.3
+      database: {}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-paytrack-frontend}:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    environment:
+      API_UPSTREAM: backend:3000
+      TLS_PROXY_CIDR: ${TLS_PROXY_CIDR:-172.31.0.1/32}
+      NGINX_ENVSUBST_FILTER: '^(API_UPSTREAM|TLS_PROXY_CIDR)$$'
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+    networks:
+      edge:
+        ipv4_address: 172.31.0.2
+      application:
+        ipv4_address: 172.30.0.2
+    depends_on:
+      backend:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp, '/etc/nginx/conf.d:uid=101,gid=101,mode=0755']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 15s
+    logging: *logging
+
+networks:
+  edge:
+    ipam:
+      config: [{subnet: 172.31.0.0/24}]
+  application:
+    internal: true
+    ipam:
+      config: [{subnet: 172.30.0.0/24}]
+  database:
+    internal: true
+
+volumes:
+  postgres_data:

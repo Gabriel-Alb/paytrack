@@ -5,14 +5,14 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   server: {
     host: '0.0.0.0',
     proxy: { '/api': 'http://127.0.0.1:3000' },
   },
   plugins: [
     vue(),
-    vueDevTools(),
+    ...(command === 'serve' ? [vueDevTools()] : []),
     tailwindcss(),
   ],
 
@@ -21,4 +21,4 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-})
+}))

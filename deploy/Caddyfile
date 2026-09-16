@@ -1,0 +1,8 @@
+{
+    admin off
+    http_port 8081
+    https_port 8443
+}
+{$SITE_ADDRESS} {
+    reverse_proxy frontend:8080
+}
