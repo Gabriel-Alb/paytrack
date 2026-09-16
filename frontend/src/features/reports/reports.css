@@ -5,114 +5,722 @@
   color: #27272a;
   font-size: 12px;
 }
-.monthly-report button, .monthly-report select { font-size: inherit; }
-.report-dashboard, .report-main, .report-side, .report-bottom, .report-metrics { display: grid; gap: 12px; min-width: 0; }
-.report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.report-card { min-width: 0; padding: 16px; border: 1px solid rgb(0 0 0 / 6%); border-radius: 16px; background: #fff; }
-.report-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.report-card-header h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -.02em; }
-.report-label { display: block; font-size: 12px; font-weight: 500; color: var(--report-muted); }
-.report-caption { margin: 0; color: var(--report-muted); font-size: 11px; line-height: 1.5; }
-.report-card-header + .report-caption { margin-top: 4px; }
-.report-metric { display: flex; min-height: 112px; flex-direction: column; padding: 14px; }
-.report-metric-value { margin: 8px 0 0; font-size: clamp(18px, 1.65vw, 25px); line-height: 1.25; font-weight: 650; letter-spacing: -.045em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.report-metric-secondary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 5px; margin-top: auto; padding-top: 9px; font-size: 11px; color: var(--report-muted); }
-.report-metric-secondary strong { color: #52525b; font-weight: 500; font-variant-numeric: tabular-nums; }
-.report-period { background: #edf7ef; border-color: #1665340d; }
-.report-period .report-label { color: #166534; }
-.report-month-control { display: flex; position: relative; margin-top: 6px; align-items: center; }
-.report-month-control select { appearance: none; width: 100%; min-width: 0; padding: 4px 22px 4px 0; font-size: clamp(18px, 1.5vw, 23px); font-weight: 600; letter-spacing: -.03em; color: #166534; cursor: pointer; background: transparent; border: 0; border-radius: 4px; }
-.report-month-control option { font-size: 14px; color: #27272a; background: #fff; }
-.report-month-control svg { position: absolute; right: 0; width: 20px; height: 20px; color: #166534; pointer-events: none; }
-.report-week-switch { display: flex; align-items: center; flex-shrink: 0; gap: 4px; padding: 3px; border-radius: 8px; background: #f6f7f8; font-size: 11px; }
-.report-week-switch span { min-width: 85px; text-align: center; font-variant-numeric: tabular-nums; }
-.report-week-switch button { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; }
-.report-week-switch button:hover:not(:disabled) { background: #e8ece9; color: #166534; }
-.report-week-switch button:disabled { opacity: .3; cursor: default; }
-.report-week-switch svg { width: 18px; height: 18px; }
-.report-count { display: inline-grid; min-width: 24px; height: 24px; place-items: center; padding: 0 6px; background: #f4f4f5; color: #52525b; border-radius: 7px; font-size: 11px; font-weight: 600; }
-.report-contracts { display: flex; min-height: 0; flex-direction: column; }
-.report-list-scroll { min-height: 110px; max-height: 240px; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #d4d4d8 transparent; margin-top: 9px; }
-.report-list { margin: 0; padding: 0; list-style: none; }
-.report-list li { padding: 11px 0; border-bottom: 1px solid #f1f1f2; }
-.report-list li:last-child { border-bottom: 0; }
-.report-list-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
-.report-list-line + .report-list-line { margin-top: 4px; }
-.report-client { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
-.report-list-line strong { flex-shrink: 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.report-list-line > span { min-width: 0; }
-.report-list-line time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.report-paid { color: #166534; }
-.report-status-filter { display: grid; grid-template-columns: .8fr 1.4fr .9fr; gap: 2px; margin-top: 13px; padding: 3px; border-radius: 8px; background: #f6f7f8; }
-.report-status-filter button { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 7px 2px; border-radius: 6px; font-size: 10px; white-space: nowrap; color: #71717a; transition: background-color .15s, color .15s; }
-.report-status-filter button[aria-pressed="true"] { background: #fff; color: #27272a; box-shadow: 0 1px 3px #0000000a; }
-.report-status-dot { display: inline-block; flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--status-color); }
-.report-payments-panel { min-width: 0; min-height: 0; scroll-margin: 80px 0; border-radius: 16px; }
-.report-payments { height: 100%; }
-.report-payments .report-list-scroll { max-height: 335px; }
-.report-empty { display: flex; min-height: 105px; height: 100%; align-items: center; justify-content: center; padding: 16px 8px; margin: 0; color: #8b8b93; font-size: 12px; text-align: center; }
-.report-agenda-content { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-top: 13px; }
-.report-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; align-content: start; }
-.report-weekday { text-align: center; color: #a1a1aa; font-size: 10px; line-height: 20px; }
-.report-calendar button { position: relative; height: 26px; padding: 0 0 3px; border-radius: 6px; color: #71717a; font-size: 11px; font-variant-numeric: tabular-nums; transition: color .15s, background-color .15s; }
-.report-calendar button.has-dues { color: #27272a; font-weight: 600; }
-.report-calendar button:hover { background: #f0f4f1; }
-.report-calendar button[aria-current="date"] { box-shadow: inset 0 0 0 1px #16653444; }
-.report-calendar button[aria-pressed="true"] { background: #edf7ef; color: #166534; box-shadow: inset 0 0 0 1px #166534; }
-.report-calendar-dot { position: absolute; bottom: 3px; left: calc(50% - 2px); width: 4px; height: 4px; border-radius: 50%; }
-.report-day-summary { border-left: 1px solid #f0f1f2; padding-left: 12px; }
-.report-day-summary h3 { margin: 2px 0 4px; font-size: 12px; font-weight: 600; }
-.report-day-values { margin: 12px 0 0; }
-.report-day-values div + div { margin-top: 8px; }
-.report-day-values dt { color: #71717a; font-size: 10px; }
-.report-day-values dd { margin: 1px 0 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.report-day-counts { margin-top: 10px; font-size: 10px; }
-.report-day-empty { margin-top: 12px; }
-.report-calendar-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 12px; font-size: 9px; }
-.report-calendar-legend span { width: 4px; height: 4px; border-radius: 50%; margin-left: 3px; background: #a1a1aa; }
-.report-calendar-legend span:nth-of-type(2) { background: #166534; }
-.report-calendar-legend span:nth-of-type(3) { background: #d99732; }
-.report-calendar-legend span:nth-of-type(4) { background: #c24141; }
-.report-gauge { position: relative; width: min(100%, 245px); margin: 9px auto 0; }
-.report-gauge svg { display: block; width: 100%; overflow: visible; }
-.report-gauge path[role="button"] { cursor: pointer; opacity: .75; transition: opacity .18s; }
-.report-gauge path[role="button"]:hover, .report-gauge path.is-selected, .report-gauge path:focus-visible { opacity: 1; }
-.report-gauge-total { display: flex; position: absolute; right: 0; bottom: 8px; left: 0; align-items: center; flex-direction: column; pointer-events: none; }
-.report-gauge-total strong { font-size: 29px; font-weight: 600; line-height: 1.15; letter-spacing: -.045em; }
-.report-gauge-total span { margin-top: 3px; font-size: 10px; color: #71717a; }
-.report-distribution-legend { display: grid; grid-template-columns: .85fr 1.4fr .85fr; gap: 4px; margin-top: 8px; }
-.report-distribution-legend button { min-width: 0; padding: 5px 2px; border-radius: 7px; color: #71717a; text-align: center; }
-.report-distribution-legend button:hover, .report-distribution-legend button[aria-pressed="true"] { background: #f6f7f8; }
-.report-legend-label { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 10px; }
-.report-distribution-legend strong { display: block; margin-top: 3px; color: #27272a; font-size: 16px; font-weight: 600; }
-.report-distribution-empty { margin-top: 7px; text-align: center; font-size: 10px; }
-.monthly-report :focus-visible { outline: 2px solid #166534; outline-offset: 3px; }
+
+.monthly-report button,
+.monthly-report select {
+  font-size: inherit;
+}
+
+.report-dashboard,
+.report-bottom,
+.report-metrics {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.report-dashboard {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.report-metrics-row,
+.report-weekly-row,
+.report-contracts,
+.report-payments-panel {
+  min-width: 0;
+}
+
+.report-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.report-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgb(0 0 0 / 6%);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.report-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.report-card-header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+.report-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--report-muted);
+}
+
+.report-caption {
+  margin: 0;
+  color: var(--report-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.report-card-header + .report-caption {
+  margin-top: 4px;
+}
+
+.report-metric {
+  display: flex;
+  min-height: 112px;
+  flex-direction: column;
+  padding: 14px;
+}
+
+.report-metric-value {
+  margin: 8px 0 0;
+  font-size: clamp(18px, 1.65vw, 25px);
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.report-metric-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 5px;
+  margin-top: auto;
+  padding-top: 9px;
+  font-size: 11px;
+  color: var(--report-muted);
+}
+
+.report-metric-secondary strong {
+  color: #52525b;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-period {
+  background: #edf7ef;
+  border-color: #1665340d;
+}
+
+.report-period .report-label {
+  color: #166534;
+}
+
+.report-month-control {
+  display: flex;
+  position: relative;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.report-month-control select {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 22px 4px 0;
+  font-size: clamp(18px, 1.5vw, 23px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+  color: #166534;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+
+.report-month-control option {
+  font-size: 14px;
+  color: #27272a;
+  background: #fff;
+}
+
+.report-month-control svg {
+  position: absolute;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  color: #166534;
+  pointer-events: none;
+}
+
+.report-week-switch {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #f6f7f8;
+  font-size: 11px;
+}
+
+.report-week-switch span {
+  min-width: 85px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-week-switch button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.report-week-switch button:hover:not(:disabled) {
+  background: #e8ece9;
+  color: #166534;
+}
+
+.report-week-switch button:disabled {
+  opacity: .3;
+  cursor: default;
+}
+
+.report-week-switch svg {
+  width: 18px;
+  height: 18px;
+}
+
+.report-count {
+  display: inline-grid;
+  min-width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0 6px;
+  background: #f4f4f5;
+  color: #52525b;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.report-contracts {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.report-list-scroll {
+  min-height: 110px;
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+  margin-top: 9px;
+}
+
+.report-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-list li {
+  padding: 11px 0;
+  border-bottom: 1px solid #f1f1f2;
+}
+
+.report-list li:last-child {
+  border-bottom: 0;
+}
+
+.report-list-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.report-list-line + .report-list-line {
+  margin-top: 4px;
+}
+
+.report-client {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+
+.report-list-line strong {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-list-line > span {
+  min-width: 0;
+}
+
+.report-list-line time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-paid {
+  color: #166534;
+}
+
+.report-status-filter {
+  display: grid;
+  grid-template-columns: .8fr 1.4fr .9fr;
+  gap: 2px;
+  margin-top: 13px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #f6f7f8;
+}
+
+.report-status-filter button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 2px;
+  border-radius: 6px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: #71717a;
+  transition: background-color .15s, color .15s;
+}
+
+.report-status-filter button[aria-pressed="true"] {
+  background: #fff;
+  color: #27272a;
+  box-shadow: 0 1px 3px #0000000a;
+}
+
+.report-status-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-color);
+}
+
+.report-payments-panel {
+  min-width: 0;
+  min-height: 0;
+  scroll-margin: 80px 0;
+  border-radius: 16px;
+}
+
+.report-payments {
+  height: 100%;
+}
+
+.report-payments-panel .report-contracts {
+  height: 100%;
+  min-height: 0;
+}
+
+.report-payments-panel .report-list-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.report-empty {
+  display: flex;
+  min-height: 105px;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 8px;
+  margin: 0;
+  color: #8b8b93;
+  font-size: 12px;
+  text-align: center;
+}
+
+.report-agenda-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 13px;
+}
+
+.report-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  align-content: start;
+}
+
+.report-weekday {
+  text-align: center;
+  color: #a1a1aa;
+  font-size: 10px;
+  line-height: 20px;
+}
+
+.report-calendar button {
+  position: relative;
+  height: 26px;
+  padding: 0 0 3px;
+  border-radius: 6px;
+  color: #71717a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: color .15s, background-color .15s;
+}
+
+.report-calendar button.has-dues {
+  color: #27272a;
+  font-weight: 600;
+}
+
+.report-calendar button:hover {
+  background: #f0f4f1;
+}
+
+.report-calendar button[aria-current="date"] {
+  box-shadow: inset 0 0 0 1px #16653444;
+}
+
+.report-calendar button[aria-pressed="true"] {
+  background: #edf7ef;
+  color: #166534;
+  box-shadow: inset 0 0 0 1px #166534;
+}
+
+.report-calendar-dot {
+  position: absolute;
+  bottom: 3px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.report-day-summary {
+  border-left: 1px solid #f0f1f2;
+  padding-left: 12px;
+}
+
+.report-day-summary h3 {
+  margin: 2px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.report-day-values {
+  margin: 12px 0 0;
+}
+
+.report-day-values div + div {
+  margin-top: 8px;
+}
+
+.report-day-values dt {
+  color: #71717a;
+  font-size: 10px;
+}
+
+.report-day-values dd {
+  margin: 1px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.report-day-counts {
+  margin-top: 10px;
+  font-size: 10px;
+}
+
+.report-day-empty {
+  margin-top: 12px;
+}
+
+.report-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  font-size: 9px;
+}
+
+.report-calendar-legend span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  margin-left: 3px;
+  background: #a1a1aa;
+}
+
+.report-calendar-legend span:nth-of-type(2) {
+  background: #166534;
+}
+
+.report-calendar-legend span:nth-of-type(3) {
+  background: #d99732;
+}
+
+.report-calendar-legend span:nth-of-type(4) {
+  background: #c24141;
+}
+
+.report-gauge {
+  position: relative;
+  width: min(100%, 245px);
+  margin: 9px auto 0;
+}
+
+.report-gauge svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.report-gauge path[role="button"] {
+  cursor: pointer;
+  opacity: .75;
+  transition: opacity .18s;
+}
+
+.report-gauge path[role="button"]:hover,
+.report-gauge path.is-selected,
+.report-gauge path:focus-visible {
+  opacity: 1;
+}
+
+.report-gauge-total {
+  display: flex;
+  position: absolute;
+  right: 0;
+  bottom: 8px;
+  left: 0;
+  align-items: center;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.report-gauge-total strong {
+  font-size: 29px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.045em;
+}
+
+.report-gauge-total span {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #71717a;
+}
+
+.report-distribution-legend {
+  display: grid;
+  grid-template-columns: .85fr 1.4fr .85fr;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.report-distribution-legend button {
+  min-width: 0;
+  padding: 5px 2px;
+  border-radius: 7px;
+  color: #71717a;
+  text-align: center;
+}
+
+.report-distribution-legend button:hover,
+.report-distribution-legend button[aria-pressed="true"] {
+  background: #f6f7f8;
+}
+
+.report-legend-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.report-distribution-legend strong {
+  display: block;
+  margin-top: 3px;
+  color: #27272a;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.report-distribution-empty {
+  margin-top: 7px;
+  text-align: center;
+  font-size: 10px;
+}
+
+.monthly-report :focus-visible {
+  outline: 2px solid #166534;
+  outline-offset: 3px;
+}
+
 @media (width < 700px) {
-  .report-main, .report-bottom, .report-side { display: contents; }
-  .report-main > .report-metrics { grid-row: 1; }
-  .report-main > .report-weekly { grid-row: 2; }
-  .report-bottom > .report-agenda { grid-row: 3; }
-  .report-side > .report-contracts { grid-row: 4; }
-  .report-bottom > .report-distribution { grid-row: 5; }
-  .report-side > .report-payments-panel { grid-row: 6; }
+  .report-bottom {
+    display: contents;
+  }
+
+  .report-metrics-row {
+    grid-row: 1;
+  }
+
+  .report-weekly-row {
+    grid-row: 2;
+  }
+
+  .report-bottom > .report-agenda {
+    grid-row: 3;
+  }
+
+  .report-contracts {
+    grid-row: 4;
+  }
+
+  .report-bottom > .report-distribution {
+    grid-row: 5;
+  }
+
+  .report-payments-panel {
+    grid-row: 6;
+  }
 }
+
 @media (min-width: 700px) {
-  .report-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .report-bottom { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
-  .report-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "metrics metrics"
+      "weekly weekly"
+      "bottom bottom"
+      "contracts payments";
+  }
+
+  .report-metrics-row {
+    grid-area: metrics;
+  }
+
+  .report-weekly-row {
+    grid-area: weekly;
+  }
+
+  .report-contracts {
+    grid-area: contracts;
+  }
+
+  .report-bottom {
+    grid-area: bottom;
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  }
+
+  .report-payments-panel {
+    grid-area: payments;
+    height: 280px;
+    min-height: 280px;
+    max-height: 280px;
+  }
+
+  .report-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
+
 @media (min-width: 1200px) {
-  .report-dashboard { grid-template-columns: minmax(0, 1fr) minmax(270px, 26%); align-items: stretch; }
-  .report-side { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, .38fr) minmax(0, .62fr); }
-  .report-contracts .report-list-scroll { flex: 1; height: 0; min-height: 0; max-height: none; }
+  .report-dashboard {
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 26%);
+    grid-template-areas:
+      "metrics metrics"
+      "weekly contracts"
+      "bottom payments";
+    align-items: stretch;
+  }
+
+  .report-metrics-row {
+    grid-area: metrics;
+  }
+
+  .report-weekly-row {
+    grid-area: weekly;
+    min-width: 0;
+  }
+
+  .report-weekly-row > * {
+    height: 100%;
+  }
+
+  .report-contracts-panel {
+    grid-area: contracts;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .report-contracts-panel > * {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .report-bottom {
+    grid-area: bottom;
+  }
+
+  .report-payments-panel {
+    grid-area: payments;
+    height: 280px;
+    min-height: 280px;
+    max-height: 280px;
+    align-self: start;
+  }
 }
+
 @media (max-width: 399px) {
-  .report-card { padding: 12px; }
-  .report-metric { padding: 11px; }
-  .report-metric-value { font-size: 18px; }
-  .report-agenda-content { gap: 8px; }
-  .report-day-summary { padding-left: 8px; }
+  .report-card {
+    padding: 12px;
+  }
+
+  .report-metric {
+    padding: 11px;
+  }
+
+  .report-metric-value {
+    font-size: 18px;
+  }
+
+  .report-agenda-content {
+    gap: 8px;
+  }
+
+  .report-day-summary {
+    padding-left: 8px;
+  }
 }
+
 @media (prefers-reduced-motion: reduce) {
-  .monthly-report *, .monthly-report *::before, .monthly-report *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  .monthly-report *,
+  .monthly-report *::before,
+  .monthly-report *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
 }

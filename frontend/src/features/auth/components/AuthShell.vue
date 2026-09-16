@@ -1,9 +1,9 @@
 <template>
   <main :class="[split
-      ? 'fixed inset-0 overflow-hidden bg-white text-[#18181b]'
-      : 'min-h-dvh bg-[#f6f7f8] text-[#18181b]',
-      extendMobileBackground && 'max-lg:z-10 max-lg:bg-transparent',
-    ]">
+    ? 'fixed inset-0 overflow-hidden bg-white text-[#18181b]'
+    : 'min-h-dvh bg-[#f6f7f8] text-[#18181b]',
+  extendMobileBackground && 'max-lg:z-10 max-lg:bg-transparent',
+  ]">
     <div v-if="split" class="grid h-full w-full overflow-hidden lg:grid-cols-[52%_48%]">
       <aside class="relative hidden h-full min-h-0 overflow-hidden bg-[#166534] lg:block">
         <img :src="backgroundImage" alt="" class="absolute inset-0 h-full w-full object-cover" />
@@ -17,10 +17,9 @@
         <div class="relative z-10 flex h-full min-h-0 flex-col justify-between p-8 xl:p-10 2xl:p-12">
           <div class="flex items-center gap-3">
             <div
-              class="flex size-10 items-center justify-center rounded-xl border border-white/20 bg-white/15 backdrop-blur-md">
-              <span class="text-sm font-bold text-white">
-                P
-              </span>
+              class="flex size-11 items-center justify-center overflow-hidden rounded-xl  bg-white/15 backdrop-blur-md">
+
+              <img :src="logo" alt="PayTrack" class="size-9 object-contain" />
             </div>
 
             <span class="text-lg font-semibold tracking-[-0.03em] text-white">
@@ -41,8 +40,8 @@
       </aside>
 
       <section class="relative h-full min-h-0 min-w-0 lg:bg-white" :class="mobileScrollable
-          ? 'overflow-y-auto overscroll-contain lg:overflow-hidden'
-          : 'overflow-hidden'
+        ? 'overflow-y-auto overscroll-contain lg:overflow-hidden'
+        : 'overflow-hidden'
         ">
         <Teleport to="body" :disabled="!extendMobileBackground">
           <div class="fixed inset-0 z-0 lg:hidden"
@@ -62,22 +61,22 @@
         <div
           class="relative z-10 flex min-h-full w-full justify-center px-4 lg:h-full lg:min-h-0 lg:items-center lg:px-14 xl:px-20"
           :class="mobileScrollable
-              ? 'items-start py-5 sm:py-7 lg:py-0'
-              : 'items-center py-0'
+            ? 'items-start py-5 sm:py-7 lg:py-0'
+            : 'items-center py-0'
             ">
           <div
             class="w-full rounded-[20px] bg-white shadow-[0_18px_50px_rgba(0,0,0,0.16)] lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none"
             :class="wide
-                ? 'max-w-[560px] px-5 py-6 sm:px-6 lg:max-w-[620px]'
-                : 'max-w-[330px] px-5 py-6 sm:max-w-[360px] sm:px-6 sm:py-7 lg:max-w-[390px]'
+              ? 'max-w-[560px] px-5 py-6 sm:px-6 lg:max-w-[620px]'
+              : 'max-w-[330px] px-5 py-6 sm:max-w-[360px] sm:px-6 sm:py-7 lg:max-w-[390px]'
               ">
             <div :class="wide
-                ? 'mb-5 lg:mb-6'
-                : 'mb-5 lg:mb-8'
+              ? 'mb-5 lg:mb-6'
+              : 'mb-5 lg:mb-8'
               ">
               <h1 class="font-semibold tracking-[-0.04em] text-[#18181b]" :class="wide
-                  ? 'text-[24px] lg:text-[30px]'
-                  : 'text-[25px] lg:text-[32px]'
+                ? 'text-[24px] lg:text-[30px]'
+                : 'text-[25px] lg:text-[32px]'
                 ">
                 {{ title }}
               </h1>
@@ -113,6 +112,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted } from 'vue'
 import backgroundImage from '@/assets/img/image.png'
+import logo from "@/assets/img/logo.png"
 
 const props = defineProps({
   title: {
