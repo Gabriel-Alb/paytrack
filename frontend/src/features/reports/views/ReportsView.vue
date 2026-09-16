@@ -1,32 +1,70 @@
 <template>
   <div class="monthly-report" :aria-busy="loading">
     <div class="report-dashboard">
-      <div class="report-main">
-        <ReportMetrics v-model="selectedMonth" :summary="data?.summary" :available="!!data" />
-
-        <ReportWeeklyPayments v-model="selectedWeek" :week-count="weeks.length" :items="chartItems" :loading="loading"
-          :available="!!data" />
-
-        <div class="report-bottom">
-          <ReportDueAgenda v-model="selectedDay" :days="days" :offset="calendarOffset" :summary="daySummary"
-            :loading="loading" :available="!!data" />
-
-          <ReportStatusDistribution :model-value="selectedStatus" :items="distribution" :loading="loading"
-            :available="!!data" @update:model-value="selectDistribution" />
-        </div>
+      <div class="report-metrics-row">
+        <ReportMetrics
+          v-model="selectedMonth"
+          :summary="data?.summary"
+          :available="!!data"
+        />
       </div>
 
-      <aside class="report-side" aria-label="Contratos do relatório">
-        <ReportContractList title="Contratos do mês" :items="data?.contracts" :total="data?.contracts.length ?? 0"
-          :loading="loading" :available="!!data" />
+      <div class="report-weekly-row">
+        <ReportWeeklyPayments
+          v-model="selectedWeek"
+          :week-count="weeks.length"
+          :items="chartItems"
+          :loading="loading"
+          :available="!!data"
+        />
+      </div>
 
-        <div ref="paymentsPanel" class="report-payments-panel !h-[280px] !min-h-[390px] !max-h-[280px] overflow-hidden"
-          tabindex="-1">
-          <ReportContractList v-model="selectedStatus" class="!h-full !min-h-full !max-h-full" payments
-            title="Pagamentos dos contratos" :items="filteredContracts" :total="filteredContracts.length"
-            :loading="loading" :available="!!data" />
-        </div>
-      </aside>
+      <div class="report-contracts-panel">
+        <ReportContractList
+          class="h-full"
+          title="Contratos do mês"
+          :items="data?.contracts"
+          :total="data?.contracts.length ?? 0"
+          :loading="loading"
+          :available="!!data"
+        />
+      </div>
+
+      <div class="report-bottom">
+        <ReportDueAgenda
+          v-model="selectedDay"
+          :days="days"
+          :offset="calendarOffset"
+          :summary="daySummary"
+          :loading="loading"
+          :available="!!data"
+        />
+
+        <ReportStatusDistribution
+          :model-value="selectedStatus"
+          :items="distribution"
+          :loading="loading"
+          :available="!!data"
+          @update:model-value="selectDistribution"
+        />
+      </div>
+
+      <div
+        ref="paymentsPanel"
+        class="report-payments-panel overflow-hidden !outline-none"
+        tabindex="-1"
+      >
+        <ReportContractList
+          v-model="selectedStatus"
+          class="!h-full !min-h-0 !max-h-full"
+          payments
+          title="Pagamentos dos contratos"
+          :items="filteredContracts"
+          :total="filteredContracts.length"
+          :loading="loading"
+          :available="!!data"
+        />
+      </div>
     </div>
   </div>
 </template>

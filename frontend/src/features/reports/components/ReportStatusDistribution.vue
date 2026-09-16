@@ -8,7 +8,7 @@
         <path v-for="segment in segments" :key="segment.key" :d="segment.path" fill="none"
           :stroke="segment.color" stroke-width="29" role="button" tabindex="0"
           :aria-label="`${segment.label}: ${segment.count} contratos`" :aria-pressed="modelValue === segment.key"
-          :class="{ 'is-selected': modelValue === segment.key }"
+          class="!outline-none focus-visible:[stroke-width:34]" :class="{ 'is-selected': modelValue === segment.key }"
           @click="$emit('update:modelValue', segment.key)" @keydown.enter="$emit('update:modelValue', segment.key)"
           @keydown.space.prevent="$emit('update:modelValue', segment.key)">
           <title>{{ segment.label }}: {{ segment.count }} contratos</title>
@@ -18,6 +18,7 @@
     </div>
     <div class="report-distribution-legend" role="group" aria-label="Filtrar lista por situação">
       <button v-for="status in items" :key="status.key" type="button" :aria-pressed="modelValue === status.key"
+        class="!outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:ring-inset"
         :style="{ '--status-color': status.color }" @click="$emit('update:modelValue', status.key)">
         <span class="report-legend-label"><span class="report-status-dot" />{{ status.label }}</span>
         <strong>{{ available ? status.count : '—' }}</strong>
