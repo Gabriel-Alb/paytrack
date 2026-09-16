@@ -36,3 +36,13 @@ test('ambiente de testes ignora .env local e política LAN continua restrita ao 
   assert.equal(policy.status,0,policy.stderr);
   assert.deepEqual(JSON.parse(policy.stdout),[true,true,false]);
 });
+
+test('proxy exige endereços explícitos e cross-site exige cookies Secure', () => {
+  for (const TRUST_PROXY of ['true', '1', '0.0.0.0/0', 'garbage', '10.1.1.1/33'])
+    assert.notEqual(configuration({ TRUST_PROXY }).status, 0);
+  const valid = configuration({ TRUST_PROXY: 'loopback,172.30.0.2/32', COOKIE_SAME_SITE: 'none' },
+    "const {cookieOptions}=await import('./src/config/auth.js'); console.log(JSON.stringify(cookieOptions))");
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.deepEqual(JSON.parse(valid.stdout), { httpOnly: true, secure: true, sameSite: 'none', path: '/' });
+  assert.notEqual(configuration({ NODE_ENV: 'development', COOKIE_SAME_SITE: 'none' }).status, 0);
+});

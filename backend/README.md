@@ -141,12 +141,12 @@ FRONTEND_ORIGIN=https://seu-dominio
 
 `DATABASE_SSL_CA` permite informar um arquivo PEM para CA privada. A validação do certificado permanece ativa. Use `DATABASE_SSL=disable` apenas quando TLS não for usado na conexão explicitamente configurada (por exemplo, PostgreSQL de teste em loopback). Não misture parâmetros SSL na URL. Sem `DATABASE_CLIENT`, produção seleciona PostgreSQL e desenvolvimento/teste selecionam SQLite. Produção recusa SQLite e caminhos como `:memory:`; URL ausente/inválida e configurações numéricas inválidas interrompem a inicialização. Não há fallback silencioso.
 
-`npm ci --omit=dev` instala o runtime de produção com `pg`; `better-sqlite3` é dependência de desenvolvimento e carregada dinamicamente somente pelo adapter SQLite. O banco PostgreSQL deve existir, e a credencial de implantação precisa criar tabelas, funções, views, triggers e índices no schema `public`. Não é necessária extensão nem credencial superuser. Após as migrations, um usuário de runtime pode receber privilégios de uso do schema, funções, sequências e DML nas tabelas; como o bootstrap verifica/cria a tabela de versões, o procedimento mais simples nesta versão é manter a mesma credencial de implantação, com acesso limitado ao banco PayTrack.
+`npm ci --omit=dev` instala o runtime de produção com `pg`; `better-sqlite3` é dependência de desenvolvimento e carregada dinamicamente somente pelo adapter SQLite. O banco PostgreSQL deve existir, e a credencial de implantação precisa criar tabelas, funções, views, triggers e índices no schema `public`. Não é necessária extensão nem credencial superuser. Após as migrations, um usuário de runtime pode receber privilégios de uso do schema, funções, sequências e DML nas tabelas, incluindo leitura de `schema_migrations`. O Compose usa uma credencial proprietária limitada ao banco PayTrack, sem superuser; o startup em produção apenas verifica versão e checksum.
 
 Comandos dentro de `backend`:
 
-- `npm run db:migrate`: aplica migrations e encerra; a inicialização da API também as aplica antes de aceitar requisições.
-- `npm run db:check`: inicializa/migra e verifica tabelas, versão, integridade/FKs do SQLite e constraints validadas no PostgreSQL.
+- `npm run migrate` / `npm run db:migrate`: aplica migrations e encerra. Execute antes da nova API em produção; o startup de produção apenas verifica versão e checksum. Desenvolvimento/testes mantêm migrations no startup.
+- `npm run db:check`: verifica tabelas, versão, integridade/FKs do SQLite e constraints validadas no PostgreSQL. Em produção não aplica migrations.
 - `npm run auth:create-master`: bootstrap interativo, sem senha padrão, válido nos dois bancos.
 - `npm run seed`: dados demonstrativos opcionais, idempotentes e recusados em produção, inclusive por chamada direta à função.
 

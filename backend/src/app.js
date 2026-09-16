@@ -15,11 +15,24 @@ import { loadSession,requireAuth,requireCsrf,trustedOrigin } from './modules/aut
 
 import { companyAccess } from './shared/middleware/company-access.js';
 import { companiesRoutes } from './modules/companies/companies.routes.js';
+import { database } from './config/database.js';
 
 export const app = express();
 app.disable("x-powered-by");
-if (env.TRUST_PROXY) app.set('trust proxy',env.TRUST_PROXY);
+if (env.TRUST_PROXY) app.set('trust proxy',env.TRUST_PROXY.split(','));
 app.use(helmet({strictTransportSecurity:env.NODE_ENV==='production' ? {maxAge:31536000} : false}));
+// Internal probes precede HTTPS enforcement; they disclose only availability.
+app.get('/health/live', (_req, res) => res.set('Cache-Control', 'no-store').json({ status: 'ok' }));
+app.get('/health/ready', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (app.locals.draining) throw new Error('Encerrando');
+    await database().prepare('SELECT 1 AS ready').get();
+    res.json({ status: 'ok' });
+  } catch {
+    res.status(503).json({ status: 'unavailable' });
+  }
+});
 app.use((req,res,next) => {
   res.set('Cache-Control','no-store');
   if (env.NODE_ENV==='production' && !req.secure)

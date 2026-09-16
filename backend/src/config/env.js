@@ -2,6 +2,17 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { z } from "zod";
+import { isIP } from 'node:net';
+
+function trustedProxies(value) {
+  return value.split(',').every(entry => {
+    if (entry === 'loopback') return true;
+    const [address, prefix, extra] = entry.split('/');
+    const family = isIP(address);
+    return !extra && family && (prefix === undefined || (/^\d+$/.test(prefix)
+      && Number(prefix) > 0 && Number(prefix) <= (family === 4 ? 32 : 128)));
+  });
+}
 
 export const backendRoot = fileURLToPath(new URL("../../", import.meta.url));
 if (!['production', 'test'].includes(process.env.NODE_ENV))
@@ -10,7 +21,8 @@ if (!['production', 'test'].includes(process.env.NODE_ENV))
 const values = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    TRUST_PROXY: z.enum(['loopback']).optional(),
+    TRUST_PROXY: z.string().refine(trustedProxies, 'Use loopback ou IPs/CIDRs explícitos separados por vírgula.').optional(),
+    COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('strict'),
     SESSION_MAX_AGE: z.coerce.number().int().min(300).max(86400).default(86400),
     SESSION_IDLE_AGE: z.coerce.number().int().min(60).max(14400).default(7200),
     AUTH_WINDOW_MS: z.coerce.number().int().min(60000).max(3600000).default(900000),
@@ -39,6 +51,8 @@ if (origin.origin !== values.FRONTEND_ORIGIN || !['http:', 'https:'].includes(or
   throw new Error('FRONTEND_ORIGIN deve conter somente uma origem HTTP(S).');
 if (values.NODE_ENV === 'production' && (!process.env.FRONTEND_ORIGIN || origin.protocol !== 'https:'))
   throw new Error('Produção exige FRONTEND_ORIGIN explícita com HTTPS.');
+if (values.COOKIE_SAME_SITE === 'none' && values.NODE_ENV !== 'production')
+  throw new Error('SameSite=None exige cookies Secure em produção.');
 
 const databasePath = values.DATABASE_PATH ?? (values.NODE_ENV === 'test' ? ':memory:' : './database/paytrack.db');
 export const env = {
