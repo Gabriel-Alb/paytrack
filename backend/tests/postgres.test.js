@@ -9,7 +9,7 @@ import { Pool } from 'pg';
 import { openDatabase, closeDatabase, injectFailure } from './database-helper.js';
 import { openSqlite } from '../src/infrastructure/persistence/sqlite.js';
 import { importSqlite } from '../src/infrastructure/persistence/import-sqlite.js';
-import { migratePostgres } from '../src/infrastructure/persistence/postgres.js';
+import { migratePostgres, openPostgres, verifyPostgres } from '../src/infrastructure/persistence/postgres.js';
 import { tables, checkSchema } from '../src/infrastructure/persistence/check.js';
 import { insertUser } from '../src/modules/auth/auth.repository.js';
 import { hashPassword, login } from '../src/modules/auth/auth.service.js';
@@ -17,6 +17,24 @@ import { backendRoot } from '../src/config/env.js';
 
 afterEach(closeDatabase);
 if (process.env.TEST_DATABASE_URL) {
+  test('produção verifica migrations sem criar schema; comando explícito prepara o banco', async () => {
+    const schema = 'paytrack_deploy_' + randomUUID().replaceAll('-', '');
+    const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${schema}` });
+    const config = { NODE_ENV: 'production', DATABASE_URL: process.env.TEST_DATABASE_URL,
+      DATABASE_SSL: 'disable', schema };
+    try {
+      await pool.query(`CREATE SCHEMA ${schema}`);
+      await assert.rejects(openPostgres(config));
+      assert.equal((await pool.query("SELECT count(*) n FROM information_schema.tables WHERE table_schema=current_schema()")).rows[0].n, '0');
+      const migrating = await openPostgres({ ...config, runMigrations: true });
+      await migrating.end();
+      const runtime = await openPostgres(config);
+      await runtime.end();
+      await verifyPostgres(pool);
+      await pool.query("UPDATE schema_migrations SET checksum='invalid' WHERE version=2");
+      await assert.rejects(openPostgres(config), /checksum/);
+    } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
+  });
   test('upgrade PostgreSQL v1 preserva empresas, duplicados legados e histórico', async () => {
     const schema='paytrack_upgrade_'+randomUUID().replaceAll('-','');
     const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`});

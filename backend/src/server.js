@@ -32,7 +32,10 @@ let stopping = false;
 function shutdown() {
   if (stopping) return;
   stopping = true;
+  app.locals.draining = true;
   clearInterval(maintenance);
+  // Bound shutdown even when maintenance is waiting for an unavailable database.
+  setTimeout(() => process.exit(1), 25000).unref();
   const forceClose = setTimeout(() => server.closeAllConnections(),5000);
   forceClose.unref();
   server.close(async () => {

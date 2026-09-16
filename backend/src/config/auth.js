@@ -11,5 +11,5 @@ export const authConfig = Object.freeze({
 });
 
 export const cookieOptions = {
-  httpOnly: true, secure: authConfig.production, sameSite: 'strict', path: '/',
+  httpOnly: true, secure: authConfig.production, sameSite: env.COOKIE_SAME_SITE, path: '/',
 };

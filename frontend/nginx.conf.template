@@ -1,0 +1,83 @@
+# Only the configured TLS terminator can supply protocol and client IP.
+geo $realip_remote_addr $trusted_tls_proxy {
+    default 0;
+    ${TLS_PROXY_CIDR} 1;
+}
+map "$trusted_tls_proxy:$http_x_forwarded_proto" $original_proto {
+    default http;
+    "1:https" https;
+}
+map $original_proto $hsts {
+    default "";
+    https "max-age=31536000";
+}
+# Do not record URLs, query strings, cookies, authorization or request bodies.
+log_format safe '$remote_addr $request_method $status $body_bytes_sent $request_time';
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
+    absolute_redirect off;
+    access_log /dev/stdout safe;
+    error_log /dev/stderr crit;
+    set_real_ip_from ${TLS_PROXY_CIDR};
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+    client_max_body_size 128k;
+    client_body_timeout 15s;
+    send_timeout 60s;
+    gzip on;
+    gzip_vary on;
+    gzip_types text/css application/javascript application/json image/svg+xml application/manifest+json;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy same-origin always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Strict-Transport-Security $hsts always;
+
+    location = /health/live { access_log off; return 200 'ok'; }
+    location /health/ { return 404; }
+    location ~ /\. { return 404; }
+    location / {
+        if ($original_proto != https) { return 426; }
+        try_files $uri $uri/ /index.html;
+    }
+    location = /index.html {
+        if ($original_proto != https) { return 426; }
+        expires -1;
+    }
+    location /assets/ {
+        if ($original_proto != https) { return 426; }
+        expires 1y;
+        try_files $uri =404;
+    }
+    # Future PWA worker/manifest updates must revalidate, never cache API responses.
+    location ~ ^/(sw\.js|service-worker\.js|manifest\.webmanifest)$ {
+        if ($original_proto != https) { return 426; }
+        expires -1;
+        try_files $uri =404;
+    }
+    location = /api { return 308 /api/; }
+    location /api/ {
+        if ($original_proto != https) { return 426; }
+        # Re-resolve the service after Compose replaces a backend container.
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $api http://${API_UPSTREAM};
+        proxy_pass $api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $original_proto;
+        proxy_set_header Connection "";
+        proxy_set_header Forwarded "";
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 75s;
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}

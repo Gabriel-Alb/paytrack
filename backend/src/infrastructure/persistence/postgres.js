@@ -26,6 +26,21 @@ export function postgresOptions(config) {
   };
 }
 
+const migrations = [[1, '001-initial.sql'], [2, '002-loan-companies.sql']];
+function migrationSource(file) {
+  const sql = readFileSync(new URL(`./postgres/${file}`, import.meta.url), 'utf8').replaceAll('\r\n','\n');
+  return { sql, checksum: createHash('sha256').update(sql).digest('hex') };
+}
+
+export async function verifyPostgres(pool) {
+  const result = await pool.query('SELECT version, checksum FROM schema_migrations ORDER BY version');
+  if (result.rows.length !== migrations.length) throw new Error('Migrations pendentes ou versão incompatível. Execute npm run migrate.');
+  for (const [index, [version, file]] of migrations.entries()) {
+    if (result.rows[index].version !== version || result.rows[index].checksum !== migrationSource(file).checksum)
+      throw new Error('Versão ou checksum PostgreSQL divergente.');
+  }
+}
+
 export async function migratePostgres(pool) {
   const client = await pool.connect();
   try {
@@ -35,9 +50,8 @@ export async function migratePostgres(pool) {
       version INTEGER PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
     const latest = (await client.query('SELECT MAX(version) AS version FROM schema_migrations')).rows[0].version;
     if (latest > 2) throw new Error('Versão PostgreSQL mais recente que a aplicação.');
-    for (const [version, file] of [[1, '001-initial.sql'], [2, '002-loan-companies.sql']]) {
-      const sql = readFileSync(new URL(`./postgres/${file}`, import.meta.url), 'utf8').replaceAll('\r\n','\n');
-      const checksum = createHash('sha256').update(sql).digest('hex');
+    for (const [version, file] of migrations) {
+      const { sql, checksum } = migrationSource(file);
       const applied = (await client.query('SELECT checksum FROM schema_migrations WHERE version=$1', [version])).rows[0];
       if (applied && applied.checksum !== checksum) throw new Error('Checksum da migration PostgreSQL divergente.');
       if (!applied) {
@@ -52,6 +66,10 @@ export async function migratePostgres(pool) {
 export async function openPostgres(config) {
   const pool = new Pool(postgresOptions(config));
   pool.on('error', () => console.error('Falha em conexão ociosa PostgreSQL.'));
-  try { await migratePostgres(pool); return pool; }
+  try {
+    if (config.NODE_ENV === 'production' && !config.runMigrations) await verifyPostgres(pool);
+    else await migratePostgres(pool);
+    return pool;
+  }
   catch (error) { await pool.end(); throw error; }
 }

@@ -1,5 +1,7 @@
 # frontend
 
+Produção usa build Vite servido por Nginx sem root. Consulte [o guia de deploy](../docs/DEPLOY.md) para Docker, HTTPS, API separada e cache da SPA. `vite preview` permanece apenas como ferramenta de pré-visualização local.
+
 ## Notificações de operações
 
 `ToastHost` fica montado uma única vez em `App.vue`, inclusive nas rotas públicas.
