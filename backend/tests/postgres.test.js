@@ -158,3 +158,41 @@ if (process.env.TEST_DATABASE_URL) {
     } finally { rmSync(directory,{recursive:true,force:true}); }
   });
 }
+
+if (process.env.TEST_DATABASE_URL) {
+  test('falha na migration de empresa PostgreSQL reverte DDL, dados e versão e permite nova tentativa', async () => {
+    const schema = 'paytrack_rollback_' + randomUUID().replaceAll('-', '');
+    const pool = new Pool({connectionString:process.env.TEST_DATABASE_URL, max:1, options:`-c search_path=${schema}`});
+    try {
+      await pool.query(`CREATE SCHEMA ${schema}`);
+      const initial = readFileSync(new URL('../src/infrastructure/persistence/postgres/001-initial.sql', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+      await pool.query(initial);
+      await pool.query('CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,checksum TEXT NOT NULL)');
+      await pool.query('INSERT INTO schema_migrations VALUES(1,$1)', [createHash('sha256').update(initial).digest('hex')]);
+      await pool.query(`SELECT set_config('paytrack.access','{"role":"admin","companyIds":[]}',false);
+        INSERT INTO clients(id,company_id,name,cpf) VALUES(8,1,'Preservado','52998224725');
+        INSERT INTO loans(id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
+          VALUES(12,8,1000,1000,1,'2026-01-01','2026-01-02');
+        INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(15,12,1,1000,'2026-01-02');
+        INSERT INTO payments(id,installment_id,amount,payment_date) VALUES(20,15,100,'2026-01-02');
+        CREATE FUNCTION reject_owner_copy() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN RAISE EXCEPTION 'injected migration failure'; END $$;
+        CREATE TRIGGER reject_owner_copy BEFORE UPDATE ON loans FOR EACH ROW EXECUTE FUNCTION reject_owner_copy();`);
+      const snapshot = async () => ({
+        data: await Promise.all(tables.map(async table => (await pool.query(`SELECT * FROM ${table}`)).rows)),
+        columns: (await pool.query(`SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns
+          WHERE table_schema=current_schema() ORDER BY table_name,ordinal_position`)).rows,
+        views: (await pool.query('SELECT viewname,definition FROM pg_views WHERE schemaname=current_schema() ORDER BY viewname')).rows,
+        migrations: (await pool.query('SELECT * FROM schema_migrations ORDER BY version')).rows,
+      });
+      const before = await snapshot();
+      await assert.rejects(migratePostgres(pool), /injected migration failure/);
+      assert.deepEqual(await snapshot(), before);
+      await pool.query('DROP TRIGGER reject_owner_copy ON loans; DROP FUNCTION reject_owner_copy()');
+      await migratePostgres(pool);
+      assert.deepEqual((await pool.query('SELECT id,client_id,company_id FROM loans')).rows, [{id:'12',client_id:'8',company_id:'1'}]);
+      assert.deepEqual((await pool.query('SELECT * FROM payments')).rows, before.data[tables.indexOf('payments')]);
+      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2}]);
+    } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
+  });
+}

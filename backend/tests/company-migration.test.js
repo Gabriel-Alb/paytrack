@@ -89,3 +89,64 @@ test('v6 preserva histórico, converte master, associa legado e não recria vín
     assert.equal((await db.pragma('user_version',{simple:true})),6);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });
+
+for (const invalidOwner of ['client', 'company']) {
+  test(`v5 com ${invalidOwner} inexistente reverte integralmente a migração`, async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'paytrack-owner-rollback-'));
+    const path = join(directory, 'legacy.db');
+    let raw;
+    try {
+      raw = new Database(path);
+      raw.exec(readFileSync(new URL('./fixtures/schema-v5.sql', import.meta.url), 'utf8'));
+      raw.pragma('foreign_keys = OFF');
+      raw.exec(`PRAGMA user_version=5;
+        INSERT INTO companies(id,name) VALUES(1,'Primeira'),(2,'Segunda');
+        INSERT INTO clients(id,company_id,name,cpf) VALUES(8,${invalidOwner === 'company' ? 999 : 1},'Preservado','52998224725');
+        INSERT INTO loans(id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
+          VALUES(12,${invalidOwner === 'client' ? 999 : 8},1000,1000,1,'2026-01-01','2026-01-02');
+        INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(15,12,1,1000,'2026-01-02');
+        INSERT INTO payments(id,installment_id,amount,payment_date) VALUES(20,15,100,'2026-01-02');`);
+      const snapshot = db => ({
+        schema: db.prepare('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name').all(),
+        data: Object.fromEntries(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all()
+          .map(({name}) => [name, db.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all()])),
+        version: db.pragma('user_version', {simple:true}),
+      });
+      const before = snapshot(raw);
+      raw.close(); raw = undefined;
+      await assert.rejects(openDatabase(path));
+      raw = new Database(path);
+      assert.deepEqual(snapshot(raw), before);
+      // A failed attempt must not prevent retry after the source link is repaired.
+      raw.exec(invalidOwner === 'client'
+        ? "INSERT INTO clients(id,company_id,name,cpf) VALUES(999,1,'Recuperado','11144477735')"
+        : "INSERT INTO companies(id,name) VALUES(999,'Recuperada')");
+      raw.close(); raw = undefined;
+      const db = await openDatabase(path);
+      assert.deepEqual(await db.prepare('SELECT id,client_id,company_id FROM loans').all(),
+        [{id:12,client_id:invalidOwner === 'client' ? 999 : 8,company_id:invalidOwner === 'company' ? 999 : 1}]);
+      assert.deepEqual(await db.prepare('SELECT * FROM payments').all(), before.data.payments);
+      assert.deepEqual(await db.pragma('foreign_key_check'), []);
+    } finally { raw?.close(); await closeDatabase(); rmSync(directory, {recursive:true,force:true}); }
+  });
+}
+
+test('cliente global e contratos de duas empresas mantêm dados e isolamento após reabrir o arquivo', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'paytrack-owner-reopen-'));
+  const path = join(directory, 'persisted.db');
+  const {withCompanyAccess} = await import('../src/application/company-access.js');
+  try {
+    let db = await openDatabase(path);
+    await db.prepare("INSERT INTO clients(name,cpf) VALUES('Global','52998224725')").run();
+    for (const company of [1,2]) await db.prepare(`INSERT INTO loans(company_id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
+      VALUES(?,1,1000,1000,1,'2026-01-01','2026-01-02')`).run(company);
+    const before = await db.prepare('SELECT * FROM loans ORDER BY id').all();
+    await closeDatabase(); db = await openDatabase(path);
+    assert.deepEqual(await db.prepare('SELECT * FROM loans ORDER BY id').all(), before);
+    assert.ok(!(await db.pragma('table_info(clients)')).some(column => column.name === 'company_id'));
+    for (const company of [1,2]) await withCompanyAccess({role:'user',companyIds:[company]}, async () => {
+      assert.deepEqual(await db.prepare('SELECT client_id,company_id FROM scoped_loans').all(), [{client_id:1,company_id:company}]);
+      assert.equal((await db.prepare('SELECT count(*) AS n FROM scoped_clients').get()).n, 1);
+    });
+  } finally { await closeDatabase(); rmSync(directory, {recursive:true,force:true}); }
+});

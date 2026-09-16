@@ -371,6 +371,46 @@ test('rateio do lucro mantém centavos exatos', async () => {
   assert.equal(report.summary.expectedProfit, 1000);
 });
 
+test('resumo mensal separa juros, multas recebidas e lucro, respeitando período e estornos', async () => {
+  const start = addDays(today(), -10);
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2) });
+  l = await pay(l, 3000, addDays(today(), -2));
+  l = (await api.post(`/api/late-fees/${l.installments[0].late_fee_id}/payments`)
+    .send({ amount: 75, payment_date: today(), revision: l.revision }).expect(201)).body.loan;
+  const summary = async (from = start, end = today()) => (await api.get('/api/reports')
+    .query({ mode: 'month', start: from, end }).expect(200)).body.summary;
+  assert.deepEqual(await summary(), {
+    capital: 10000, received: 3075, receivedLateFees: 75, realizedProfit: 348,
+    pending: 8175, expectedInterest: 1000, expectedProfit: 1250,
+  });
+  // A multa recebida hoje pertence ao caixa de hoje, mesmo com vencimento anterior.
+  assert.deepEqual(await summary(today()), {
+    capital: 0, received: 75, receivedLateFees: 75, realizedProfit: 75,
+    pending: 0, expectedInterest: 0, expectedProfit: 0,
+  });
+  l = await confirm(l, [select(1, 75)]);
+  await confirm(l, []);
+  assert.deepEqual(await summary(), {
+    capital: 10000, received: 0, receivedLateFees: 0, realizedProfit: 0,
+    pending: 11250, expectedInterest: 1000, expectedProfit: 1250,
+  });
+  assert.deepEqual(await summary(addDays(today(), 1), addDays(today(), 2)), {
+    capital: 0, received: 0, receivedLateFees: 0, realizedProfit: 0,
+    pending: 0, expectedInterest: 0, expectedProfit: 0,
+  });
+});
+
+test('juros previstos mensais reutilizam o rateio exato das parcelas do período', async () => {
+  await loan({ installments: [3333, 3333, 4334] });
+  const summary = async (end) => (await api.get('/api/reports')
+    .query({ mode: 'month', start: today(), end }).expect(200)).body.summary;
+  assert.equal((await summary(today())).expectedInterest, 303);
+  const all = await summary(addDays(today(), 2));
+  assert.equal(all.expectedInterest, 1000);
+  assert.equal(all.expectedProfit, 1000);
+  assert.equal(all.receivedLateFees, 0);
+});
+
 test('prévia congela multa na quitação e multa retroativa não excede saldo da data', async () => {
   let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
   const feeId = l.installments[0].late_fee_id;
