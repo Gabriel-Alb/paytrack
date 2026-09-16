@@ -12,17 +12,16 @@
         <div
             class="flex h-[68px] shrink-0 items-center justify-between border-b border-black/[0.05] px-5 lg:h-[60px] lg:px-5">
             <RouterLink to="/" class="flex items-center gap-3" @click="closeSidebar">
-                <div
-                    class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#166534] text-sm font-bold text-white">
-                    P
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#166534]">
+                    <img :src="logo" alt="PayTrack" class="h-7 w-7 object-contain" />
                 </div>
 
                 <div>
-                    <p class="text-[17px] font-semibold tracking-[-0.02em] text-[#18181b]">
+                    <p class="text-[17px] font-semibold tracking-[-0.01em] text-[#18181b]">
                         PayTrack
                     </p>
 
-                    <p class="mt-0.5 text-[10px] font-medium text-[#a1a1aa]">
+                    <p class="-mt-1 text-[10px] font-medium text-[#a1a1aa]">
                         Gestão financeira
                     </p>
                 </div>
@@ -148,6 +147,8 @@ import { useAuth } from '@/composables/useAuth'
 import { perform, pendingOperation } from '@/services/api'
 
 import { navigationSections } from './navigation'
+
+import logo from '@/assets/img/logo.png'
 
 defineProps({
     isOpen: {
