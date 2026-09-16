@@ -74,7 +74,7 @@ const reportRows = `${interestAllocation}, financial AS (
   SELECT i.id,c.name AS client,i.loan_id AS "contractId",i.due_date AS date,i.payment_date AS "paymentDate",
     i.amount+i.fee AS expected,i.paid_amount+i.fee_paid AS received,
     greatest(0,i.amount+i.fee-i.paid_amount-i.fee_paid) AS pending,
-    i.interest_share+i.fee AS "expectedProfit",
+    i.interest_share AS "expectedInterest",i.interest_share+i.fee AS "expectedProfit",
     money_share(i.paid_amount,i.interest_share,i.amount)+i.fee_paid AS "realizedProfit",
     CASE WHEN i.paid_amount>=i.amount AND i.fee_paid>=i.fee THEN 'paid'
       WHEN i.paid_amount+i.fee_paid>0 THEN 'partial' ELSE 'unpaid' END AS status,
@@ -98,6 +98,7 @@ export async function monthlyReport(start, end, date) {
       SUM(p.amount) OVER (PARTITION BY p.installment_id ORDER BY p.payment_date,p.id) AS cumulative_amount
     FROM scoped_payments p JOIN interest_allocation i ON i.id=p.installment_id WHERE p.voided_at IS NULL
   ) SELECT COALESCE(SUM(amount+late_fee_amount),0) AS received,
+    COALESCE(SUM(late_fee_amount),0) AS "receivedLateFees",
     COALESCE(SUM(money_share(cumulative_amount,interest_share,installment_amount)
       -money_share(cumulative_amount-amount,interest_share,installment_amount)+late_fee_amount),0) AS "realizedProfit"
     FROM payment_allocation WHERE payment_date BETWEEN ? AND ?`).get(start, end));

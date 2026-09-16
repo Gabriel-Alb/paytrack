@@ -72,13 +72,14 @@ export async function report(query) {
 async function monthlyReport({ start, end }) {
   const date = today();
   const { installments, contracts, cash } = (await repository.monthlyReport(start, end, date));
-  const summary = { capital: 0, ...cash, pending: 0, expectedProfit: 0 };
+  const summary = { capital: 0, ...cash, pending: 0, expectedInterest: 0, expectedProfit: 0 };
   for (const contract of contracts) summary.capital += contract.amount;
   const agenda = new Map();
   const dueByContract = new Map();
   const priority = { 'on-time': 0, attention: 1, overdue: 2 };
   for (const row of installments) {
     summary.pending += row.pending;
+    summary.expectedInterest += row.expectedInterest;
     summary.expectedProfit += row.expectedProfit;
     const status = visualStatus(row.installmentDaysLate, Boolean(row.feePending));
     const day = agenda.get(row.date) ?? {

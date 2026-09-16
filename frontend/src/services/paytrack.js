@@ -65,7 +65,7 @@ export async function getMonthlyReport(query,signal) {
   const result=await request(`/reports?${queryString({ ...query,mode:'month' })}`,{ signal })
   const mapMoney = (record,keys) => ({ ...record,...Object.fromEntries(keys.map((key) => [key,fromCents(record[key])])) })
   return { ...result,
-    summary:mapMoney(result.summary,['capital','received','pending','expectedProfit','realizedProfit']),
+    summary:mapMoney(result.summary,['capital','received','pending','expectedInterest','receivedLateFees','expectedProfit','realizedProfit']),
     contracts:result.contracts.map((row) => mapMoney(row,['amount'])),
     contractStatuses:result.contractStatuses.map((row) => mapMoney(row,['expected','pending'])),
     agenda:result.agenda.map((row) => mapMoney(row,['expected','received'])),
