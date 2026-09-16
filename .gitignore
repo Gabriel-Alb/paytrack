@@ -8,3 +8,12 @@ coverage/
 *.db-*
 *.sqlite*
 *.log
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.dump
+backups/
+.deploy/
+.validation/
