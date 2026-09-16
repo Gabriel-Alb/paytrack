@@ -1,0 +1,82 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Start isolated test PostgreSQL with an ephemeral password
+        run: |
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          echo "TEST_DATABASE_URL=postgresql://paytrack_test:$password@127.0.0.1:5432/paytrack_test" >> "$GITHUB_ENV"
+          docker run -d --name test-postgres -p 127.0.0.1:5432:5432 \
+            -e POSTGRES_USER=paytrack_test -e POSTGRES_DB=paytrack_test -e POSTGRES_PASSWORD="$password" postgres:17-bookworm
+          for i in {1..30}; do
+            if docker exec test-postgres pg_isready -U paytrack_test -d paytrack_test; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - run: npm run test:postgres
+      - if: always()
+        run: docker rm -f test-postgres
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and validate full production stack
+        run: bash scripts/smoke-compose.sh
