@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { env } from "./config/env.js";
-import { isAllowedOrigin } from './config/origins.js';
+import { isAllowedOrigin } from "./config/origins.js";
 import { clientsRoutes } from "./modules/clients/clients.routes.js";
 import { loansRoutes } from "./modules/loans/loans.routes.js";
 import { installmentsRoutes } from "./modules/installments/installments.routes.js";
@@ -10,43 +10,71 @@ import { lateFeesRoutes } from "./modules/late-fees/late-fees.routes.js";
 import { overviewRoutes } from "./modules/overview/overview.routes.js";
 import { errorHandler } from "./shared/middleware/errors.js";
 import { AppError } from "./shared/errors/AppError.js";
-import { authRoutes,usersRoutes } from './modules/auth/auth.routes.js';
-import { loadSession,requireAuth,requireCsrf,trustedOrigin } from './modules/auth/auth.middleware.js';
+import { authRoutes, usersRoutes } from "./modules/auth/auth.routes.js";
+import {
+  loadSession,
+  requireAuth,
+  requireCsrf,
+  trustedOrigin,
+} from "./modules/auth/auth.middleware.js";
 
-import { companyAccess } from './shared/middleware/company-access.js';
-import { companiesRoutes } from './modules/companies/companies.routes.js';
-import { database } from './config/database.js';
+import { companyAccess } from "./shared/middleware/company-access.js";
+import { companiesRoutes } from "./modules/companies/companies.routes.js";
+import { database } from "./config/database.js";
 
 export const app = express();
 app.disable("x-powered-by");
-if (env.TRUST_PROXY) app.set('trust proxy',env.TRUST_PROXY.split(','));
-app.use(helmet({strictTransportSecurity:env.NODE_ENV==='production' ? {maxAge:31536000} : false}));
+if (env.TRUST_PROXY) app.set("trust proxy", env.TRUST_PROXY.split(","));
+app.use(
+  helmet({
+    strictTransportSecurity:
+      env.NODE_ENV === "production" ? { maxAge: 31536000 } : false,
+  }),
+);
 // Internal probes precede HTTPS enforcement; they disclose only availability.
-app.get('/health/live', (_req, res) => res.set('Cache-Control', 'no-store').json({ status: 'ok' }));
-app.get('/health/ready', async (_req, res) => {
-  res.set('Cache-Control', 'no-store');
+app.get("/health/live", (_req, res) =>
+  res.set("Cache-Control", "no-store").json({ status: "ok" }),
+);
+app.get("/health/ready", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
   try {
-    if (app.locals.draining) throw new Error('Encerrando');
-    await database().prepare('SELECT 1 AS ready').get();
-    res.json({ status: 'ok' });
+    if (app.locals.draining) throw new Error("Encerrando");
+    await database().prepare("SELECT 1 AS ready").get();
+    res.json({ status: "ok" });
   } catch {
-    res.status(503).json({ status: 'unavailable' });
+    res.status(503).json({ status: "unavailable" });
   }
 });
-app.use((req,res,next) => {
-  res.set('Cache-Control','no-store');
-  if (env.NODE_ENV==='production' && !req.secure)
-    return next(new AppError(400,'HTTPS_REQUIRED','HTTPS obrigatório.'));
+app.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  const forwardedProto = req.headers["x-forwarded-proto"]
+    ?.split(",")[0]
+    ?.trim();
+
+  if (
+    env.NODE_ENV === "production" &&
+    !req.secure &&
+    forwardedProto !== "https"
+  ) {
+    return next(new AppError(400, "HTTPS_REQUIRED", "HTTPS obrigatório."));
+  }
   next();
 });
-app.use(cors({ origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),credentials:true,methods:['GET','POST','PUT','PATCH','DELETE'],allowedHeaders:['Content-Type','X-CSRF-Token'] }));
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "X-CSRF-Token"],
+  }),
+);
 app.use(express.json({ limit: "128kb" }));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
-app.use('/api',loadSession,companyAccess);
-app.use('/api/auth',authRoutes);
-app.use('/api',requireAuth,trustedOrigin,requireCsrf);
-app.use('/api/users',usersRoutes);
-app.use('/api/companies',companiesRoutes);
+app.use("/api", loadSession, companyAccess);
+app.use("/api/auth", authRoutes);
+app.use("/api", requireAuth, trustedOrigin, requireCsrf);
+app.use("/api/users", usersRoutes);
+app.use("/api/companies", companiesRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/loans", loansRoutes);
 app.use("/api/installments", installmentsRoutes);
