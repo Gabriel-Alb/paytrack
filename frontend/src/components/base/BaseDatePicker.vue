@@ -5,16 +5,16 @@
         </span>
 
         <button type="button"
-            class="flex h-11 w-full min-w-0 max-w-full items-center justify-between gap-3 rounded-lg border border-black/10 bg-white px-3 text-left outline-none transition-[border-color,box-shadow] hover:border-black/[0.14] focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10"
+            class="flex h-11 w-full min-w-0 max-w-full items-center justify-between gap-3 rounded-lg border border-black/[0.12] bg-white px-3 text-left outline-none transition-[border-color,box-shadow] hover:border-black/[0.14] focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10"
             :aria-expanded="open" @click="toggle">
             <span class="min-w-0 truncate text-sm" :class="modelValue
                     ? 'text-[#202124]'
-                    : 'text-black/30'
+                    : 'text-black/45'
                 ">
                 {{ displayValue }}
             </span>
 
-            <span class="mdi mdi-calendar-month-outline shrink-0 text-lg text-black/35" aria-hidden="true" />
+            <span class="mdi mdi-calendar-month-outline shrink-0 text-lg text-black/45" aria-hidden="true" />
         </button>
 
         <div v-if="open"
@@ -39,7 +39,7 @@
 
             <div class="mt-3 grid grid-cols-7 gap-1">
                 <span v-for="day in weekDays" :key="day"
-                    class="flex h-7 items-center justify-center text-[10px] font-semibold uppercase text-black/35">
+                    class="flex h-7 items-center justify-center text-[10px] font-semibold uppercase text-black/45">
                     {{ day }}
                 </span>
 
@@ -57,7 +57,7 @@
                 </template>
             </div>
 
-            <div v-if="modelValue" class="mt-2 border-t border-black/[0.06] pt-2">
+            <div v-if="modelValue" class="mt-2 border-t border-black/[0.07] pt-2">
                 <button type="button"
                     class="flex h-8 w-full items-center justify-center rounded-lg text-xs font-medium text-black/45 transition-colors hover:bg-black/[0.03] hover:text-black/65"
                     @click="clear">

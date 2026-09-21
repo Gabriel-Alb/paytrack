@@ -6,11 +6,11 @@
         <template v-if="client?.loans?.length">
             <div class="space-y-3">
                 <article v-for="loan in client.loans" :key="loan.id"
-                    class="overflow-hidden rounded-xl border border-black/[0.07] bg-white">
+                    class="overflow-hidden rounded-xl border border-black/[0.08] bg-white">
                     <div class="p-4">
                         <div class="flex items-start justify-between gap-3">
                             <div>
-                                <p class="text-[11px] font-medium text-black/35">
+                                <p class="text-[11px] font-medium text-black/45">
                                     Empréstimo #{{
                                         String(
                                             loan.id,
@@ -44,7 +44,7 @@
                             </span>
                         </div>
 
-                        <div class="mt-4 grid grid-cols-2 gap-3 border-t border-black/[0.05] pt-4 sm:grid-cols-3">
+                        <div class="mt-4 grid grid-cols-2 gap-3 border-t border-black/[0.07] pt-4 sm:grid-cols-3">
                             <div>
                                 <p :class="labelClass">
                                     Parcelas
@@ -101,7 +101,7 @@
                 Nenhum empréstimo
             </p>
 
-            <p class="mt-1 max-w-[250px] text-xs leading-5 text-black/40">
+            <p class="mt-1 max-w-[250px] text-xs leading-5 text-black/50">
                 Este cliente ainda não possui histórico de
                 empréstimos.
             </p>
@@ -130,7 +130,7 @@ const emit = defineEmits([
 ])
 
 const labelClass =
-    'text-[10px] font-semibold uppercase tracking-[0.04em] text-black/30'
+    'text-[10px] font-semibold uppercase tracking-[0.04em] text-black/45'
 
 const valueClass =
     'mt-1 text-xs font-semibold text-black/60'

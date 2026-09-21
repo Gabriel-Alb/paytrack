@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { canAdminister } from '@/features/auth/companyAccess.js'
 import { restoreAuth,onSessionExpired } from '@/composables/useAuth'
 
 const router = createRouter({
@@ -66,7 +67,7 @@ router.beforeEach(async (to) => {
   const user = await restoreAuth()
   if (!user && !to.meta.public) return {name:'login'}
   if (user && to.meta.public) return {name:'dashboard'}
-  if (to.meta.admin && !(user?.role === 'admin')) return {name:'dashboard'}
+  if (to.meta.admin && !canAdminister(user)) return {name:'dashboard'}
 })
 onSessionExpired(() => {
   if (router.currentRoute.value.matched.length && !router.currentRoute.value.meta.public)

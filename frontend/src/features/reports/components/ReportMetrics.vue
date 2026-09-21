@@ -15,7 +15,7 @@
         </select>
 
         <svg viewBox="0 0 24 24" aria-hidden="true"
-          class="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-400">
+          class="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500">
           <path :d="mdiChevronDown" fill="currentColor" />
         </svg>
       </div>

@@ -8,21 +8,21 @@
         </span>
 
         <div
-            class="relative flex h-11 min-w-0 w-full items-center overflow-hidden rounded-lg border border-black/10 bg-white transition-[border-color,box-shadow] focus-within:border-[#166534] focus-within:ring-2 focus-within:ring-[#166534]/10"
+            class="relative flex h-11 min-w-0 w-full items-center overflow-hidden rounded-lg border border-black/[0.12] bg-white transition-[border-color,box-shadow] focus-within:border-[#166534] focus-within:ring-2 focus-within:ring-[#166534]/10"
         >
             <input
                 v-model="query"
                 type="text"
                 autocomplete="off"
                 placeholder="Digite o nome do cliente"
-                class="h-full min-w-0 flex-1 bg-transparent px-3 pr-12 text-sm text-[#202124] outline-none placeholder:text-black/30"
+                class="h-full min-w-0 flex-1 bg-transparent px-3 pr-12 text-sm text-[#202124] outline-none placeholder:text-black/45"
                 @focus="openDropdown"
                 @input="handleInput"
             />
 
             <button
                 type="button"
-                class="absolute right-0 top-0 flex h-full w-11 shrink-0 items-center justify-center border-l border-black/[0.06] bg-white text-[#166534] transition-colors hover:bg-[#166534]/[0.05] active:bg-[#166534]/[0.08]"
+                class="absolute right-0 top-0 flex h-full w-11 shrink-0 items-center justify-center border-l border-black/[0.07] bg-white text-[#166534] transition-colors hover:bg-[#166534]/[0.05] active:bg-[#166534]/[0.08]"
                 aria-label="Cadastrar novo cliente"
                 title="Cadastrar novo cliente"
                 @click.stop="requestNewClient"
@@ -60,7 +60,7 @@
 
                         <p
                             v-if="client.cpf"
-                            class="mt-0.5 truncate text-[11px] text-black/40"
+                            class="mt-0.5 truncate text-[11px] text-black/50"
                         >
                             CPF: {{ client.cpf }}
                         </p>

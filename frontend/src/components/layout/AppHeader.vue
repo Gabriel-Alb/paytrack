@@ -1,6 +1,6 @@
 <template>
     <header
-        class="sticky top-0 z-30 flex h-[calc(68px+env(safe-area-inset-top,0px))] items-center justify-between border-b border-black/[0.06] bg-white/95 px-4 pt-[env(safe-area-inset-top,0px)] backdrop-blur-sm sm:px-7 lg:h-[60px] lg:px-6 lg:pt-0"
+        class="sticky top-0 z-30 flex h-[calc(68px+env(safe-area-inset-top,0px))] items-center justify-between border-b border-black/12 bg-white/95 px-4 pt-[env(safe-area-inset-top,0px)] backdrop-blur-sm sm:px-7 lg:h-[60px] lg:px-6 lg:pt-0"
     >
         <div class="flex min-w-0 items-center gap-3">
             <button

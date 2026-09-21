@@ -1,6 +1,6 @@
 <template>
     <section class="px-3 pt-4 sm:px-4">
-        <h3 class="mb-2 px-1 text-[10px] font-semibold tracking-[0.08em] text-[#a1a1aa] uppercase">
+        <h3 class="mb-2 px-1 text-[10px] font-semibold tracking-[0.08em] text-[#71717a] uppercase">
             {{ label }}
         </h3>
 

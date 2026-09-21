@@ -1,5 +1,5 @@
 <template>
-    <div class="rounded-xl border border-black/[0.07] bg-[#fafafa] p-4">
+    <div class="rounded-xl border border-black/[0.08] bg-[#fafafa] p-4">
         <div class="flex items-start justify-between gap-4">
             <div>
                 <p class="text-sm font-medium text-[#202124]">
@@ -12,7 +12,7 @@
             </div>
 
             <div class="shrink-0 text-right">
-                <p class="text-xs text-black/40">
+                <p class="text-xs text-black/50">
                     Total
                 </p>
 
@@ -25,19 +25,19 @@
         <div v-if="installments.length" class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div v-for="(column, columnIndex) in installmentColumns" :key="columnIndex" class="flex min-w-0 flex-col gap-2">
                 <label v-for="item in column" :key="item.index"
-                    class="flex items-center gap-3 rounded-lg border border-black/[0.06] bg-white px-3 py-2.5">
+                    class="flex items-center gap-3 rounded-lg border border-black/[0.08] bg-white px-3 py-2.5">
                     <span
                         class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#166534]/[0.07] text-xs font-semibold text-[#166534]">
                         {{ item.index + 1 }}
                     </span>
 
                     <div class="min-w-0 flex-1">
-                        <span class="mb-0.5 block text-[11px] text-black/40">
+                        <span class="mb-0.5 block text-[11px] text-black/50">
                             Parcela {{ item.index + 1 }}
                         </span>
 
                         <div class="flex items-center">
-                            <span class="mr-1 text-sm text-black/40">
+                            <span class="mr-1 text-sm text-black/50">
                                 R$
                             </span>
 
@@ -55,7 +55,7 @@
             </div>
         </div>
 
-        <div v-else class="mt-4 rounded-lg border border-dashed border-black/10 py-5 text-center text-sm text-black/40">
+        <div v-else class="mt-4 rounded-lg border border-dashed border-black/10 py-5 text-center text-sm text-black/50">
             Informe o valor e a quantidade de parcelas.
         </div>
     </div>

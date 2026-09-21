@@ -22,6 +22,10 @@ export async function recordAction(event, actor, entityType, entityId, details) 
   (await database().prepare(`INSERT INTO auth_audit_logs(event,actor_id,actor_name,entity_type,entity_id,details,created_at)
     VALUES (?,?,?,?,?,?,?)`).run(event,user.id,user.name,entityType,entityId,JSON.stringify(details),Date.now()));
 }
+export async function recordCompanyAction(event,actor,subjectId,companyId,details) {
+  await database().prepare(`INSERT INTO auth_audit_logs(event,actor_id,subject_id,actor_name,entity_type,entity_id,details,created_at)
+    VALUES(?,?,?,?,?,?,?,?)`).run(event,actor.id,subjectId,actor.name,'company',companyId,JSON.stringify({companyId,...details}),Date.now());
+}
 export const sessionByHash = async (hash) => (await database().prepare('SELECT * FROM auth_sessions WHERE token_hash=?').get(hash));
 export async function insertSession({userId,tokenHash,csrfToken,now,expiresAt}) {
   (await database().prepare(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,created_at,expires_at,last_seen_at)
@@ -43,13 +47,26 @@ export async function setAccess(id, action, actorId, role) {
   };
   (await database().prepare(`UPDATE users SET ${updates[action]},updated_at=utc_now() WHERE id=@id`).run({id,actorId,role:role ?? null}));
 }
-export async function listUsers({status,page}) {
+export async function listUsers({status,page},scope) {
+  const companyFilter = scope.global ? '1=1' : `r.company_id IN (${scope.companyIds.map(() => '?').join(',')})`;
+  const memberFilter = scope.global ? '1=1' : `uc.company_id IN (${scope.companyIds.map(() => '?').join(',')})`;
+  const ids = scope.global ? [] : scope.companyIds;
+  const filter = ['pending','rejected'].includes(status)
+    ? `(EXISTS(SELECT 1 FROM user_access_companies r WHERE r.user_id=users.id AND r.status=? AND ${companyFilter})
+      ${scope.global ? "OR (access_status=? AND NOT EXISTS(SELECT 1 FROM user_access_companies r WHERE r.user_id=users.id))" : ''})`
+    : `access_status=? AND ${scope.global ? '1=1' : `EXISTS(SELECT 1 FROM user_companies uc WHERE uc.user_id=users.id AND ${memberFilter})`}`;
+  const args = [status,...ids,...(['pending','rejected'].includes(status) && scope.global ? [status] : [])];
   return {items: (await database().prepare(`SELECT id,name,email,role,access_status AS "accessStatus",created_at AS "createdAt"
-    FROM users WHERE access_status=? ORDER BY id DESC LIMIT 50 OFFSET ?`).all(status,(page-1)*50)),
-  total: (await database().prepare('SELECT count(*) n FROM users WHERE access_status=?').get(status)).n};
+    FROM users WHERE ${filter} ORDER BY id DESC LIMIT 50 OFFSET ?`).all(...args,(page-1)*50)),
+  total: (await database().prepare(`SELECT count(*) n FROM users WHERE ${filter}`).get(...args)).n};
 }
-export const pendingNotifications = async () => (await database().prepare(`SELECT 'access-' || id AS id,id AS "userId",
-  'access' AS type,name AS customer,created_at AS datetime FROM users WHERE access_status='pending' ORDER BY id DESC LIMIT 100`).all());
+export async function pendingNotifications(scope) {
+  const filter = scope.global ? '1=1' : `r.company_id IN (${scope.companyIds.map(() => '?').join(',')})`;
+  return database().prepare(`SELECT 'access-' || id AS id,id AS "userId",'access' AS type,name AS customer,created_at AS datetime FROM users
+    WHERE EXISTS(SELECT 1 FROM user_access_companies r WHERE r.user_id=users.id AND r.status='pending' AND ${filter})
+    ${scope.global ? "OR (access_status='pending' AND NOT EXISTS(SELECT 1 FROM user_access_companies r WHERE r.user_id=users.id))" : ''}
+    ORDER BY id DESC LIMIT 100`).all(...(scope.global ? [] : scope.companyIds));
+}
 export async function cleanup() {
   const now = Date.now();
   (await database().prepare('DELETE FROM auth_sessions WHERE expires_at<? OR revoked_at<?').run(now,now-86400000));

@@ -220,7 +220,7 @@ test('login ativo gera cookie novo opaco; banco só contém hash e API minimiza 
   assert.ok(!JSON.stringify(result.body).includes(raw));
   assert.notEqual(cookie.split(';')[0],anonymous);
   const me=await agent.get('/api/auth/me').expect(200);
-  assert.deepEqual(Object.keys(me.body.user).sort(),['accessStatus','companies','companyIds','cpf','email','id','name','rg','role']);
+  assert.deepEqual(Object.keys(me.body.user).sort(),['accessStatus','companies','companyIds','cpf','email','id','managedCompanyIds','name','rg','role']);
   await request(app).get('/api/auth/me').set('Cookie',anonymous).expect(401);
 });
 test('senha incorreta, inexistente e email de SQL injection não autenticam',async()=>{

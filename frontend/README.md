@@ -2,6 +2,29 @@
 
 Produção usa build Vite servido por Nginx sem root. Consulte [o guia de deploy](../docs/DEPLOY.md) para Docker, HTTPS, API separada e cache da SPA. `vite preview` permanece apenas como ferramenta de pré-visualização local.
 
+## Administração por empresa e regressões
+
+Consulte [as regras e endpoints de acesso empresarial](../docs/COMPANY_ACCESS.md).
+`npm test` executa testes unitários; `npm run test:e2e` abre uma API com SQLite em
+memória e Vite em `127.0.0.1:5179`, usando a porta `33021` para a API. Instale as
+dependências do backend e o Chromium antes da primeira execução:
+
+```sh
+npm ci
+npm ci --prefix ../backend
+npx playwright install chromium
+npm run test:e2e
+```
+
+O teste cobre solicitação multiempresa, aprovação parcial, recusa remanescente,
+escopo de gerente, accordion, promoção/rebaixamento, último gerente e revogação
+de acesso; usa viewports 1440×1000 e 390×844 e falha com erros de aplicação ou
+avisos no console. Sessões, contas e banco são descartados ao terminar. Screenshots
+e resultados ficam no diretório temporário do sistema; `E2E_ARTIFACT_DIR` permite
+escolher outro diretório existente. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` permite usar
+um Chrome local; `PLAYWRIGHT_MODULE` permite um runtime Playwright já provisionado.
+O modo Vite `test` desativa apenas as ferramentas de desenvolvimento visuais.
+
 ## Notificações de operações
 
 `ToastHost` fica montado uma única vez em `App.vue`, inclusive nas rotas públicas.

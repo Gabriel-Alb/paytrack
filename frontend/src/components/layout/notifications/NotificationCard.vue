@@ -1,6 +1,6 @@
 <template>
     <article
-        class="rounded-[14px] border border-black/[0.07] bg-white px-3.5 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.025)] transition-[border-color,box-shadow,transform] duration-200 sm:hover:-translate-y-px sm:hover:border-black/[0.11] sm:hover:shadow-[0_5px_14px_rgba(0,0,0,0.05)]">
+        class="rounded-[14px] border border-black/[0.08] bg-white px-3.5 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.025)] transition-[border-color,box-shadow,transform] duration-200 sm:hover:-translate-y-px sm:hover:border-black/[0.11] sm:hover:shadow-[0_5px_14px_rgba(0,0,0,0.05)]">
         <div class="flex items-start gap-2.5">
             <div :class="[
                 'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
@@ -17,7 +17,7 @@
                         {{ title }}
                     </h4>
 
-                    <time :datetime="notification.datetime" class="shrink-0 text-[10px] font-medium text-[#a1a1aa]">
+                    <time :datetime="notification.datetime" class="shrink-0 text-[10px] font-medium text-[#71717a]">
                         {{ formattedTime }}
                     </time>
                 </div>

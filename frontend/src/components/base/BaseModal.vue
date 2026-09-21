@@ -33,7 +33,7 @@
                     </div>
 
                     <header
-                        class="flex shrink-0 items-start justify-between gap-4 border-b border-black/[0.06] bg-white px-4 pb-4 pt-3 sm:px-6 sm:py-4">
+                        class="flex shrink-0 items-start justify-between gap-4 border-b border-black/[0.07] bg-white px-4 pb-4 pt-3 sm:px-6 sm:py-4">
                         <slot name="header">
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2">
@@ -43,14 +43,14 @@
                                     </h2>
                                 </div>
 
-                                <p v-if="description" class="mt-1 truncate text-xs text-black/40">
+                                <p v-if="description" class="mt-1 truncate text-xs text-black/50">
                                     {{ description }}
                                 </p>
                             </div>
                         </slot>
 
                         <button v-if="showClose" type="button"
-                            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-black/40 transition-colors hover:bg-black/[0.04] hover:text-black/60 active:bg-black/[0.06]"
+                            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-black/50 transition-colors hover:bg-black/[0.04] hover:text-black/60 active:bg-black/[0.06]"
                             aria-label="Fechar" @click="requestClose">
                             <span class="mdi mdi-close text-[21px]" />
                         </button>
@@ -61,7 +61,7 @@
                     </div>
 
                     <footer v-if="$slots.footer"
-                        class="grid shrink-0 grid-cols-2 gap-2 border-t border-black/[0.06] bg-white px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 sm:flex sm:items-center sm:justify-end sm:px-6 sm:py-4"
+                        class="grid shrink-0 grid-cols-2 gap-2 border-t border-black/[0.07] bg-white px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3 sm:flex sm:items-center sm:justify-end sm:px-6 sm:py-4"
                         :class="footerClass">
                         <slot name="footer" />
                     </footer>

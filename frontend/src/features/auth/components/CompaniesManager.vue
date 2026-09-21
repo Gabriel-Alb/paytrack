@@ -1,15 +1,20 @@
 <template>
-  <section class="mt-6 rounded-2xl border border-black/[0.07] bg-white p-5 sm:p-7">
+  <section class="mt-6 rounded-2xl border border-black/[0.08] bg-white p-5 sm:p-7">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <h2 class="text-lg font-semibold">Empresas</h2>
-      <button class="min-h-11 rounded-lg bg-[#166534] px-4 text-sm font-semibold text-white" @click="openForm()">Nova empresa</button>
+      <button v-if="user?.role === 'admin'" class="min-h-11 rounded-lg bg-[#166534] px-4 text-sm font-semibold text-white" @click="openForm()">Nova empresa</button>
     </div>
-    <ul class="mt-4 divide-y divide-black/5">
-      <li v-for="company in companies" :key="company.id" class="flex items-center justify-between gap-3 py-3 text-sm">
-        <span class="min-w-0 [overflow-wrap:anywhere]">{{ company.name }}</span>
-        <button type="button" :aria-label="`Editar empresa ${company.name}`"
+    <p v-if="loading" role="status" class="mt-4 text-sm text-zinc-500">Carregando empresas…</p>
+    <p v-else-if="!companies.length" class="mt-4 text-sm text-zinc-500">Nenhuma empresa para administrar.</p>
+    <ul class="mt-4 divide-y divide-black/[0.07]">
+      <li v-for="company in companies" :key="company.id" class="py-3 text-sm">
+        <div class="flex items-center justify-between gap-3">
+        <button type="button" :aria-expanded="expanded === company.id" :aria-controls="`company-members-${company.id}`" class="min-h-11 min-w-0 flex-1 text-left font-medium [overflow-wrap:anywhere]" @click="expanded = expanded === company.id ? null : company.id">{{ company.name }} <span aria-hidden="true">{{ expanded === company.id ? '−' : '+' }}</span></button>
+        <button v-if="user?.role === 'admin'" type="button" :aria-label="`Editar empresa ${company.name}`"
           class="min-h-11 shrink-0 rounded-lg px-3 text-xs font-semibold text-[#166534] transition-colors hover:bg-[#edf7ef] focus-visible:outline-2 focus-visible:outline-[#166534]"
           @click="openForm(company)">Editar</button>
+        </div>
+        <CompanyMembers v-if="expanded === company.id" :id="`company-members-${company.id}`" :company="company" :revision="revision" @updated="$emit('updated')" />
       </li>
     </ul>
     <BaseModal :model-value="open" :title="editingId ? 'Editar empresa' : 'Nova empresa'" @close="closeForm">
@@ -25,11 +30,20 @@
 </template>
 <script setup>
 import { toast } from '@/composables/useToast'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { useAuth } from '@/composables/useAuth'
+import { canAdminister } from '../companyAccess.js'
+import CompanyMembers from './CompanyMembers.vue'
 import { request } from '@/services/api'
 import BaseModal from '@/components/base/BaseModal.vue'
+const props = defineProps({ revision: { type: Number, default: 0 } })
+defineEmits(['updated'])
+const { user } = useAuth()
+const expanded = ref(null)
 const companies = ref([]), open = ref(false), name = ref(''), busy = ref(false)
 const editingId = ref(null)
+const loading = ref(false)
+let sequence = 0
 function openForm(company) {
   editingId.value = company?.id ?? null
   name.value = company?.name ?? ''
@@ -39,8 +53,17 @@ function closeForm() {
   if (!busy.value) open.value = false
 }
 async function load() {
-  try { companies.value = await request('/companies'); }
-  catch (failure) { toast.error(failure.message) }
+  const current = ++sequence
+  if (!canAdminister(user.value)) { companies.value = []; expanded.value = null; loading.value = false; return }
+  loading.value = true
+  try {
+    const result = await request('/companies/managed')
+    if (current !== sequence) return
+    companies.value = result
+    if (!result.some(company => company.id === expanded.value)) expanded.value = null
+  }
+  catch (failure) { if (current === sequence) { companies.value = []; toast.error(failure.message) } }
+  finally { if (current === sequence) loading.value = false }
 }
 async function save() {
   if (busy.value) return
@@ -57,5 +80,6 @@ async function save() {
   catch (failure) { toast.error(failure.message) }
   finally { busy.value = false }
 }
-load()
+watch(() => props.revision, load, { immediate: true })
+onBeforeUnmount(() => { sequence++ })
 </script>

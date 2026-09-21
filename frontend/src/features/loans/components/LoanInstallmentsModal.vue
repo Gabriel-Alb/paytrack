@@ -7,8 +7,8 @@
                 Empresa: <span class="font-medium text-[#3f3f46]">{{ loan.companyName }}</span>
             </p>
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-                <div class="min-w-0 rounded-xl border border-black/[0.06] bg-[#fafafa] p-3 sm:p-4">
-                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa] sm:text-[10px]">
+                <div class="min-w-0 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3 sm:p-4">
+                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#71717a] sm:text-[10px]">
                         Valor emprestado
                     </p>
 
@@ -17,8 +17,8 @@
                     </p>
                 </div>
 
-                <div class="min-w-0 rounded-xl border border-black/[0.06] bg-[#fafafa] p-3 sm:p-4">
-                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa] sm:text-[10px]">
+                <div class="min-w-0 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3 sm:p-4">
+                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#71717a] sm:text-[10px]">
                         Parcelas pagas
                     </p>
 
@@ -27,8 +27,8 @@
                     </p>
                 </div>
 
-                <div class="min-w-0 rounded-xl border border-black/[0.06] bg-[#fafafa] p-3 sm:p-4">
-                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa] sm:text-[10px]">
+                <div class="min-w-0 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3 sm:p-4">
+                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#71717a] sm:text-[10px]">
                         Multa diária
                     </p>
 
@@ -37,8 +37,8 @@
                     </p>
                 </div>
 
-                <div class="min-w-0 rounded-xl border border-black/[0.06] bg-[#fafafa] p-3 sm:p-4">
-                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa] sm:text-[10px]">
+                <div class="min-w-0 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3 sm:p-4">
+                    <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#71717a] sm:text-[10px]">
                         Valor já pago
                     </p>
 
@@ -54,7 +54,7 @@
                         Parcelas do contrato
                     </h3>
 
-                    <p class="mt-1 text-[11px] leading-5 text-[#8b8b93]">
+                    <p class="mt-1 text-[11px] leading-5 text-[#71717a]">
                         Clique na parcela para visualizar os detalhes. Clique no
                         número para registrar ou remover o pagamento.
                     </p>
@@ -126,7 +126,7 @@
                                     </div>
 
                                     <div
-                                        class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-[#8b8b93]">
+                                        class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-[#71717a]">
                                         <span>
                                             Vencimento
                                             {{ formatDate(installment.dueDate) }}
@@ -190,7 +190,7 @@
                                     {{ formatCurrency(installment.value) }}
                                 </span>
 
-                                <span class="mdi shrink-0 text-lg text-[#a1a1aa] transition-transform duration-200"
+                                <span class="mdi shrink-0 text-lg text-[#71717a] transition-transform duration-200"
                                     :class="isExpanded(installment.number)
                                             ? 'mdi-chevron-up'
                                             : 'mdi-chevron-down'
@@ -199,7 +199,7 @@
                         </div>
 
                         <div v-if="isExpanded(installment.number)"
-                            class="min-w-0 border-t border-black/[0.06] bg-white px-3 pb-3 pt-3 sm:px-3.5 sm:pb-3.5"
+                            class="min-w-0 border-t border-black/[0.07] bg-white px-3 pb-3 pt-3 sm:px-3.5 sm:pb-3.5"
                             @click.stop>
                             <template v-if="!isPaid(installment.number)">
                                 <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -282,7 +282,7 @@
                                                 installment.number,
                                             )
                                                 " type="date" :max="today"
-                                                class="block h-10 w-full min-w-0 max-w-full appearance-none rounded-xl border border-black/[0.08] bg-white px-3 text-[12px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-150 focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.07)] [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left"
+                                                class="block h-10 w-full min-w-0 max-w-full appearance-none rounded-xl border border-black/[0.10] bg-white px-3 text-[12px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-150 focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.07)] [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left"
                                                 @input="
                                                     updatePaymentDate(
                                                         installment,
@@ -299,7 +299,7 @@
                                         </p>
 
                                         <div
-                                            class="flex h-10 w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-black/[0.06] bg-[#fafafa] px-3">
+                                            class="flex h-10 w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-black/[0.07] bg-[#fafafa] px-3">
                                             <span class="mdi mdi-account-outline shrink-0 text-[17px] text-[#71717a]"
                                                 aria-hidden="true" />
 
@@ -311,7 +311,7 @@
                                                 }}
                                             </p>
 
-                                            <span class="mdi mdi-lock-outline shrink-0 text-[14px] text-[#a1a1aa]"
+                                            <span class="mdi mdi-lock-outline shrink-0 text-[14px] text-[#71717a]"
                                                 aria-hidden="true" />
                                         </div>
                                     </div>
@@ -322,7 +322,7 @@
                                     getPaymentLateDays(
                                         installment.number,
                                     ) > 0
-                                " class="mt-3 rounded-xl border border-black/[0.06] bg-[#fafafa] p-3">
+                                " class="mt-3 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3">
                                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div class="min-w-0">
                                             <p class="text-[11px] font-semibold text-[#3f3f46]">
@@ -337,7 +337,7 @@
                                                 recebida?
                                             </p>
 
-                                            <p class="mt-0.5 text-[9px] leading-4 text-[#8b8b93]">
+                                            <p class="mt-0.5 text-[9px] leading-4 text-[#71717a]">
                                                 Informe o valor recebido junto
                                                 com a parcela.
                                             </p>
@@ -406,7 +406,7 @@
 
                                         <div class="relative min-w-0">
                                             <span
-                                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-[#8b8b93]">
+                                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-[#71717a]">
                                                 R$
                                             </span>
 
@@ -417,7 +417,7 @@
                                                     installment.number,
                                                 )
                                                     " step="0.01" placeholder="0,00"
-                                                class="block h-9 w-full min-w-0 max-w-full rounded-lg border border-black/[0.08] bg-white pl-9 pr-3 text-[11px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#a1a1aa] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.07)]"
+                                                class="block h-9 w-full min-w-0 max-w-full rounded-lg border border-black/[0.10] bg-white pl-9 pr-3 text-[11px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#71717a] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.07)]"
                                                 @input="
                                                     updateCustomLateFee(
                                                         installment.number,
@@ -431,10 +431,10 @@
                                         getLateFeeOption(
                                             installment.number,
                                         )
-                                    " class="mt-3 grid grid-cols-2 gap-2 border-t border-black/[0.05] pt-3">
+                                    " class="mt-3 grid grid-cols-2 gap-2 border-t border-black/[0.07] pt-3">
                                         <div>
                                             <p
-                                                class="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#a1a1aa]">
+                                                class="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
                                                 Multa recebida
                                             </p>
 
@@ -451,7 +451,7 @@
 
                                         <div>
                                             <p
-                                                class="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#a1a1aa]">
+                                                class="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
                                                 Saldo da multa
                                             </p>
 
@@ -473,7 +473,7 @@
                                     </div>
                                 </div>
 
-                                <div class="mt-3 flex items-center justify-end border-t border-black/[0.05] pt-3">
+                                <div class="mt-3 flex items-center justify-end border-t border-black/[0.07] pt-3">
                                     <button type="button"
                                         class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2]"
                                         @click="
@@ -556,7 +556,7 @@ const InfoItem = defineComponent({
                 'div',
                 {
                     class: [
-                        'min-w-0 rounded-lg border border-black/[0.05] bg-[#fafafa] p-2.5 sm:p-3',
+                        'min-w-0 rounded-lg border border-black/[0.07] bg-[#fafafa] p-2.5 sm:p-3',
                         props.wrapperClass,
                     ],
                 },
@@ -564,7 +564,7 @@ const InfoItem = defineComponent({
                     h(
                         'p',
                         {
-                            class: 'text-[8px] font-semibold uppercase tracking-[0.05em] text-[#a1a1aa] sm:text-[9px]',
+                            class: 'text-[8px] font-semibold uppercase tracking-[0.05em] text-[#71717a] sm:text-[9px]',
                         },
                         props.label,
                     ),
@@ -745,7 +745,7 @@ function getInstallmentContainerClass(
         return 'border-[#b91c1c]/15 bg-white'
     }
 
-    return 'border-black/[0.07] bg-white'
+    return 'border-black/[0.08] bg-white'
 }
 
 function isPaid(number) {

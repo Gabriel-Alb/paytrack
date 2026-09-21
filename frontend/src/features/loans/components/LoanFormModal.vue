@@ -20,10 +20,10 @@
                         <div class="relative min-w-0">
                             <input :value="selectedClient?.cpf ?? ''" readonly type="text"
                                 placeholder="Selecione um cliente"
-                                class="box-border h-11 w-full min-w-0 max-w-full cursor-not-allowed rounded-lg border border-black/[0.07] bg-[#f4f4f5] px-3 pr-9 text-sm text-[#71717a] outline-none placeholder:text-black/25" />
+                                class="box-border h-11 w-full min-w-0 max-w-full cursor-not-allowed rounded-lg border border-black/[0.08] bg-[#f4f4f5] px-3 pr-9 text-sm text-[#71717a] outline-none placeholder:text-black/40" />
 
                             <span
-                                class="mdi mdi-lock-outline pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-[#a1a1aa]"
+                                class="mdi mdi-lock-outline pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-[#71717a]"
                                 aria-hidden="true" />
                         </div>
                     </label>
@@ -40,13 +40,13 @@
 
                         <div class="relative min-w-0">
                             <span
-                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-black/40">
+                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-black/50">
                                 R$
                             </span>
 
                             <input v-model.number="form.amount" required min="0.01" step="0.01" type="number"
                                 placeholder="0,00"
-                                class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white pl-10 pr-3 text-sm text-[#202124] outline-none transition placeholder:text-black/30 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
+                                class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white pl-10 pr-3 text-sm text-[#202124] outline-none transition placeholder:text-black/45 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                         </div>
                     </label>
 
@@ -58,10 +58,10 @@
                         <div class="relative min-w-0">
                             <input v-model.number="form.interest" required min="0" step="0.01" type="number"
                                 placeholder="0"
-                                class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white px-3 pr-10 text-sm text-[#202124] outline-none transition placeholder:text-black/30 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
+                                class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white px-3 pr-10 text-sm text-[#202124] outline-none transition placeholder:text-black/45 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
 
                             <span
-                                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-black/40">
+                                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-black/50">
                                 %
                             </span>
                         </div>
@@ -74,15 +74,15 @@
 
                         <div class="relative min-w-0">
                             <span
-                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#8b8b93]">
+                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#71717a]">
                                 R$
                             </span>
 
                             <input :value="formatInputValue(totalWithInterest)" readonly type="text"
-                                class="box-border h-11 w-full min-w-0 max-w-full cursor-not-allowed rounded-lg border border-black/[0.07] bg-[#f4f4f5] pl-10 pr-9 text-sm font-semibold text-[#52525b] outline-none" />
+                                class="box-border h-11 w-full min-w-0 max-w-full cursor-not-allowed rounded-lg border border-black/[0.08] bg-[#f4f4f5] pl-10 pr-9 text-sm font-semibold text-[#52525b] outline-none" />
 
                             <span
-                                class="mdi mdi-lock-outline pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-[#a1a1aa]"
+                                class="mdi mdi-lock-outline pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-[#71717a]"
                                 aria-hidden="true" />
                         </div>
                     </label>
@@ -94,15 +94,15 @@
 
                         <div class="relative min-w-0">
                             <span
-                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#8b8b93]">
+                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#71717a]">
                                 R$
                             </span>
 
                             <input :value="formatInputValue(profit)" readonly type="text"
-                                class="box-border h-11 w-full min-w-0 max-w-full cursor-not-allowed rounded-lg border border-black/[0.07] bg-[#f4f4f5] pl-10 pr-9 text-sm font-semibold text-[#166534] outline-none" />
+                                class="box-border h-11 w-full min-w-0 max-w-full cursor-not-allowed rounded-lg border border-black/[0.08] bg-[#f4f4f5] pl-10 pr-9 text-sm font-semibold text-[#166534] outline-none" />
 
                             <span
-                                class="mdi mdi-lock-outline pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-[#a1a1aa]"
+                                class="mdi mdi-lock-outline pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base text-[#71717a]"
                                 aria-hidden="true" />
                         </div>
                     </label>
@@ -114,7 +114,7 @@
 
                         <input v-model.number="form.installmentCount" required min="1" max="120" type="number"
                             placeholder="1"
-                            class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white px-3 text-sm text-[#202124] outline-none transition placeholder:text-black/30 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
+                            class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white px-3 text-sm text-[#202124] outline-none transition placeholder:text-black/45 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                     </label>
 
                     <label class="min-w-0">
@@ -124,13 +124,13 @@
 
                         <div class="relative min-w-0">
                             <span
-                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-black/40">
+                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-black/50">
                                 R$
                             </span>
 
                             <input v-model.number="form.dailyLateFee" required min="0" step="0.01" type="number"
                                 placeholder="0,00"
-                                class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white pl-10 pr-3 text-sm text-[#202124] outline-none transition placeholder:text-black/30 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
+                                class="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white pl-10 pr-3 text-sm text-[#202124] outline-none transition placeholder:text-black/45 focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                         </div>
                     </label>
 
@@ -140,7 +140,7 @@
                         </span>
 
                         <input v-model="form.loanDate" required type="date"
-                            class="block box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white px-3 text-sm text-[#202124] outline-none transition focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
+                            class="block box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white px-3 text-sm text-[#202124] outline-none transition focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                     </label>
 
                     <label class="min-w-0 max-w-full overflow-hidden">
@@ -149,7 +149,7 @@
                         </span>
 
                         <input v-model="form.firstPaymentDate" required type="date"
-                            class="block box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/10 bg-white px-3 text-sm text-[#202124] outline-none transition focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
+                            class="block box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white px-3 text-sm text-[#202124] outline-none transition focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                     </label>
                 </div>
             </section>

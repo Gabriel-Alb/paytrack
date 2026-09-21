@@ -5,14 +5,14 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => ({
   server: {
     host: '0.0.0.0',
     proxy: { '/api': 'http://127.0.0.1:3000' },
   },
   plugins: [
     vue(),
-    ...(command === 'serve' ? [vueDevTools()] : []),
+    ...(command === 'serve' && mode !== 'test' ? [vueDevTools()] : []),
     tailwindcss(),
   ],
 
