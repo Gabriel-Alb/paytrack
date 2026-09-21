@@ -1,12 +1,12 @@
 <template>
-    <article class="relative overflow-visible rounded-xl border border-black/[0.07] bg-white p-4 sm:p-6" :class="{ 'compact-chart': compact }">
+    <article class="relative overflow-visible rounded-xl border border-black/[0.08] bg-white p-4 sm:p-6" :class="{ 'compact-chart': compact }">
         <header class="flex items-start justify-between gap-4">
             <div class="min-w-0">
                 <h2 class="truncate text-[15px] font-semibold tracking-[-0.02em] text-[#27272a] sm:text-base">
                     {{ title }}
                 </h2>
 
-                <p v-if="description" class="mt-1 text-[10px] text-[#8b8b93] sm:text-xs">
+                <p v-if="description" class="mt-1 text-[10px] text-[#71717a] sm:text-xs">
                     {{ description }}
                 </p>
             </div>
@@ -24,7 +24,7 @@
                 :style="chartStyle">
                 <div class="pointer-events-none absolute inset-x-0 top-0 bottom-7" aria-hidden="true">
                     <span v-for="line in gridLines" :key="line"
-                        class="absolute inset-x-0 border-t border-dashed border-black/[0.06]"
+                        class="absolute inset-x-0 border-t border-dashed border-black/[0.07]"
                         :style="{ bottom: `${line}%` }" />
                 </div>
 
@@ -42,14 +42,14 @@
                                     leave-from-class="translate-y-0 scale-100 opacity-100"
                                     leave-to-class="translate-y-1 scale-95 opacity-0">
                                     <div v-if="isPopoverVisible(index)"
-                                        class="chart-tooltip absolute z-[100] whitespace-nowrap rounded-lg border border-black/[0.06] bg-white px-2.5 py-1.5 shadow-[0_6px_18px_rgb(0_0_0/0.10)]"
+                                        class="chart-tooltip absolute z-[100] whitespace-nowrap rounded-lg border border-black/[0.07] bg-white px-2.5 py-1.5 shadow-[0_6px_18px_rgb(0_0_0/0.10)]"
                                         :style="{
                                             bottom: `${getBarHeight(item.value)}%`,
                                             marginBottom: '8px',
                                             left: compact && index === 0 ? '0' : undefined,
                                             right: compact && index === normalizedItems.length - 1 ? '0' : undefined,
                                         }">
-                                        <p class="text-[9px] font-medium text-[#8b8b93]">
+                                        <p class="text-[9px] font-medium text-[#71717a]">
                                             {{ item.fullLabel }}
                                         </p>
 
@@ -58,7 +58,7 @@
                                         </p>
 
                                         <span
-                                            class="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rotate-45 border-r border-b border-black/[0.06] bg-white" />
+                                            class="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rotate-45 border-r border-b border-black/[0.07] bg-white" />
                                     </div>
                                 </Transition>
 
@@ -78,7 +78,7 @@
                         </div>
 
                         <span
-                            class="overflow-hidden px-0.5 pt-2 text-center text-[9px] leading-5 font-medium text-ellipsis whitespace-nowrap text-[#8b8b93] sm:px-1 sm:text-[11px]">
+                            class="overflow-hidden px-0.5 pt-2 text-center text-[9px] leading-5 font-medium text-ellipsis whitespace-nowrap text-[#71717a] sm:px-1 sm:text-[11px]">
                             {{ item.label }}
                         </span>
                     </div>
@@ -86,7 +86,7 @@
             </div>
         </div>
 
-        <div v-else class="flex h-[220px] items-center justify-center text-xs text-[#8b8b93] sm:h-[260px]">
+        <div v-else class="flex h-[220px] items-center justify-center text-xs text-[#71717a] sm:h-[260px]">
             Nenhum dado disponível.
         </div>
     </article>

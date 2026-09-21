@@ -93,7 +93,7 @@
     </div>
 
     <section v-else class="flex min-h-dvh items-center justify-center px-4 py-8">
-      <div class="w-full rounded-2xl border border-black/[0.07] bg-white p-5 shadow-sm sm:p-9"
+      <div class="w-full rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm sm:p-9"
         :class="wide ? 'max-w-2xl' : 'max-w-md'">
         <h1 class="text-2xl font-semibold tracking-tight">
           {{ title }}

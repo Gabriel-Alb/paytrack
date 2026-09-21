@@ -8,7 +8,7 @@
         </label>
 
         <input id="email" v-model="email" type="email" autocomplete="username" required maxlength="254"
-          class="h-10 w-full min-w-0 rounded-lg border border-black/[0.10] bg-[#fafafa] px-3.5 text-[13px] text-[#18181b] outline-none transition-[border-color,box-shadow,background-color] duration-200 hover:border-black/[0.16] focus:border-[#166534]/70 focus:bg-white focus:ring-4 focus:ring-[#166534]/[0.07]" />
+          class="h-10 w-full min-w-0 rounded-lg border border-black/[0.12] bg-[#fafafa] px-3.5 text-[13px] text-[#18181b] outline-none transition-[border-color,box-shadow,background-color] duration-200 hover:border-black/[0.16] focus:border-[#166534]/70 focus:bg-white focus:ring-4 focus:ring-[#166534]/[0.07]" />
       </div>
 
       <PasswordField id="password" v-model="password" autocomplete="current-password"
@@ -21,13 +21,13 @@
     </form>
 
     <div class="mt-5 flex items-center gap-3">
-      <div class="h-px flex-1 bg-black/[0.07]" />
+      <div class="h-px flex-1 bg-black/[0.08]" />
 
-      <span class="text-[10px] text-black/30">
+      <span class="text-[10px] text-black/45">
         PayTrack
       </span>
 
-      <div class="h-px flex-1 bg-black/[0.07]" />
+      <div class="h-px flex-1 bg-black/[0.08]" />
     </div>
 
     <p class="mt-4 text-center text-xs text-[#71717a]">
