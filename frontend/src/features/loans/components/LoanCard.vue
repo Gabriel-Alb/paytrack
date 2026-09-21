@@ -10,7 +10,7 @@
                         {{ loan.clientName }}
                     </h3>
 
-                    <p class="mt-1 text-[12px] text-[#8b8b93]">
+                    <p class="mt-1 text-[12px] text-[#71717a]">
                         Empréstimo #{{ loan.id }}
                     </p>
                 </div>
@@ -27,7 +27,7 @@
 
             <div class="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
                 <div class="min-w-0">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                         Valor
                     </p>
 
@@ -41,7 +41,7 @@
                 </div>
 
                 <div class="min-w-0">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                         Valor da parcela
                     </p>
 
@@ -53,7 +53,7 @@
                 </div>
 
                 <div class="min-w-0">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                         Parcelas
                     </p>
 
@@ -65,7 +65,7 @@
                 </div>
 
                 <div class="min-w-0">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                         Juros
                     </p>
 
@@ -79,9 +79,9 @@
                 </div>
             </div>
 
-            <div class="mt-5 flex items-end justify-between gap-4 border-t border-black/[0.06] pt-4">
+            <div class="mt-5 flex items-end justify-between gap-4 border-t border-black/[0.07] pt-4">
                 <div class="min-w-0">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                         Parcelas pagas
                     </p>
 

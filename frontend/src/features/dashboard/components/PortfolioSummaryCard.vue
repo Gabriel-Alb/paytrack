@@ -1,6 +1,6 @@
 <template>
     <article
-        class="relative min-w-0 overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] sm:p-5">
+        class="relative min-w-0 overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] sm:p-5">
         <div
             class="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#166534]/20 to-transparent" />
 
@@ -10,7 +10,7 @@
                     {{ title }}
                 </h2>
 
-                <p v-if="description" class="mt-1 text-[9px] leading-relaxed text-[#a1a1aa] sm:text-[11px]">
+                <p v-if="description" class="mt-1 text-[9px] leading-relaxed text-[#71717a] sm:text-[11px]">
                     {{ description }}
                 </p>
             </div>
@@ -38,7 +38,7 @@
                     </span>
                 </div>
 
-                <div class="mt-2.5 h-2 overflow-hidden rounded-full bg-[#f1f1f2]" role="progressbar"
+                <div class="mt-2.5 h-2 overflow-hidden rounded-full bg-[#eaeaed]" role="progressbar"
                     :aria-label="item.label" :aria-valuenow="item.percentage" aria-valuemin="0" aria-valuemax="100">
                     <div :class="[
                         'h-full rounded-full transition-[width] duration-700 ease-out',
@@ -55,7 +55,7 @@
 
         <div v-else
             class="mt-5 flex min-h-24 items-center justify-center rounded-xl border border-dashed border-black/[0.08] bg-[#fafafa]">
-            <span class="text-[10px] font-medium text-[#a1a1aa] sm:text-xs">
+            <span class="text-[10px] font-medium text-[#71717a] sm:text-xs">
                 Nenhum dado disponível
             </span>
         </div>

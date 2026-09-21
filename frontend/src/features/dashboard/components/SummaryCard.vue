@@ -1,6 +1,6 @@
 <template>
     <article
-        class="min-w-0 rounded-xl border border-black/[0.07] bg-white p-4 transition-shadow hover:shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:p-5"
+        class="min-w-0 rounded-xl border border-black/[0.08] bg-white p-4 transition-shadow hover:shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:p-5"
     >
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -19,7 +19,7 @@
 
         <p
             v-if="description"
-            class="mt-2 truncate text-[10px] text-[#a1a1aa] sm:text-[11px]"
+            class="mt-2 truncate text-[10px] text-[#71717a] sm:text-[11px]"
         >
             {{ description }}
         </p>

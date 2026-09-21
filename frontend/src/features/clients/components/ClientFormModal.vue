@@ -108,7 +108,7 @@ const emit = defineEmits([
 ])
 
 const inputClass =
-    'h-[46px] w-full rounded-[10px] border border-black/[0.09] bg-[#f8f8f8] px-3 text-base text-[#202124] outline-none transition-[border-color,background-color,box-shadow] duration-150 placeholder:text-black/30 focus:border-[#166534]/45 focus:bg-white focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)] sm:h-10 sm:text-sm'
+    'h-[46px] w-full rounded-[10px] border border-black/[0.11] bg-[#f8f8f8] px-3 text-base text-[#202124] outline-none transition-[border-color,background-color,box-shadow] duration-150 placeholder:text-black/45 focus:border-[#166534]/45 focus:bg-white focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)] sm:h-10 sm:text-sm'
 
 const primaryButtonClass =
     'inline-flex min-h-11 items-center justify-center rounded-[10px] border border-[#166534] bg-[#166534] px-4 text-[13px] font-semibold text-white transition-colors active:bg-[#14532d] sm:min-h-[38px]'

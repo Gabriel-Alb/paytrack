@@ -4,16 +4,16 @@
             <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
                 <div class="relative w-full sm:max-w-[360px]">
                     <input v-model="search" type="text" placeholder="Pesquisar por nome ou CPF"
-                        class="h-10 w-full rounded-xl border border-black/[0.08] bg-white pl-4 pr-10 text-[13px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#a1a1aa] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]" />
+                        class="h-10 w-full rounded-xl border border-black/[0.10] bg-white pl-4 pr-10 text-[13px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#71717a] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]" />
 
                     <span
-                        class="mdi mdi-magnify pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg text-[#a1a1aa]"
+                        class="mdi mdi-magnify pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg text-[#71717a]"
                         aria-hidden="true" />
                 </div>
 
                 <div class="relative w-full sm:w-[180px]">
                     <select v-model="statusFilter"
-                        class="h-10 w-full appearance-none rounded-xl border border-black/[0.08] bg-white px-3 pr-9 text-[13px] font-medium text-[#52525b] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]">
+                        class="h-10 w-full appearance-none rounded-xl border border-black/[0.10] bg-white px-3 pr-9 text-[13px] font-medium text-[#52525b] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.08)]">
                         <option value="todos">
                             Todos os status
                         </option>
@@ -51,7 +51,7 @@
                             {{ client.name }}
                         </h3>
 
-                        <p class="mt-1 text-[12px] text-[#8b8b93]">
+                        <p class="mt-1 text-[12px] text-[#71717a]">
                             CPF: {{ client.cpf }}
                         </p>
                     </div>
@@ -64,7 +64,7 @@
 
                 <div class="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
                     <div class="min-w-0">
-                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                             Telefone
                         </p>
 
@@ -74,7 +74,7 @@
                     </div>
 
                     <div class="min-w-0">
-                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                             E-mail
                         </p>
 
@@ -84,7 +84,7 @@
                     </div>
 
                     <div class="min-w-0">
-                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                             RG
                         </p>
 
@@ -94,7 +94,7 @@
                     </div>
 
                     <div class="min-w-0">
-                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#a1a1aa]">
+                        <p class="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#71717a]">
                             CNH
                         </p>
 
@@ -104,9 +104,9 @@
                     </div>
                 </div>
 
-                <div class="mt-5 flex items-center justify-between gap-4 border-t border-black/[0.06] pt-4">
+                <div class="mt-5 flex items-center justify-between gap-4 border-t border-black/[0.07] pt-4">
                     <div class="min-w-0">
-                        <p class="text-[11px] text-[#a1a1aa]">
+                        <p class="text-[11px] text-[#71717a]">
                             {{ loanLabel(client.loan_count ?? 0) }}
                         </p>
                     </div>
@@ -146,7 +146,7 @@
                 Nenhum cliente encontrado
             </h3>
 
-            <p class="mt-1 max-w-sm text-xs leading-5 text-[#8b8b93]">
+            <p class="mt-1 max-w-sm text-xs leading-5 text-[#71717a]">
                 Tente alterar os filtros ou pesquisar utilizando outro nome ou CPF.
             </p>
         </div>

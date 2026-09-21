@@ -39,7 +39,7 @@
                         {{ status.label }}
                     </p>
 
-                    <p class="mt-0.5 text-xs leading-4 text-black/35">
+                    <p class="mt-0.5 text-xs leading-4 text-black/45">
                         {{ status.description }}
                     </p>
                 </div>

@@ -56,7 +56,7 @@
       </div>
     </div>
 
-    <div class="flex items-center justify-center gap-5 border-t border-black/[0.05] px-4 py-3"
+    <div class="flex items-center justify-center gap-5 border-t border-black/[0.07] px-4 py-3"
       aria-label="Legenda dos vencimentos">
       <div v-for="status in legendStatuses" :key="status.key" class="flex items-center gap-1.5 whitespace-nowrap">
         <span class="block h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: status.color }"

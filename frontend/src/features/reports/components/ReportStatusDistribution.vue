@@ -4,7 +4,7 @@
 
     <div class="report-gauge">
       <svg viewBox="0 0 240 134" aria-label="Distribuição por situação" role="group">
-        <path d="M 24 116 A 96 96 0 0 1 216 116" fill="none" stroke="#f0f1f2" stroke-width="29" />
+        <path d="M 24 116 A 96 96 0 0 1 216 116" fill="none" stroke="#eaeaed" stroke-width="29" />
         <path v-for="segment in segments" :key="segment.key" :d="segment.path" fill="none"
           :stroke="segment.color" stroke-width="29" role="button" tabindex="0"
           :aria-label="`${segment.label}: ${segment.count} contratos`" :aria-pressed="modelValue === segment.key"

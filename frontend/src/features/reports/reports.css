@@ -37,7 +37,7 @@
 .report-card {
   min-width: 0;
   padding: 16px;
-  border: 1px solid rgb(0 0 0 / 6%);
+  border: 1px solid rgb(0 0 0 / 8%);
   border-radius: 16px;
   background: #fff;
 }
@@ -161,7 +161,7 @@
   gap: 4px;
   padding: 3px;
   border-radius: 8px;
-  background: #f6f7f8;
+  background: #f4f4f5;
   font-size: 11px;
 }
 
@@ -185,7 +185,7 @@
 }
 
 .report-week-switch button:disabled {
-  opacity: .3;
+  opacity: .4;
   cursor: default;
 }
 
@@ -231,7 +231,7 @@
 
 .report-list li {
   padding: 11px 0;
-  border-bottom: 1px solid #f1f1f2;
+  border-bottom: 1px solid #eaeaed;
 }
 
 .report-list li:last-child {
@@ -286,7 +286,7 @@
   margin-top: 13px;
   padding: 3px;
   border-radius: 8px;
-  background: #f6f7f8;
+  background: #f4f4f5;
 }
 
 .report-status-filter button {
@@ -347,7 +347,7 @@
   justify-content: center;
   padding: 16px 8px;
   margin: 0;
-  color: #8b8b93;
+  color: #71717a;
   font-size: 12px;
   text-align: center;
 }
@@ -368,7 +368,7 @@
 
 .report-weekday {
   text-align: center;
-  color: #a1a1aa;
+  color: #71717a;
   font-size: 10px;
   line-height: 20px;
 }
@@ -413,7 +413,7 @@
 }
 
 .report-day-summary {
-  border-left: 1px solid #f0f1f2;
+  border-left: 1px solid #eaeaed;
   padding-left: 12px;
 }
 
@@ -547,7 +547,7 @@
 
 .report-distribution-legend button:hover,
 .report-distribution-legend button[aria-pressed="true"] {
-  background: #f6f7f8;
+  background: #f4f4f5;
 }
 
 .report-legend-label {
