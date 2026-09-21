@@ -2,7 +2,7 @@
   <AuthShell
     wide
     split
-    mobile-scrollable
+    scrollable
     title="Solicitar acesso"
     description="Preencha seus dados. Um administrador avaliará sua solicitação antes de liberar o acesso."
   >

@@ -4,7 +4,7 @@
     : 'min-h-dvh bg-[#f6f7f8] text-[#18181b]',
   extendMobileBackground && 'max-lg:z-10 max-lg:bg-transparent',
   ]">
-    <div v-if="split" class="grid h-full w-full overflow-hidden lg:grid-cols-[52%_48%]">
+    <div v-if="split" class="grid h-full w-full grid-rows-[minmax(0,1fr)] overflow-hidden lg:grid-cols-[52%_48%]">
       <aside class="relative hidden h-full min-h-0 overflow-hidden bg-[#166534] lg:block">
         <img :src="backgroundImage" alt="" class="absolute inset-0 h-full w-full object-cover" />
 
@@ -39,8 +39,8 @@
         </div>
       </aside>
 
-      <section class="relative h-full min-h-0 min-w-0 lg:bg-white" :class="mobileScrollable
-        ? 'overflow-y-auto overscroll-contain lg:overflow-hidden'
+      <section class="relative h-full min-h-0 min-w-0 lg:bg-white" :class="scrollable
+        ? 'overflow-y-auto overscroll-contain'
         : 'overflow-hidden'
         ">
         <Teleport to="body" :disabled="!extendMobileBackground">
@@ -59,10 +59,10 @@
           class="pointer-events-none absolute right-[-180px] top-[-180px] hidden size-[420px] rounded-full bg-[#166534]/[0.035] blur-3xl lg:block" />
 
         <div
-          class="relative z-10 flex min-h-full w-full justify-center px-4 lg:h-full lg:min-h-0 lg:items-center lg:px-14 xl:px-20"
-          :class="mobileScrollable
-            ? 'items-start py-5 sm:py-7 lg:py-0'
-            : 'items-center py-0'
+          class="relative z-10 flex min-h-full w-full justify-center px-4 lg:px-14 xl:px-20"
+          :class="scrollable
+            ? 'items-start py-5 sm:py-7'
+            : 'items-center py-0 lg:h-full lg:min-h-0'
             ">
           <div
             class="w-full rounded-[20px] bg-white shadow-[0_18px_50px_rgba(0,0,0,0.16)] lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none"
@@ -125,7 +125,7 @@ const props = defineProps({
   },
   wide: Boolean,
   split: Boolean,
-  mobileScrollable: Boolean,
+  scrollable: Boolean,
   extendMobileBackground: Boolean,
 })
 
