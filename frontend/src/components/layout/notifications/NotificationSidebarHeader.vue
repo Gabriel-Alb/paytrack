@@ -1,5 +1,5 @@
 <template>
-    <header class="flex h-[60px] shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-4">
+    <header class="flex h-[60px] shrink-0 items-center justify-between border-b border-black/[0.07] bg-white px-4">
         <h2 id="notifications-title" class="text-[17px] font-semibold tracking-[-0.02em] text-[#18181b]">
             Notificações
         </h2>
