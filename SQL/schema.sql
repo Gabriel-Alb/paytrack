@@ -74,9 +74,26 @@ CREATE TABLE IF NOT EXISTS companies (
 CREATE TABLE IF NOT EXISTS user_companies (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+    role TEXT NOT NULL DEFAULT 'USER' CHECK(role IN ('USER','MANAGER')),
     PRIMARY KEY(user_id,company_id)
 );
 CREATE INDEX IF NOT EXISTS idx_user_companies_company ON user_companies(company_id,user_id);
+
+-- The existing user is the access request; decisions belong to each company.
+CREATE TABLE IF NOT EXISTS user_access_companies (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    company_role TEXT CHECK(company_role IN ('USER','MANAGER')),
+    decided_by INTEGER REFERENCES users(id),
+    decided_at TEXT,
+    PRIMARY KEY(user_id,company_id),
+    CHECK ((status='pending' AND company_role IS NULL AND decided_by IS NULL AND decided_at IS NULL)
+      OR (status='approved' AND company_role IS NOT NULL AND decided_by IS NOT NULL AND decided_at IS NOT NULL)
+      OR (status='rejected' AND company_role IS NULL AND decided_by IS NOT NULL AND decided_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_user_access_company ON user_access_companies(company_id,status,user_id);
+CREATE INDEX IF NOT EXISTS idx_user_access_actor ON user_access_companies(decided_by);
 
 CREATE TABLE IF NOT EXISTS clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

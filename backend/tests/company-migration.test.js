@@ -48,7 +48,7 @@ test('schema atual aplicado manualmente inicializa sem perder empresas já vincu
       INSERT INTO user_companies(user_id,company_id) VALUES(1,2);`));
     (await initial.close());
     const db=(await openDatabase(path));
-    assert.deepEqual((await db.prepare('SELECT * FROM user_companies').all()),[{user_id:1,company_id:2}]);
+    assert.deepEqual((await db.prepare('SELECT * FROM user_companies').all()),[{user_id:1,company_id:2,role:'USER'}]);
     assert.deepEqual((await db.pragma('foreign_key_check')),[]);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });
@@ -77,7 +77,7 @@ test('v6 preserva histórico, converte master, associa legado e não recria vín
     assert.ok(!(await db.pragma('table_info(clients)')).some(column=>column.name==='company_id'));
     assert.equal((await db.prepare('SELECT company_id FROM scoped_loans WHERE id=12').get()).company_id,1);
     assert.equal((await db.prepare('SELECT role FROM users WHERE id=1').get()).role,'admin');
-    assert.deepEqual((await db.prepare('SELECT * FROM user_companies ORDER BY user_id').all()),[{user_id:2,company_id:1},{user_id:3,company_id:1}]);
+    assert.deepEqual((await db.prepare('SELECT * FROM user_companies ORDER BY user_id').all()),[{user_id:2,company_id:1,role:'USER'},{user_id:3,company_id:1,role:'USER'}]);
     (await assert.rejects(async ()=>(await db.exec("UPDATE users SET role='master' WHERE id=1"))));
     (await assert.rejects(async ()=>(await db.exec("INSERT INTO clients(name,cpf) VALUES('Duplicado','52998224725')"))));
     (await db.exec('UPDATE user_companies SET company_id=2 WHERE user_id=2'));
@@ -86,7 +86,7 @@ test('v6 preserva histórico, converte master, associa legado e não recria vín
     assert.equal((await db.prepare('SELECT COUNT(*) n FROM companies').get()).n,2);
     assert.deepEqual((await db.pragma('foreign_key_check')),[]);
     assert.equal((await db.pragma('foreign_keys',{simple:true})),1);
-    assert.equal((await db.pragma('user_version',{simple:true})),6);
+    assert.equal((await db.pragma('user_version',{simple:true})),7);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });
 

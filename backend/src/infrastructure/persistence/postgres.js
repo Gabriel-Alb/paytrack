@@ -26,7 +26,7 @@ export function postgresOptions(config) {
   };
 }
 
-const migrations = [[1, '001-initial.sql'], [2, '002-loan-companies.sql']];
+const migrations = [[1, '001-initial.sql'], [2, '002-loan-companies.sql'], [3, '003-company-roles.sql']];
 function migrationSource(file) {
   const sql = readFileSync(new URL(`./postgres/${file}`, import.meta.url), 'utf8').replaceAll('\r\n','\n');
   return { sql, checksum: createHash('sha256').update(sql).digest('hex') };
@@ -49,7 +49,7 @@ export async function migratePostgres(pool) {
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version INTEGER PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
     const latest = (await client.query('SELECT MAX(version) AS version FROM schema_migrations')).rows[0].version;
-    if (latest > 2) throw new Error('Versão PostgreSQL mais recente que a aplicação.');
+    if (latest > 3) throw new Error('Versão PostgreSQL mais recente que a aplicação.');
     for (const [version, file] of migrations) {
       const { sql, checksum } = migrationSource(file);
       const applied = (await client.query('SELECT checksum FROM schema_migrations WHERE version=$1', [version])).rows[0];

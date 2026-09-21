@@ -8,9 +8,9 @@ export async function importSqlite(sourcePath, target) {
   const source = new Database(sourcePath, { readonly:true, fileMustExist:true });
   try {
     source.exec('BEGIN');
-    if (source.pragma('user_version', { simple:true }) !== 6 || source.pragma('foreign_key_check').length ||
+    if (![6,7].includes(source.pragma('user_version', { simple:true })) || source.pragma('foreign_key_check').length ||
       source.pragma('integrity_check')[0].integrity_check !== 'ok')
-      throw new Error('A origem precisa estar no schema SQLite v6, com referências válidas.');
+      throw new Error('A origem precisa estar no schema SQLite v6 ou v7, com referências válidas.');
     return await target.transaction(async () => {
       await target.exec(`LOCK TABLE ${tables.join(',')} IN ACCESS EXCLUSIVE MODE`);
       for (const table of tables.filter(table => table !== 'companies')) {
@@ -25,6 +25,7 @@ export async function importSqlite(sourcePath, target) {
       for (const key of ['cpf','rg','cnh']) await target.exec(`ALTER TABLE clients DISABLE TRIGGER clients_${key}_unique`);
       const counts = {};
       for (const table of tables) {
+        if (table==='user_access_companies' && source.pragma('user_version', {simple:true})===6) { counts[table]=0; continue; }
         const rows = source.prepare(`SELECT * FROM ${table}`).safeIntegers(true).all().map(row =>
           Object.fromEntries(Object.entries(row).map(([key,value]) => {
             if (typeof value !== 'bigint') return [key,value];
@@ -43,7 +44,7 @@ export async function importSqlite(sourcePath, target) {
       }
       for (const user of source.prepare('SELECT id,approved_by FROM users WHERE approved_by IS NOT NULL').all())
         await target.prepare('UPDATE users SET approved_by=? WHERE id=?').run(user.approved_by,user.id);
-      for (const table of tables.filter(table => !['user_companies','auth_rate_limits'].includes(table))) {
+      for (const table of tables.filter(table => !['user_companies','user_access_companies','auth_rate_limits'].includes(table))) {
         const { maximum } = await target.prepare(`SELECT COALESCE(MAX(id),0) AS maximum FROM ${table}`).get();
         const sequence = source.prepare('SELECT seq FROM sqlite_sequence WHERE name=?').get(table)?.seq ?? 0;
         const value = Math.max(maximum,sequence);
