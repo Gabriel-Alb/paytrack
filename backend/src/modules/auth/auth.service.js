@@ -16,11 +16,12 @@ export async function verifyPassword(hash,password) {
   try { return await argon2.verify(hash,password); }
   catch { await argon2.verify(await dummy(),password); return false; }
 }
-import { userCompanies, replaceUserCompanies } from '../companies/companies.repository.js';
+import { userCompanies, companyExists, addRequestedCompany, requestCompanies } from '../companies/companies.repository.js';
+import { administrationScope, decideAccess, replaceMemberships } from '../companies/companies.service.js';
 
 export const safeUser = async (user) => {
   const companies = (await userCompanies(user.id));
-  return {id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status,companies,companyIds:companies.map(company=>company.id)};
+  return {id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status,companies,companyIds:companies.map(company=>company.id),managedCompanyIds:companies.filter(company=>company.role==='MANAGER').map(company=>company.id)};
 };
 export const profileUser = async (user) => ({...(await safeUser(user)),cpf:user.cpf,rg:user.rg});
 export async function updateProfile(user,input) {
@@ -60,10 +61,13 @@ export function validCsrf(session, token) {
   return typeof token==='string' && /^[\w-]{43}$/.test(token) && timingSafeEqual(Buffer.from(session.csrf_token),Buffer.from(token));
 }
 export async function requestAccess(data) {
+  data = requestSchema.parse(data);
   const passwordHash = await hashPassword(data.password);
   try {
     (await repo.atomic(async () => {
+      for (const companyId of data.companyIds ?? []) if (!await companyExists(companyId)) throw new AppError(400,'INVALID_COMPANY','Uma das empresas selecionadas não existe.');
       const id = (await repo.insertUser({...data,passwordHash},'user','pending'));
+      for (const companyId of data.companyIds ?? []) await addRequestedCompany(id,companyId);
       (await repo.audit('access_requested',null,id));
     }));
   } catch (error) {
@@ -125,21 +129,40 @@ export async function changePassword(user,session,data) {
     (await repo.audit('sessions_revoked',user.id,user.id));
   }));
 }
-export async function reviewUser(id) {
-  const user = requireRecord((await repo.byId(id)),'Usuário');
-  return {...(await safeUser(user)),cpf:user.cpf,rg:user.rg,cnh:user.cnh,createdAt:user.created_at};
+export async function reviewUser(id,actor) {
+  return repo.atomic(async () => {
+    const scope = await administrationScope(actor);
+    const companies = (await userCompanies(id)).filter(row => scope.global || scope.companyIds.includes(row.id));
+    const requests = (await requestCompanies(id)).filter(row => scope.global || scope.companyIds.includes(row.id));
+    if (!scope.global && !companies.length && !requests.length) throw new AppError(403,'COMPANY_FORBIDDEN','Usuário fora das empresas administradas.');
+    const user = requireRecord(await repo.byId(id),'Usuário');
+    const requestStatus = requests.some(row => row.status==='pending') ? 'pending' : requests.some(row => row.status==='approved') ? 'approved' : requests.length ? 'rejected' : null;
+    return {id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status,companies,companyIds:companies.map(row=>row.id),requests,requestStatus,
+      ...(scope.global ? {cpf:user.cpf,rg:user.rg,cnh:user.cnh} : {}),createdAt:user.created_at};
+  });
 }
 export async function changeAccess(actor,id,input) {
   if (actor.role !== 'admin') throw new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.');
   const {action,role,companyIds} = accessSchema.parse(input);
   const result = (await repo.atomic(async () => {
+    if (!(await administrationScope(actor)).global) throw new AppError(403,'FORBIDDEN','Somente administradores alteram o acesso global.');
     const user = requireRecord((await repo.byId(id)),'Usuário');
+    const requests = await requestCompanies(id);
+    if (requests.length && ['approve','reject'].includes(action)) {
+      if (role && role!=='user') throw new AppError(400,'GLOBAL_ROLE_SEPARATE','Aprove o acesso empresarial antes de alterar o nível global.');
+      const pending = requests.filter(row => row.status==='pending');
+      if (!pending.length) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
+      if (action==='approve' && companyIds.some(companyId => !pending.some(row=>row.id===companyId))) throw new AppError(400,'INVALID_COMPANY','Selecione apenas empresas pendentes da solicitação.');
+      await decideAccess(actor,id,{decisions:pending.map(row => action==='approve' && companyIds.includes(row.id)
+        ? {companyId:row.id,action:'approve',role:'USER'} : {companyId:row.id,action:'reject'})},{notify:false});
+      return safeUser(await repo.byId(id));
+    }
     const expected = {approve:'pending',reject:'pending',block:'active',unblock:'blocked'}[action];
     if (action === 'edit' ? !['active','blocked'].includes(user.access_status) : user.access_status!==expected) throw new AppError(409,'ACCESS_CONFLICT','O status mudou. Atualize a lista.');
     if (user.id===actor.id) throw new AppError(409,'SELF_ACCESS_CHANGE','Não é possível alterar o próprio acesso.');
     if (user.role === 'admin' && user.access_status === 'active' && (action === 'block' || (action === 'edit' && role === 'user')) && !(await repo.hasOtherActiveAdmin(id)))
       throw new AppError(409,'LAST_ADMIN','Mantenha pelo menos um administrador ativo.');
-    if (action === 'approve' || action === 'edit') (await replaceUserCompanies(id, companyIds));
+    if (action === 'approve' || action === 'edit') (await replaceMemberships(actor,id,companyIds));
     if (action === 'unblock' && user.role === 'user' && !(await userCompanies(id)).length)
       throw new AppError(400,'COMPANY_REQUIRED','Vincule pelo menos uma empresa antes de desbloquear.');
     (await repo.setAccess(id,action,actor.id,role));
@@ -151,5 +174,8 @@ export async function changeAccess(actor,id,input) {
   notifyAccessChanged();
   return result;
 }
-export const listUsers = repo.listUsers;
-export const pendingNotifications = repo.pendingNotifications;
+export const listUsers = (query,actor) => repo.atomic(async () => repo.listUsers(query,await administrationScope(actor)));
+export const pendingNotifications = actor => repo.atomic(async () => {
+  try { return await repo.pendingNotifications(await administrationScope(actor)); }
+  catch (error) { if (error.code==='COMPANY_FORBIDDEN') return []; throw error; }
+});

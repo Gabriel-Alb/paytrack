@@ -7,6 +7,6 @@ export const dashboard = async (_req, res) => res.json((await readFinancial(asyn
 export const report = async (req, res) =>
   res.json((await readFinancial(async () => (await service.report(reportSchema.parse(req.query))))));
 export const notifications = async (req, res) => res.json([
-  ...(['admin'].includes(req.user.role) ? (await pendingNotifications()) : []),
+  ...(await pendingNotifications(req.user)),
   ...(await readFinancial(async () => (await service.notifications(['admin'].includes(req.user.role))))),
 ]);

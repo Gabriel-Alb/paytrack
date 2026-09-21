@@ -192,3 +192,15 @@ test('guardas de banco impedem mutações fora do escopo e contexto não vaza en
   results.forEach((result,i)=>assert.equal(result.body.total,i%2 ? 1 : 0));
   await request(app).get('/api/clients').expect(401);
 });
+
+test('papel MANAGER não concede acesso financeiro a empresas sem vínculo',async()=>{
+  await admin.api.patch(`/api/companies/1/users/${a.id}`).send({role:'MANAGER'}).expect(200);
+  const {client,loan}=await create(b.api,undefined,'Restrito B');
+  for(const path of [`loans/${loan.id}`,`loans/${loan.id}/installments`,`late-fees/${loan.installments[0].late_fee_id}`]) await a.api.get(`/api/${path}`).expect(404);
+  assert.equal((await a.api.get(`/api/clients/${client.id}`).expect(200)).body.loans.length,0);
+  assert.equal((await a.api.get('/api/loans?company_id=2').expect(200)).body.total,0);
+  for(const path of ['/dashboard/summary',`/reports?start=${addDays(today(),-10)}&end=${today()}`,'/notifications'])
+    assert.ok(!JSON.stringify((await a.api.get(`/api${path}`).expect(200)).body).includes('Restrito B'));
+  await a.api.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,status:'cancelled'}).expect(404);
+  await a.api.post(`/api/installments/${loan.installments[0].id}/payments`).send({revision:loan.revision,amount:100,payment_date:today()}).expect(404);
+});
