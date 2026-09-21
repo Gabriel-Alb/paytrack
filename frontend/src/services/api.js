@@ -2,7 +2,8 @@ import { ref } from 'vue'
 import { toast } from '../composables/useToast.js'
 
 export const pendingOperation = ref(false)
-const baseUrl = import.meta.env?.VITE_API_URL || '/api'
+// Vite embeds this value at build time; /api is the local proxy fallback.
+const baseUrl = (import.meta.env?.VITE_API_URL?.trim() || '/api').replace(/\/+$/, '')
 export const watchAccessChanges = (refresh) => {
   const events = new EventSource(`${baseUrl}/users/events`, { withCredentials: true })
   events.onmessage = refresh

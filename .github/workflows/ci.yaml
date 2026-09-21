@@ -40,11 +40,16 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+        env:
+          VITE_API_URL: /api
       - name: Install isolated API and browser for frontend regressions
         run: |
           npm ci --prefix ../backend
           npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - run: npm run test:e2e
+        env:
+          E2E_PRODUCTION: 'true'
   postgres:
     runs-on: ubuntu-latest
     timeout-minutes: 15

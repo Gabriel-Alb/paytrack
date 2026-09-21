@@ -32,13 +32,30 @@ test('cadastro, escopo, decisões, accordion, níveis e revogação no navegador
  }
  api=app.listen(33021,'127.0.0.1');
  await new Promise(resolve=>api.once('listening',resolve));
- const { createServer }=await import('vite');
- vite=await createServer({mode:'test',root:fileURLToPath(new URL('../..',import.meta.url)),server:{host:'127.0.0.1',port:5179,strictPort:true,proxy:{'/api':'http://127.0.0.1:33021'}}});
- await vite.listen();
+ const { createServer, build, preview }=await import('vite');
+ const frontendRoot=fileURLToPath(new URL('../..',import.meta.url));
+ if(process.env.E2E_PRODUCTION === 'true') {
+  process.env.VITE_API_URL='http://127.0.0.1:33021/api';
+  const outDir=join(root,'dist');
+  const previousNodeEnv=process.env.NODE_ENV;
+  process.env.NODE_ENV='production';
+  try { await build({root:frontendRoot,mode:'production',logLevel:'silent',build:{outDir,emptyOutDir:true}}); }
+  finally { process.env.NODE_ENV=previousNodeEnv; }
+  const server=await preview({root:frontendRoot,build:{outDir},preview:{host:'127.0.0.1',port:5179,strictPort:true,proxy:{}}});
+  vite={close:()=>new Promise(resolve=>{server.httpServer.closeAllConnections();server.httpServer.close(resolve)})};
+ } else {
+  vite=await createServer({mode:'test',root:frontendRoot,server:{host:'127.0.0.1',port:5179,strictPort:true,proxy:{'/api':'http://127.0.0.1:33021'}}});
+  await vite.listen();
+ }
  browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {})});
  const failures=[], errors=[], warnings=[], checks=[];
  async function pageFor(email) {
   const context=await browser.newContext({viewport:{width:1440,height:1000}}), page=await context.newPage();
+  page.on('request',request=>{
+   const target=new URL(request.url());
+   if(process.env.E2E_PRODUCTION === 'true' && target.pathname.startsWith('/api/') && target.origin!=='http://127.0.0.1:33021')
+    errors.push(`API enviada para origem incorreta: ${target.origin}${target.pathname}`);
+  });
   page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='warning') warnings.push(message.text()); if(message.type()==='error'&&!/status of (401|403|409)/.test(message.text())) errors.push(message.location().url+': '+message.text())});
   await page.goto(url+'/login');
@@ -57,13 +74,35 @@ test('cadastro, escopo, decisões, accordion, níveis e revogação no navegador
    await visitor.setViewportSize({width:390,height:844});
    assert.ok(await visitor.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
    await visitor.screenshot({path:root+'/request-mobile.png',fullPage:true,animations:'disabled'});
+   const panel=visitor.locator('main section');
+   for(const viewport of [{width:390,height:664},{width:390,height:400},{width:1280,height:600}]) {
+    await visitor.setViewportSize(viewport);
+    await panel.evaluate(node=>{node.scrollTop=0});
+    const title=await visitor.getByRole('heading',{name:'Solicitar acesso'}).boundingBox();
+    assert.ok(title.y>=0 && title.y+title.height<viewport.height,'título começa visível');
+    const subtitle=await visitor.getByText('Preencha seus dados.',{exact:false}).boundingBox();
+    assert.ok(subtitle.y>=0 && subtitle.y+subtitle.height<viewport.height,'subtítulo começa visível');
+    await visitor.screenshot({path:root+`/request-${viewport.width}x${viewport.height}-top.png`,animations:'disabled'});
+    assert.equal(await panel.evaluate(node=>getComputedStyle(node).overflowY),'auto');
+    await visitor.mouse.move(viewport.width*0.9,viewport.height/2);
+    await visitor.mouse.wheel(0,2000);
+    await visitor.waitForFunction(()=>document.querySelector('main section').scrollTop>0);
+    await visitor.getByRole('link',{name:'Voltar para o login'}).scrollIntoViewIfNeeded();
+    const submit=await visitor.getByRole('button',{name:'Enviar solicitação'}).boundingBox();
+    assert.ok(submit.y>=0 && submit.y+submit.height<=viewport.height,'botão final alcançável');
+    await visitor.screenshot({path:root+`/request-${viewport.width}x${viewport.height}-bottom.png`,animations:'disabled'});
+   }
+   await visitor.setViewportSize({width:390,height:664});
    await visitor.getByLabel('Nome completo').fill('Solicitante QA');
    await visitor.getByLabel('E-mail',{exact:true}).fill('applicant@qa.test');
    await visitor.getByLabel('CPF',{exact:true}).fill('52998224725');
    await visitor.locator('#new-password').fill('QaSenha123');
    await visitor.locator('#confirm-password').fill('QaSenha123');
    const response=visitor.waitForResponse(r=>r.url().endsWith('/auth/request-access')&&r.request().method()==='POST');
-   await visitor.getByRole('button',{name:'Enviar solicitação'}).click();assert.equal((await response).status(),202);
+   await visitor.getByRole('button',{name:'Enviar solicitação'}).click();
+   const submitted=await response;
+   assert.equal(submitted.status(),202);
+   if(process.env.E2E_PRODUCTION === 'true') assert.equal(new URL(submitted.url()).origin,'http://127.0.0.1:33021');
    await visitor.waitForURL(url+'/login');
   });
   const manager=await pageFor('manager@qa.test');

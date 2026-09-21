@@ -11,6 +11,15 @@ export default defineConfig(({ command, mode }) => ({
     proxy: { '/api': 'http://127.0.0.1:3000' },
   },
   plugins: [
+    {
+      name: 'validate-api-url',
+      configResolved(config) {
+        // Use Vite's resolved env (including .env.production and build variables).
+        if (config.command === 'build' && !config.env.VITE_API_URL?.trim()) {
+          throw new Error('Defina VITE_API_URL antes do build: URL do backend terminada em /api para API separada, ou /api quando houver proxy no mesmo domínio.')
+        }
+      },
+    },
     vue(),
     ...(command === 'serve' && mode !== 'test' ? [vueDevTools()] : []),
     tailwindcss(),
