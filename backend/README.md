@@ -17,6 +17,9 @@ Configuração conforme `.env.example`. O `.env` local é carregado somente no d
 Veja [SECURITY.md](SECURITY.md) para configuração, limites, migração e riscos restantes.
 Todas as rotas financeiras abaixo exigem usuário ativo e sessão válida. Escritas também exigem CSRF e Origin/Referer autorizado.
 
+Para os níveis `USER`/`MANAGER`, solicitações multiempresa, permissões dos gerentes
+e migrations SQLite v7/PostgreSQL v3, veja [Acesso por empresa](../docs/COMPANY_ACCESS.md).
+
 Crie o primeiro administrador dentro de `backend`, em um terminal interativo:
 
 ```sh
