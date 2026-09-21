@@ -6,6 +6,9 @@ const baseUrl = import.meta.env?.VITE_API_URL || '/api'
 export const watchAccessChanges = (refresh) => {
   const events = new EventSource(`${baseUrl}/users/events`, { withCredentials: true })
   events.onmessage = refresh
+  // The server closes the stream when company management is revoked. Recheck
+  // the session on disconnect as well, instead of retaining stale admin UI.
+  events.onerror = refresh
   return () => events.close()
 }
 let csrfToken = ''

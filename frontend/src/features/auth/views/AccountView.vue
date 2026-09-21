@@ -2,7 +2,7 @@
 <template>
   <section class="mx-auto w-full max-w-6xl">
     <div class="grid gap-4 lg:grid-cols-2">
-      <section class="flex flex-col rounded-2xl border border-black/[0.07] bg-white p-5 sm:p-6">
+      <section class="flex flex-col rounded-2xl border border-black/[0.08] bg-white p-5 sm:p-6">
         <header class="mb-5 flex items-start gap-3">
           <div class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#166534]/[0.08] text-[#166534]">
             <i class="mdi mdi-account-outline text-[20px] leading-none"></i>
@@ -27,7 +27,7 @@
               </label>
 
               <input :id="`account-${key}`" :value="auth.user.value?.[key] || ''" readonly
-                class="h-[46px] w-full cursor-default rounded-xl border border-black/[0.10] bg-[#fafafa] px-4 text-[13px] text-zinc-700 outline-none" />
+                class="h-[46px] w-full cursor-default rounded-xl border border-black/[0.12] bg-[#fafafa] px-4 text-[13px] text-zinc-700 outline-none" />
             </div>
 
             <div>
@@ -37,7 +37,7 @@
 
               <input id="account-email" v-model="email" type="email" autocomplete="email" required maxlength="254"
                 :disabled="profileBusy"
-                class="h-[46px] w-full rounded-xl border border-black/[0.10] bg-white px-4 text-[13px] text-zinc-900 outline-none transition duration-200 hover:border-black/[0.16] focus:border-[#166534]/60 focus:ring-3 focus:ring-[#166534]/[0.06] disabled:cursor-not-allowed disabled:bg-[#fafafa] disabled:text-zinc-500" />
+                class="h-[46px] w-full rounded-xl border border-black/[0.12] bg-white px-4 text-[13px] text-zinc-900 outline-none transition duration-200 hover:border-black/[0.16] focus:border-[#166534]/60 focus:ring-3 focus:ring-[#166534]/[0.06] disabled:cursor-not-allowed disabled:bg-[#fafafa] disabled:text-zinc-500" />
             </div>
           </div>
 
@@ -50,7 +50,7 @@
         </form>
       </section>
 
-      <section class="flex flex-col rounded-2xl border border-black/[0.07] bg-white p-5 sm:p-6">
+      <section class="flex flex-col rounded-2xl border border-black/[0.08] bg-white p-5 sm:p-6">
         <header class="mb-5 flex items-start gap-3">
           <div class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#166534]/[0.08] text-[#166534]">
             <i class="mdi mdi-lock-outline text-[20px] leading-none"></i>

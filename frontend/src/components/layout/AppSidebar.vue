@@ -6,11 +6,11 @@
     </Transition>
 
     <aside :class="[
-        'fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col border-r border-black/[0.07] bg-white transition-transform duration-300 max-lg:pt-[env(safe-area-inset-top,0px)] max-lg:pb-[env(safe-area-inset-bottom,0px)] lg:z-40 lg:w-[224px] lg:translate-x-0',
+        'fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col border-r border-black/15 bg-white transition-transform duration-300 max-lg:pt-[env(safe-area-inset-top,0px)] max-lg:pb-[env(safe-area-inset-bottom,0px)] lg:z-40 lg:w-[224px] lg:translate-x-0',
         isOpen && 'translate-x-0',
     ]">
         <div
-            class="flex h-[68px] shrink-0 items-center justify-between border-b border-black/[0.05] px-5 lg:h-[60px] lg:px-5">
+            class="flex h-[68px] shrink-0 items-center justify-between border-b border-black/12 px-5 lg:h-[60px] lg:px-5">
             <RouterLink to="/" class="flex items-center gap-3" @click="closeSidebar">
                 <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#166534]">
                     <img :src="logo" alt="PayTrack" class="h-7 w-7 object-contain" />
@@ -21,7 +21,7 @@
                         PayTrack
                     </p>
 
-                    <p class="-mt-1 text-[10px] font-medium text-[#a1a1aa]">
+                    <p class="-mt-1 text-[10px] font-medium text-[#71717a]">
                         Gestão financeira
                     </p>
                 </div>
@@ -39,7 +39,7 @@
         <nav class="flex-1 overflow-y-auto px-3 py-4">
             <section v-for="(section, sectionIndex) in navigationSections" :key="section.title"
                 :class="sectionIndex > 0 && 'mt-7'">
-                <p class="mb-2 px-3 text-[10px] font-semibold tracking-[0.12em] text-[#a1a1aa] uppercase">
+                <p class="mb-2 px-3 text-[10px] font-semibold tracking-[0.12em] text-[#71717a] uppercase">
                     {{ section.title }}
                 </p>
 
@@ -63,12 +63,12 @@
             </section>
         </nav>
 
-        <div ref="userMenuRef" class="relative border-t border-black/[0.06] p-3">
+        <div ref="userMenuRef" class="relative p-3">
             <Transition enter-active-class="transition duration-150 ease-out" enter-from-class="translate-y-1 opacity-0"
                 enter-to-class="translate-y-0 opacity-100" leave-active-class="transition duration-100 ease-in"
                 leave-from-class="translate-y-0 opacity-100" leave-to-class="translate-y-1 opacity-0">
                 <div v-if="isUserMenuOpen"
-                    class="absolute right-3 bottom-full left-3 mb-2 overflow-hidden rounded-xl border border-black/[0.08] bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.10)]">
+                    class="absolute right-3 bottom-full left-3 -mb-3 overflow-hidden rounded-xl border border-black/20 bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.10)]">
                     <RouterLink to="/account"
                         class="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#52525b] transition-colors hover:bg-[#f7f7f8] hover:text-[#27272a]"
                         @click="handleMenuNavigation">
@@ -79,7 +79,7 @@
                         <span>Minha conta</span>
                     </RouterLink>
 
-                    <RouterLink v-if="user?.role === 'admin'" to="/users"
+                    <RouterLink v-if="canAdminister(user)" to="/users"
                         class="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#52525b] transition-colors hover:bg-[#f7f7f8] hover:text-[#27272a]"
                         @click="handleMenuNavigation">
                         <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] shrink-0 text-[#71717a]" aria-hidden="true">
@@ -89,7 +89,7 @@
                         <span>Administração</span>
                     </RouterLink>
 
-                    <div class="my-1 border-t border-black/[0.06]" />
+                    <div class="my-1 border-t border-black/15" />
 
                     <button type="button" :disabled="pendingOperation"
                         class="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-[#dc2626] transition-colors hover:bg-[#fef2f2] disabled:pointer-events-none disabled:opacity-50"
@@ -104,10 +104,10 @@
             </Transition>
 
             <button type="button" :aria-expanded="isUserMenuOpen"
-                class="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[#f7f7f8]"
+                class="flex w-full items-center gap-3 rounded-xl border border-black/5 px-2 py-2 text-left transition-colors hover:border-black/10 hover:bg-[#f7f7f8]"
                 @click="toggleUserMenu">
                 <div
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f0fdf4] text-xs font-semibold text-[#166534]">
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100/80 text-xs font-semibold text-[#166534]">
                     {{ userInitial }}
                 </div>
 
@@ -116,13 +116,13 @@
                         {{ user?.name }}
                     </p>
 
-                    <p class="truncate text-[11px] text-[#a1a1aa]">
-                        {{ user?.role === 'admin' ? 'Administrador' : 'Usuário padrão' }}
+                    <p class="truncate text-[11px] text-[#71717a]">
+                        {{ user?.role === 'admin' ? 'Administrador' : canAdminister(user) ? 'Gerente de empresa' : 'Usuário padrão' }}
                     </p>
                 </div>
 
                 <svg viewBox="0 0 24 24"
-                    class="h-[18px] w-[18px] shrink-0 text-[#a1a1aa] transition-transform duration-200"
+                    class="h-[18px] w-[18px] shrink-0 text-[#71717a] transition-transform duration-200"
                     :class="isUserMenuOpen && 'rotate-180'" aria-hidden="true">
                     <path :d="mdiChevronUp" fill="currentColor" />
                 </svg>
@@ -132,6 +132,7 @@
 </template>
 
 <script setup>
+import { canAdminister } from '@/features/auth/companyAccess.js'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 

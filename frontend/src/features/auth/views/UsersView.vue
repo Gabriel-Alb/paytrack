@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-5">
-    <section class="overflow-hidden rounded-2xl border border-black/[0.07] bg-white">
+    <section class="overflow-hidden rounded-2xl border border-black/[0.08] bg-white">
       <header
-        class="flex flex-col gap-4 border-b border-black/[0.06] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        class="flex flex-col gap-4 border-b border-black/[0.07] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <h2 class="text-[15px] font-semibold text-zinc-900">
             Usuários e solicitações
@@ -27,7 +27,7 @@
               <option value="blocked">Bloqueados</option>
             </select>
 
-            <i class="mdi mdi-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-base text-zinc-400"
+            <i class="mdi mdi-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-base text-zinc-500"
               aria-hidden="true" />
           </div>
         </div>
@@ -41,7 +41,7 @@
       </div>
 
       <template v-else>
-        <ul v-if="items.length" class="divide-y divide-black/[0.05]">
+        <ul v-if="items.length" class="divide-y divide-black/[0.07]">
           <li v-for="person in items" :key="person.id"
             class="group flex flex-col gap-4 px-5 py-4 transition-colors duration-200 hover:bg-zinc-50/70 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div class="flex min-w-0 items-start gap-3">
@@ -95,20 +95,20 @@
         </ul>
 
         <div v-else class="flex min-h-[190px] flex-col items-center justify-center px-6 py-8 text-center">
-          <i class="mdi mdi-account-search-outline text-3xl text-zinc-300" aria-hidden="true" />
+          <i class="mdi mdi-account-search-outline text-3xl text-zinc-400" aria-hidden="true" />
 
           <p class="mt-2 text-sm font-medium text-zinc-700">
             Nenhum usuário encontrado
           </p>
 
-          <p class="mt-1 text-xs text-zinc-400">
+          <p class="mt-1 text-xs text-zinc-500">
             Não existem usuários neste status no momento.
           </p>
         </div>
       </template>
 
       <footer v-if="!loading && total > 50"
-        class="flex items-center justify-between border-t border-black/[0.06] px-5 py-3.5 sm:px-6">
+        class="flex items-center justify-between border-t border-black/[0.07] px-5 py-3.5 sm:px-6">
         <p class="text-xs text-zinc-500">
           Página
           <span class="font-medium text-zinc-700">{{ page }}</span>
@@ -120,13 +120,13 @@
 
         <div class="flex items-center gap-1.5">
           <button type="button" :disabled="page === 1" aria-label="Página anterior"
-            class="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-35"
+            class="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-45"
             @click="page--">
             <i class="mdi mdi-chevron-left text-lg" aria-hidden="true" />
           </button>
 
           <button type="button" :disabled="page >= totalPages" aria-label="Próxima página"
-            class="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-35"
+            class="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-45"
             @click="page++">
             <i class="mdi mdi-chevron-right text-lg" aria-hidden="true" />
           </button>
@@ -136,7 +136,7 @@
       <AccessReviewModal :user-id="selected" @close="selected = null" @updated="updated" />
     </section>
 
-    <CompaniesManager />
+    <CompaniesManager :revision="revision" @updated="updated" />
   </div>
 </template>
 
@@ -151,9 +151,15 @@ import {
 } from 'vue'
 
 import { request, watchAccessChanges } from '@/services/api'
+import { restoreAuth, useAuth } from '@/composables/useAuth'
+import { useRouter } from 'vue-router'
+import { canAdminister } from '../companyAccess.js'
 import CompaniesManager from '../components/CompaniesManager.vue'
 import AccessReviewModal from '../components/AccessReviewModal.vue'
 
+const revision = ref(0)
+const router = useRouter()
+const { user } = useAuth()
 const status = ref('pending')
 const items = ref([])
 const total = ref(0)
@@ -189,6 +195,7 @@ async function load(background = false) {
     total.value = result.total
   } catch (failure) {
     if (id === sequence) {
+      items.value = []; total.value = 0
       toast.error(failure.message)
     }
   } finally {
@@ -200,7 +207,18 @@ async function load(background = false) {
 
 function updated() {
   selected.value = null
-  load()
+  accessChanged()
+}
+
+async function accessChanged() {
+  const current = await restoreAuth()
+  if (!canAdminister(current)) {
+    selected.value = null; items.value = []; total.value = 0; stopWatching?.()
+    await router.replace(current ? '/' : '/login')
+    return
+  }
+  revision.value++
+  load(true)
 }
 
 watch(status, () => {
@@ -212,8 +230,12 @@ watch(page, () => {
   load()
 })
 
+watch(() => [user.value?.role, ...(user.value?.managedCompanyIds ?? [])].join(','), () => {
+  selected.value = null
+})
+
 onMounted(() => {
-  stopWatching = watchAccessChanges(() => load(true))
+  stopWatching = watchAccessChanges(accessChanged)
   load()
 })
 

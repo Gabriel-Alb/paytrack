@@ -6,7 +6,7 @@
     />
     <nav
         aria-label="Navegação principal"
-        class="fixed right-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] left-3 z-30 grid grid-cols-4 rounded-md border border-black/[0.07] bg-white/95 p-1.5 backdrop-blur-xl lg:hidden"
+        class="fixed right-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] left-3 z-30 grid grid-cols-4 rounded-md border border-black/[0.08] bg-white/95 p-1.5 backdrop-blur-xl lg:hidden"
     >
         <template
             v-for="item in mobileNavigationItems"
@@ -72,6 +72,6 @@ const getItemClasses = (item) => [
     'flex min-h-[50px] flex-col items-center justify-center gap-1 rounded-lg transition-colors',
     isActive(item)
         ? 'bg-[#edf7ef] text-[#166534]'
-        : 'text-[#8b8b93] hover:bg-[#f7f7f8]',
+        : 'text-[#71717a] hover:bg-[#f7f7f8]',
 ]
 </script>
