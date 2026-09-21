@@ -21,7 +21,7 @@ cd ../frontend
 npm ci
 npm run lint
 npm test
-npm run build
+VITE_API_URL=/api npm run build
 ```
 
 No PowerShell, defina variáveis por `$env:NOME='valor'` antes do comando. Não aponte TEST_DATABASE_URL para produção. O importador SQLite original continua disponível; exige dependências de desenvolvimento em uma estação de migração, não no container de runtime. Consulte `backend/README.md` para transferência offline e validação de uma cópia do SQLite.
@@ -41,7 +41,7 @@ Copie o `.env.example` da raiz para `.env`. Para produção prefira `/opt/paytra
 | DATABASE_CONNECT_TIMEOUT_MS / DATABASE_IDLE_TIMEOUT_MS / DATABASE_STATEMENT_TIMEOUT_MS | 5000 / 30000 / 30000 no Compose |
 | FRONTEND_ORIGIN | Origem pública exata, por exemplo `https://financeiro.exemplo.com`, sem barra/caminho |
 | COOKIE_SAME_SITE | `strict` padrão; `none` somente se frontend/API estão em sites diferentes, mantendo HTTPS e CSRF |
-| VITE_API_URL | `/api` padrão; URL absoluta terminada em `/api` se separado; valor público incorporado no build |
+| VITE_API_URL | Obrigatória no build; `/api` somente com proxy no mesmo domínio, URL absoluta terminada em `/api` se separado; valor público incorporado no build |
 | BACKEND_IMAGE / FRONTEND_IMAGE | Caminhos GHCR ou nomes locais |
 | IMAGE_TAG | `local` para desenvolvimento Docker; SHA completo publicado para deploy |
 | HTTP_PORT | 8080; publicado exclusivamente em 127.0.0.1 |
@@ -115,6 +115,8 @@ Opção automática: configure `SITE_ADDRESS=financeiro.exemplo.com`, `FRONTEND_
 Cloudflare: use Full (strict) com certificado válido na origem e bloqueie acesso direto conforme sua topologia. Nunca use Flexible. Para preservar IP real atrás da Cloudflare, o terminador precisa confiar **somente nas faixas oficiais atuais** do provedor e normalizar o header antes de enviá-lo ao Nginx; não confie em CF-Connecting-IP de conexões arbitrárias. Essas faixas, DNS, firewall e certificados pertencem à infraestrutura externa e não foram inventados aqui.
 
 Domínios separados: build frontend com `VITE_API_URL=https://api.exemplo.com/api`, configure FRONTEND_ORIGIN na API com a origem exata da SPA e encaminhe o domínio da API pelo mesmo proxy controlado. Subdomínios HTTPS do mesmo site podem manter Strict. Sites diferentes exigem `COOKIE_SAME_SITE=none`; Secure/HttpOnly, validação de origem, CSRF e credentials permanecem ativos. Navegadores que bloqueiam cookies de terceiros podem impedir esse cenário; prefira `/api` no mesmo domínio para confiabilidade. Nenhum segredo pode ir para VITE_*.
+
+No Render com frontend/API separados, configure `VITE_API_URL=https://paytrack-backend-9amo.onrender.com/api` no ambiente de **build do serviço frontend** e execute um novo build/deploy. Definir a variável apenas no backend ou no runtime de uma imagem já construída não modifica o JavaScript publicado. Se usar arquivos, o Vite lê `frontend/.env` e `frontend/.env.production`; o `.env` da raiz é usado pelo Compose e não é carregado automaticamente pelo Vite. Variáveis do processo de build têm precedência sobre esses arquivos. Em Docker, passe a variável como build argument (o Compose e o workflow de release já fazem isso). O proxy de desenvolvimento não existe no site estático do Render; não use `/api` nesse cenário. Sem valor explícito, o build falha para evitar publicar novamente o fallback local.
 
 ## CI, registry e CD
 
