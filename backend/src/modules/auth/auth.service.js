@@ -5,6 +5,7 @@ import { authConfig } from '../../config/auth.js';
 import { AppError, requireRecord } from '../../shared/errors/AppError.js';
 import { requestSchema, profileSchema, accessSchema } from './auth.validator.js';
 import { notifyAccessChanged } from './auth.events.js';
+import { invalidatePending } from './password-recovery.repository.js';
 
 export const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 export const hashPassword = (password) => argon2.hash(password, {type: argon2.argon2id,...authConfig.password});
@@ -20,10 +21,11 @@ import { userCompanies, companyExists, addRequestedCompany, requestCompanies } f
 import { administrationScope, decideAccess, replaceMemberships } from '../companies/companies.service.js';
 
 export const safeUser = async (user) => {
+  if (user.must_change_password) return {id:user.id,name:user.name,email:user.email,mustChangePassword:true};
   const companies = (await userCompanies(user.id));
   return {id:user.id,name:user.name,email:user.email,role:user.role,accessStatus:user.access_status,companies,companyIds:companies.map(company=>company.id),managedCompanyIds:companies.filter(company=>company.role==='MANAGER').map(company=>company.id)};
 };
-export const profileUser = async (user) => ({...(await safeUser(user)),cpf:user.cpf,rg:user.rg});
+export const profileUser = async (user) => user.must_change_password ? safeUser(user) : ({...(await safeUser(user)),cpf:user.cpf,rg:user.rg});
 export async function updateProfile(user,input) {
   const {email} = profileSchema.parse(input);
   let result;
@@ -55,6 +57,7 @@ export async function resolveSession(token) {
   if (!session || session.revoked_at || session.expires_at<=now || session.last_seen_at+authConfig.idleMs<=now) return null;
   const user = session.user_id ? (await repo.byId(session.user_id)) : null;
   if (session.user_id && user?.access_status!=='active') return null;
+  if (user?.must_change_password && (!user.temporary_password_expires_at || user.temporary_password_expires_at<=now)) return null;
   return {session,user};
 }
 export function validCsrf(session, token) {
@@ -96,6 +99,10 @@ export async function login(data,oldSession) {
   return (await repo.atomic(async () => {
     const current = (await repo.byId(user.id));
     if (current.password_hash!==user.password_hash) throw invalidCredentials();
+    if (current.must_change_password && (!current.temporary_password_expires_at || current.temporary_password_expires_at<=Date.now())) {
+      await repo.audit('login_failure');
+      return {denied:invalidCredentials()};
+    }
     const messages = {pending:'Sua solicitação ainda está aguardando aprovação.',rejected:'Sua solicitação de acesso foi rejeitada.',blocked:'Seu acesso está bloqueado.'};
     if (current.access_status!=='active') {
       (await repo.audit('login_failure',null,user.id));
@@ -124,6 +131,7 @@ export async function changePassword(user,session,data) {
     if (current.password_hash!==original.password_hash || current.access_status!=='active' || !currentSession || currentSession.revoked_at || currentSession.expires_at<=Date.now() || currentSession.last_seen_at+authConfig.idleMs<=Date.now())
       throw new AppError(401,'UNAUTHENTICATED','Entre novamente para continuar.');
     (await repo.savePassword(user.id,hash));
+    await invalidatePending(user.id,Date.now());
     (await repo.revokeAll(user.id));
     (await repo.audit('password_changed',user.id,user.id));
     (await repo.audit('sessions_revoked',user.id,user.id));

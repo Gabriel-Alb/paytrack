@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import * as controller from './auth.controller.js';
-import { requireAuth,requireCsrf,requireRole,trustedOrigin } from './auth.middleware.js';
-import { csrfLimit,loginLimits,requestLimits,passwordLimits } from './auth.rate-limit.js';
+import { requireSession,requireFullAccess,requireCsrf,requireRole,trustedOrigin } from './auth.middleware.js';
+import { csrfLimit,loginLimits,requestLimits,passwordLimits,recoveryLimits } from './auth.rate-limit.js';
+import * as recovery from './password-recovery.controller.js';
 import { publicCompanies } from '../companies/companies.repository.js';
 
 export const authRoutes=Router();
@@ -9,14 +10,20 @@ authRoutes.get('/csrf',csrfLimit,trustedOrigin,controller.csrf);
 authRoutes.get('/companies',csrfLimit,trustedOrigin,async (_req,res) => res.json(await publicCompanies()));
 authRoutes.post('/login',...loginLimits,trustedOrigin,requireCsrf,controller.login);
 authRoutes.post('/request-access',...requestLimits,trustedOrigin,requireCsrf,controller.requestAccess);
-authRoutes.use(requireAuth,trustedOrigin,requireCsrf);
+authRoutes.post('/forgot-password',...recoveryLimits,trustedOrigin,requireCsrf,recovery.requestRecovery);
+authRoutes.use(requireSession,trustedOrigin,requireCsrf);
 authRoutes.get('/me',controller.me);
-authRoutes.patch('/me',controller.updateProfile);
 authRoutes.post('/logout',controller.logout);
 authRoutes.post('/logout-all',controller.logout);
+authRoutes.post('/change-required-password',...passwordLimits,recovery.changeRequiredPassword);
+authRoutes.use(requireFullAccess);
+authRoutes.patch('/me',controller.updateProfile);
 authRoutes.post('/change-password',...passwordLimits,controller.changePassword);
 
 export const usersRoutes=Router();
+usersRoutes.get('/password-reset-requests',requireRole('admin'),recovery.listRequests);
+usersRoutes.post('/password-reset-requests/:id/approve',requireRole('admin'),recovery.approve);
+usersRoutes.post('/password-reset-requests/:id/reject',requireRole('admin'),recovery.reject);
 usersRoutes.get('/',controller.listUsers);
 usersRoutes.get('/events',controller.watchUsers);
 usersRoutes.get('/:id',controller.reviewUser);

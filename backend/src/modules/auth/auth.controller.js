@@ -6,7 +6,7 @@ import { accessEvents } from './auth.events.js';
 import { loadSession } from './auth.middleware.js';
 import { administrationScope, decideAccess } from '../companies/companies.service.js';
 
-function setCookie(res,token,authenticated) {
+export function setCookie(res,token,authenticated) {
   res.cookie(authConfig.cookieName,token,{...cookieOptions,maxAge:authenticated ? authConfig.absoluteMs : authConfig.anonymousMs});
 }
 const clearCookie = (res) => res.clearCookie(authConfig.cookieName,cookieOptions);

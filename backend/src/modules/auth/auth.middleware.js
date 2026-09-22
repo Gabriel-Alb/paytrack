@@ -11,10 +11,17 @@ export async function loadSession(req,_res,next) {
   req.user = resolved?.user;
   next();
 }
-export async function requireAuth(req,_res,next) {
+export async function requireSession(req,_res,next) {
   if (!req.user) return next(new AppError(401,'UNAUTHENTICATED','Entre para continuar.'));
   if (Date.now()-req.authSession.last_seen_at>60000) (await touch(req.authSession.id,Date.now()));
   next();
+}
+export function requireFullAccess(req,_res,next) {
+  if (req.user?.must_change_password) return next(new AppError(403,'PASSWORD_CHANGE_REQUIRED','Crie uma nova senha para continuar.'));
+  next();
+}
+export async function requireAuth(req,res,next) {
+  await requireSession(req,res,error => error ? next(error) : requireFullAccess(req,res,next));
 }
 export const requireRole = (...roles) => (req,_res,next) => {
   if (!roles.includes(req.user?.role)) return next(new AppError(403,'FORBIDDEN','Você não tem permissão para esta ação.'));

@@ -28,3 +28,4 @@ export const loginLimits = [limiter('login-ip:',env.AUTH_LOGIN_IP_LIMIT),limiter
 export const requestLimits = [limiter('request-ip:',env.AUTH_REQUEST_IP_LIMIT),limiter('request-account:',authConfig.limits.requestAccount,identifier)];
 export const passwordLimits = [limiter('password-ip:',authConfig.limits.passwordIp),limiter('password-user:',authConfig.limits.passwordUser,(req)=>String(req.user.id))];
 export const csrfLimit = limiter('csrf-ip:',authConfig.limits.csrfIp);
+export const recoveryLimits = [limiter('recovery-ip:',env.AUTH_REQUEST_IP_LIMIT),limiter('recovery-account:',authConfig.limits.requestAccount,identifier)];
