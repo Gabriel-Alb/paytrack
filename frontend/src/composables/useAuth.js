@@ -45,5 +45,10 @@ export function useAuth() {
       user.value = null
       setCsrfToken('')
     },
+    async changeRequiredPassword(body) {
+      const result = await request('/auth/change-required-password',{method:'POST',body})
+      user.value = result.user
+      setCsrfToken(result.csrfToken)
+    },
   }
 }

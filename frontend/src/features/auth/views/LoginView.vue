@@ -14,6 +14,8 @@
       <PasswordField id="password" v-model="password" autocomplete="current-password"
         class="[&_input]:h-10 [&_input]:rounded-lg [&_input]:text-[13px] [&_label]:mb-1 [&_label]:text-xs" />
 
+      <RouterLink to="/forgot-password" class="block text-right text-xs font-medium text-[#166534] hover:underline">Esqueci minha senha</RouterLink>
+
       <button :disabled="busy"
         class="mt-0.5 flex h-10 w-full items-center justify-center rounded-lg bg-[#166534] px-4 text-[13px] font-semibold text-white shadow-[0_6px_16px_rgba(22,101,52,0.14)] transition-[transform,background-color,box-shadow] duration-200 hover:-translate-y-px hover:bg-[#14532d] hover:shadow-[0_8px_20px_rgba(22,101,52,0.18)] active:translate-y-0 active:scale-[0.995] disabled:pointer-events-none disabled:opacity-50">
         {{ busy ? 'Entrando…' : 'Entrar' }}

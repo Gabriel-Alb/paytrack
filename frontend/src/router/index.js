@@ -7,6 +7,8 @@ const router = createRouter({
 
   routes: [
     { path:'/login',name:'login',meta:{public:true},component:()=>import('@/features/auth/views/LoginView.vue') },
+    { path:'/forgot-password',name:'forgot-password',meta:{public:true},component:()=>import('@/features/auth/views/ForgotPasswordView.vue') },
+    { path:'/change-required-password',name:'required-password',component:()=>import('@/features/auth/views/RequiredPasswordView.vue') },
     { path:'/request-access',name:'request-access',meta:{public:true},component:()=>import('@/features/auth/views/RequestAccessView.vue') },
     {
       path: '/',
@@ -66,6 +68,8 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const user = await restoreAuth()
   if (!user && !to.meta.public) return {name:'login'}
+  if (user?.mustChangePassword && to.name!=='required-password') return {name:'required-password'}
+  if (user && !user.mustChangePassword && to.name==='required-password') return {name:'dashboard'}
   if (user && to.meta.public) return {name:'dashboard'}
   if (to.meta.admin && !canAdminister(user)) return {name:'dashboard'}
 })

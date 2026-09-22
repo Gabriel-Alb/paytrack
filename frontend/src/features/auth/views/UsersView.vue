@@ -1,5 +1,6 @@
 <template>
   <div class="space-y-5">
+    <PasswordRecoveryRequests v-if="user?.role === 'admin'" :revision="revision" />
     <section class="overflow-hidden rounded-2xl border border-black/[0.08] bg-white">
       <header
         class="flex flex-col gap-4 border-b border-black/[0.07] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -156,6 +157,7 @@ import { useRouter } from 'vue-router'
 import { canAdminister } from '../companyAccess.js'
 import CompaniesManager from '../components/CompaniesManager.vue'
 import AccessReviewModal from '../components/AccessReviewModal.vue'
+import PasswordRecoveryRequests from '../components/PasswordRecoveryRequests.vue'
 
 const revision = ref(0)
 const router = useRouter()
