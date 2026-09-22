@@ -1,4 +1,4 @@
-export const tables = ['users','companies','user_companies','user_access_companies','clients','loans','installments','payments','late_fees','auth_sessions','auth_audit_logs','auth_rate_limits'];
+export const tables = ['users','companies','user_companies','user_access_companies','clients','loans','installments','payments','late_fees','auth_sessions','auth_audit_logs','auth_rate_limits','password_reset_requests'];
 export async function checkSchema(db) {
   for (const table of tables) await db.prepare(`SELECT * FROM ${table} LIMIT 0`).all();
   if (db.dialect === 'sqlite') {

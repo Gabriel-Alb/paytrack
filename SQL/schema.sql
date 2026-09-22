@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
     rg TEXT UNIQUE,
     cnh TEXT UNIQUE,
     password_hash TEXT NOT NULL,
+    must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1)),
+    temporary_password_expires_at INTEGER,
     role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin', 'user')),
     access_status TEXT NOT NULL DEFAULT 'pending' CHECK(access_status IN ('pending','active','rejected','blocked')),
     approved_by INTEGER REFERENCES users(id),
@@ -30,6 +32,19 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     last_seen_at INTEGER NOT NULL,
     revoked_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','rejected','expired')),
+    requested_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_password_reset_pending ON password_reset_requests(user_id) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS idx_password_reset_status ON password_reset_requests(status,id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_resolver ON password_reset_requests(resolved_by);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS auth_audit_logs (

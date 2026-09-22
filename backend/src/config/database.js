@@ -24,7 +24,7 @@ export async function openDatabase(pathOrConfig) {
     adapter = createAdapter(driver, config.DATABASE_CLIENT);
     setConnection(adapter);
     const repositories = {};
-    for (const name of ['auth','clients','companies','installments','late-fees','loans','overview','payments','rate-limits'])
+    for (const name of ['auth','clients','companies','installments','late-fees','loans','overview','payments','rate-limits','password-recovery'])
       repositories[name] = await import(`../infrastructure/persistence/repositories/${name}.repository.js`);
     configurePersistence({ ...repositories, unitOfWork: adapter.transaction });
     return adapter;

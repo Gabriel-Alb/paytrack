@@ -10,6 +10,7 @@ import { migrateCompanies } from './sqlite/company-migration.js';
 import { migrateLoanCompanies } from './sqlite/loan-company-migration.js';
 import { installCompanyAccess } from './sqlite/company-access.js';
 import { migrateCompanyRoles } from './sqlite/company-roles-migration.js';
+import { migratePasswordRecovery } from './sqlite/password-recovery-migration.js';
 
 const schema = readFileSync(
   new URL("../../../../SQL/schema.sql", import.meta.url),
@@ -32,7 +33,7 @@ export function openSqlite(path) {
     db.pragma("foreign_keys = OFF");
     db.transaction(() => {
       const version = db.pragma('user_version', { simple: true });
-      if (version > 7) throw new Error('Versão SQLite mais recente que a aplicação.');
+      if (version > 8) throw new Error('Versão SQLite mais recente que a aplicação.');
       migrate(db, schema);
       migrateAuth(db);
       if (version < 3) migrateRoles(db);
@@ -40,10 +41,11 @@ export function openSqlite(path) {
       if (version < 5) migrateCompanies(db, schema);
       if (version < 6) migrateLoanCompanies(db, schema);
       if (version < 7) migrateCompanyRoles(db);
+      if (version < 8) migratePasswordRecovery(db);
       db.exec(schema);
       if (db.pragma("foreign_key_check").length)
         throw new Error("Banco contém referências inválidas.");
-      db.pragma("user_version = 7");
+      db.pragma("user_version = 8");
     }).immediate();
     db.pragma("foreign_keys = ON");
     installCompanyAccess(db);
