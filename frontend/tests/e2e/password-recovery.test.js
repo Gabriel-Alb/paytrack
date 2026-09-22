@@ -1,0 +1,122 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { mkdtempSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+const require = createRequire(import.meta.url)
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const url = 'http://127.0.0.1:5180'
+
+test('recuperação completa no navegador, guarda de rotas, segredo único e layout mobile', {timeout:180000}, async t => {
+  await import('../../../backend/tests/setup-env.js')
+  process.env.FRONTEND_ORIGIN = url
+  const { app } = await import('../../../backend/src/app.js')
+  const { openDatabase, closeDatabase } = await import('../../../backend/src/config/database.js')
+  const { insertUser } = await import('../../../backend/src/modules/auth/auth.repository.js')
+  const { hashPassword } = await import('../../../backend/src/modules/auth/auth.service.js')
+  const { setMembership } = await import('../../../backend/src/modules/companies/companies.repository.js')
+  const { createServer } = await import('vite')
+  const root = process.env.E2E_ARTIFACT_DIR || mkdtempSync(join(tmpdir(),'paytrack-recovery-browser-'))
+  mkdirSync(root,{recursive:true})
+  let api, vite, browser
+  t.after(async () => {
+    await browser?.close(); await vite?.close()
+    if (api) { api.closeAllConnections(); await new Promise(resolve => api.close(resolve)) }
+    await closeDatabase()
+  })
+  await openDatabase(':memory:')
+  const passwordHash = await hashPassword('Original123')
+  await insertUser({name:'Admin QA',email:'admin@qa.test',cpf:null,passwordHash},'admin','active')
+  const id = await insertUser({name:'Pessoa QA',email:'person@qa.test',cpf:null,passwordHash},'user','active')
+  await setMembership(id,1,'USER')
+  api = app.listen(33022,'127.0.0.1')
+  await new Promise(resolve => api.once('listening',resolve))
+  vite = await createServer({mode:'test',root:fileURLToPath(new URL('../..',import.meta.url)),server:{host:'127.0.0.1',port:5180,strictPort:true,proxy:{'/api':'http://127.0.0.1:33022'}}})
+  await vite.listen()
+  browser = await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {})})
+  const errors = []
+  async function pageFor() {
+    const context = await browser.newContext({viewport:{width:1440,height:1000}})
+    const page = await context.newPage()
+    page.on('pageerror',error => errors.push(error.message))
+    page.on('console',message => { if (['warning','error'].includes(message.type()) && !/status of (401|403|409)/.test(message.text())) errors.push(message.text()) })
+    await page.goto(url+'/login')
+    assert.match(await page.title(),/PayTrack/i)
+    assert.equal(await page.locator('vite-error-overlay').count(),0)
+    return page
+  }
+  async function signIn(page,email,password) {
+    await page.goto(url+'/login')
+    await page.getByLabel('E-mail',{exact:true}).fill(email)
+    await page.locator('#password').fill(password)
+    await page.getByRole('button',{name:'Entrar',exact:true}).click()
+  }
+  const visitor = await pageFor()
+  await visitor.getByRole('link',{name:'Esqueci minha senha'}).click()
+  await visitor.waitForURL(url+'/forgot-password')
+  await visitor.getByRole('heading',{name:'Recuperar senha'}).waitFor()
+  await visitor.setViewportSize({width:390,height:844})
+  assert.ok(await visitor.evaluate(() => document.documentElement.scrollWidth<=innerWidth))
+  await visitor.screenshot({path:join(root,'recovery-mobile.png'),fullPage:true})
+  await visitor.getByLabel('E-mail',{exact:true}).fill('person@qa.test')
+  await visitor.getByRole('button',{name:'Solicitar recuperação'}).click()
+  await visitor.getByRole('status').filter({hasText:'Se os dados informados'}).waitFor()
+  const generic = await visitor.getByRole('status').filter({hasText:'Se os dados informados'}).textContent()
+  await visitor.reload()
+  await visitor.getByLabel('E-mail',{exact:true}).fill('absent@qa.test')
+  await visitor.getByRole('button',{name:'Solicitar recuperação'}).click()
+  await visitor.getByRole('status').filter({hasText:'Se os dados informados'}).waitFor()
+  assert.equal(await visitor.getByRole('status').filter({hasText:'Se os dados informados'}).textContent(),generic)
+  const admin = await pageFor()
+  await signIn(admin,'admin@qa.test','Original123')
+  await admin.waitForURL(url+'/')
+  await admin.goto(url+'/users')
+  const panel = admin.locator('#password-recovery')
+  await panel.getByText('person@qa.test',{exact:true}).waitFor()
+  await admin.screenshot({path:join(root,'recovery-admin.png'),fullPage:true})
+  await panel.getByRole('button',{name:'Aprovar',exact:true}).click()
+  await admin.getByRole('button',{name:'Gerar senha temporária'}).click()
+  const secret = admin.getByTestId('temporary-password')
+  await secret.waitFor()
+  const temporaryPassword = await secret.textContent()
+  assert.equal(temporaryPassword.length,20)
+  // Never capture the one-time password in screenshots or diagnostics.
+  await admin.getByRole('button',{name:'Concluir e ocultar senha'}).click()
+  await secret.waitFor({state:'detached'})
+  await panel.getByLabel('Status',{exact:true}).selectOption('completed')
+  await panel.getByText('person@qa.test',{exact:true}).waitFor()
+  assert.equal(await panel.getByRole('button',{name:'Aprovar',exact:true}).count(),0)
+  await admin.reload()
+  assert.equal(await admin.getByTestId('temporary-password').count(),0)
+  await signIn(visitor,'person@qa.test',temporaryPassword)
+  await visitor.waitForURL(url+'/change-required-password')
+  await visitor.getByRole('heading',{name:'Criar nova senha'}).waitFor()
+  await visitor.screenshot({path:join(root,'required-password-mobile.png'),fullPage:true})
+  assert.ok(await visitor.evaluate(() => document.documentElement.scrollWidth<=innerWidth))
+  for (const path of ['/clients','/users','/account','/login']) {
+    await visitor.goto(url+path)
+    await visitor.waitForURL(url+'/change-required-password')
+  }
+  await visitor.locator('#required-password').fill('NovaSenha123')
+  await visitor.locator('#required-confirmation').fill('Diferente123')
+  await visitor.getByRole('button',{name:'Salvar nova senha'}).click()
+  await visitor.getByText('As senhas não coincidem.',{exact:true}).waitFor()
+  await visitor.locator('#required-confirmation').fill('NovaSenha123')
+  await visitor.getByRole('button',{name:'Salvar nova senha'}).click()
+  await visitor.waitForURL(url+'/')
+  await visitor.goto(url+'/clients')
+  await visitor.getByRole('heading',{name:'Gestão de clientes',exact:true}).waitFor()
+  assert.equal(await visitor.locator('#password-recovery').count(),0)
+  const fresh = await pageFor()
+  await signIn(fresh,'person@qa.test',temporaryPassword)
+  await fresh.getByText('E-mail ou senha inválidos.',{exact:true}).waitFor()
+  assert.equal(new URL(fresh.url()).pathname,'/login')
+  await signIn(fresh,'person@qa.test','NovaSenha123')
+  await fresh.waitForURL(url+'/')
+  await fresh.goto(url+'/change-required-password')
+  await fresh.waitForURL(url+'/')
+  assert.deepEqual(errors,[])
+  t.diagnostic('Fluxo validado em 1440x1000 e 390x844. Evidências sem segredos: '+root)
+})
