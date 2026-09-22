@@ -104,12 +104,12 @@ if (process.env.TEST_DATABASE_URL) {
     try {
       await migratePostgres(pool);
       await migratePostgres(pool);
-      assert.equal((await db.prepare('SELECT count(*) AS n FROM schema_migrations').get()).n,3);
+      assert.equal((await db.prepare('SELECT count(*) AS n FROM schema_migrations').get()).n,4);
       assert.equal((await db.prepare('SELECT count(*) AS n FROM companies').get()).n,2);
       assert.deepEqual(await db.prepare(`SELECT c.conname FROM pg_constraint c
         WHERE c.contype='f' AND c.connamespace=current_schema()::regnamespace
         AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid=c.conrelid AND i.indisvalid AND i.indkey[0]=c.conkey[1])`).all(),[]);
-      assert.equal((await checkSchema(db)).version,3);
+      assert.equal((await checkSchema(db)).version,4);
       await db.prepare("UPDATE schema_migrations SET checksum='invalid'").run();
       await assert.rejects(migratePostgres(pool),/Checksum/);
     } finally { await pool.end(); }
@@ -239,7 +239,7 @@ if (process.env.TEST_DATABASE_URL) {
           BEGIN RAISE EXCEPTION 'injected migration failure'; END $$;
         CREATE TRIGGER reject_owner_copy BEFORE UPDATE ON loans FOR EACH ROW EXECUTE FUNCTION reject_owner_copy();`);
       const snapshot = async () => ({
-        data: await Promise.all(tables.filter(table => table !== 'user_access_companies').map(async table => (await pool.query(`SELECT * FROM ${table}`)).rows)),
+        data: await Promise.all(tables.filter(table => !['user_access_companies','password_reset_requests'].includes(table)).map(async table => (await pool.query(`SELECT * FROM ${table}`)).rows)),
         columns: (await pool.query(`SELECT table_name,column_name,data_type,is_nullable FROM information_schema.columns
           WHERE table_schema=current_schema() ORDER BY table_name,ordinal_position`)).rows,
         views: (await pool.query('SELECT viewname,definition FROM pg_views WHERE schemaname=current_schema() ORDER BY viewname')).rows,
@@ -251,8 +251,8 @@ if (process.env.TEST_DATABASE_URL) {
       await pool.query('DROP TRIGGER reject_owner_copy ON loans; DROP FUNCTION reject_owner_copy()');
       await migratePostgres(pool);
       assert.deepEqual((await pool.query('SELECT id,client_id,company_id FROM loans')).rows, [{id:'12',client_id:'8',company_id:'1'}]);
-      assert.deepEqual((await pool.query('SELECT * FROM payments')).rows, before.data[tables.filter(table => table !== 'user_access_companies').indexOf('payments')]);
-      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2},{version:3}]);
+      assert.deepEqual((await pool.query('SELECT * FROM payments')).rows, before.data[tables.filter(table => !['user_access_companies','password_reset_requests'].includes(table)).indexOf('payments')]);
+      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2},{version:3},{version:4}]);
     } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
   });
 }

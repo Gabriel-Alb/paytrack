@@ -20,7 +20,7 @@ afterEach(closeDatabase);
 test('schema, chaves estrangeiras, índices e invariantes persistidos estão válidos', async () => {
   const db = database();
   const result = await checkSchema(db);
-  assert.equal(result.tables, 12);
+  assert.equal(result.tables, 13);
   await assert.rejects(db.prepare("INSERT INTO clients(company_id,name,cpf) VALUES(999,'Teste','123')").run());
   await assert.rejects(db.prepare("INSERT INTO users(name,email,password_hash,role) VALUES('Teste','x@example.test','hash','master')").run());
   await assert.rejects(db.prepare("INSERT INTO auth_audit_logs(event,details,created_at) VALUES('test','invalid json',1)").run());

@@ -38,7 +38,7 @@ test('migration v3 amplia auditoria sem inventar autores, preserva histórico e 
       VALUES('client_created',1,'Nome histórico','client',1,?,2)`).run(JSON.stringify({customer:'Cliente legado'})));
     const history=(await db.prepare('SELECT * FROM auth_audit_logs').all());(await closeDatabase());db=(await openDatabase(path));
     assert.deepEqual((await db.prepare('SELECT * FROM auth_audit_logs').all()),history);
-    assert.equal((await db.pragma('user_version',{simple:true})),7);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
+    assert.equal((await db.pragma('user_version',{simple:true})),8);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true})}
 });
 
@@ -58,7 +58,7 @@ test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e con
     const sessions=(await old.prepare('SELECT * FROM auth_sessions').all()),logs=(await old.prepare('SELECT * FROM auth_audit_logs').all());
     (await old.close());
     let db=(await openDatabase(path));
-    assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()),users.map(user=>({...user,role:user.role==='master'?'admin':user.role})));
+    assert.deepEqual((await db.prepare('SELECT * FROM users ORDER BY id').all()),users.map(user=>({...user,role:user.role==='master'?'admin':user.role,must_change_password:0,temporary_password_expires_at:null})));
     assert.deepEqual((await snapshot(db)),finances);assert.deepEqual((await db.prepare('SELECT * FROM auth_sessions').all()),sessions);
     assert.deepEqual((await db.prepare('SELECT * FROM auth_audit_logs').all()),logs);
     assert.equal((await db.pragma('foreign_keys',{simple:true})),1);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
@@ -70,7 +70,7 @@ test('migration v2 aceita admin e preserva dados, sessões, auditoria, FKs e con
     (await assert.rejects(async ()=>(await db.exec('DELETE FROM users WHERE id=2'))));
     (await closeDatabase());db=(await openDatabase(path));
     assert.equal((await db.prepare('SELECT role FROM users WHERE id=2').get()).role,'admin');
-    assert.equal((await db.pragma('user_version',{simple:true})),7);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
+    assert.equal((await db.pragma('user_version',{simple:true})),8);assert.deepEqual((await db.pragma('foreign_key_check')),[]);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true})}
 });
 
@@ -105,7 +105,7 @@ test('migration auth sobre legado preserva usuários, finanças e FKs, normaliza
     const users=(await migrated.prepare('SELECT * FROM users').all());(await closeDatabase());
     migrated=(await openDatabase(path));
     assert.deepEqual((await migrated.prepare('SELECT * FROM users').all()),users);
-    assert.deepEqual((await snapshot(migrated)),before);assert.equal((await migrated.pragma('user_version',{simple:true})),7);
+    assert.deepEqual((await snapshot(migrated)),before);assert.equal((await migrated.pragma('user_version',{simple:true})),8);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true})}
 });
 for(const field of ['cpf','rg','cnh','email'])test(`duplicidade normalizada de ${field} aborta toda migration sem mudanças parciais`,async ()=>{

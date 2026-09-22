@@ -31,7 +31,7 @@ test('SQLite v7 preserva vínculos como USER, histórico e sessões; reabrir man
   let db;
   try {
     const before=legacy(path); db=openSqlite(path);
-    assert.equal(db.pragma('user_version',{simple:true}),7);
+    assert.equal(db.pragma('user_version',{simple:true}),8);
     assert.deepEqual(db.prepare('SELECT * FROM user_companies ORDER BY company_id').all(),[{user_id:2,company_id:1,role:'USER'},{user_id:2,company_id:2,role:'USER'}]);
     assert.deepEqual(db.prepare('SELECT * FROM users').all(),before.users);
     assert.deepEqual(db.prepare('SELECT * FROM auth_sessions').all(),before.sessions);
@@ -60,6 +60,6 @@ test('SQLite v7 com FK inválida reverte DDL, dados e versão e permite nova ten
     assert.deepEqual(db.prepare('SELECT type,name,sql FROM sqlite_master ORDER BY name').all(),schema);
     assert.deepEqual(db.prepare('SELECT * FROM user_companies').all(),rows);
     db.prepare('DELETE FROM user_companies WHERE company_id=999').run(); db.close(); db=openSqlite(path);
-    assert.equal(db.pragma('user_version',{simple:true}),7);
+    assert.equal(db.pragma('user_version',{simple:true}),8);
   } finally {db?.close();rmSync(directory,{recursive:true,force:true});}
 });

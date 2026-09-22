@@ -8,7 +8,7 @@ const forbidden = () => new AppError(403,'COMPANY_FORBIDDEN','Você não adminis
 // Re-read the actor inside the same transaction as the protected action.
 export async function administrationScope(actor) {
   const current = actor && await auth.byId(actor.id);
-  if (!current || current.access_status!=='active') throw forbidden();
+  if (!current || current.access_status!=='active' || current.must_change_password) throw forbidden();
   if (current.role==='admin') return {actor:current,global:true,companyIds:[]};
   const companyIds = (await repo.userCompanies(current.id)).filter(row => row.role==='MANAGER').map(row => row.id);
   if (!companyIds.length) throw forbidden();

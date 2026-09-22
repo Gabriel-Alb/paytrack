@@ -86,7 +86,7 @@ test('v6 preserva histórico, converte master, associa legado e não recria vín
     assert.equal((await db.prepare('SELECT COUNT(*) n FROM companies').get()).n,2);
     assert.deepEqual((await db.pragma('foreign_key_check')),[]);
     assert.equal((await db.pragma('foreign_keys',{simple:true})),1);
-    assert.equal((await db.pragma('user_version',{simple:true})),7);
+    assert.equal((await db.pragma('user_version',{simple:true})),8);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });
 

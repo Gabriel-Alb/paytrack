@@ -11,6 +11,13 @@ export const requestSchema = clientSchema.pick({ name: true, cpf: true, rg: true
 export const loginSchema = z.object({ email: emailSchema, password: passwordSchema }).strict();
 export const changePasswordSchema = z.object({ currentPassword: passwordSchema, newPassword: passwordSchema }).strict();
 export const profileSchema = z.object({ email: emailSchema }).strict();
+export const recoverySchema = profileSchema;
+export const requiredPasswordSchema = z.object({newPassword:passwordSchema}).strict();
+export const recoveryDecisionSchema = z.object({}).strict();
+export const recoveryQuerySchema = z.object({
+  status:z.enum(['pending','completed','rejected','expired']).default('pending'),
+  page:z.coerce.number().int().min(1).max(100000).default(1),
+}).strict();
 export const accessSchema = z.discriminatedUnion('action', [
   z.object({ action: z.enum(['approve','edit']), role: z.enum(['user','admin']).default('user'), companyIds: z.array(z.number().int().positive()).max(10000).default([]) }).strict()
     .refine(data => data.role === 'admin' || data.companyIds.length > 0, {message:'Selecione pelo menos uma empresa.',path:['companyIds']})

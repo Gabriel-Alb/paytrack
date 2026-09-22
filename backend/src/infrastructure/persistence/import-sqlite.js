@@ -8,9 +8,10 @@ export async function importSqlite(sourcePath, target) {
   const source = new Database(sourcePath, { readonly:true, fileMustExist:true });
   try {
     source.exec('BEGIN');
-    if (![6,7].includes(source.pragma('user_version', { simple:true })) || source.pragma('foreign_key_check').length ||
+    const version = source.pragma('user_version', { simple:true });
+    if (![6,7,8].includes(version) || source.pragma('foreign_key_check').length ||
       source.pragma('integrity_check')[0].integrity_check !== 'ok')
-      throw new Error('A origem precisa estar no schema SQLite v6 ou v7, com referências válidas.');
+      throw new Error('A origem precisa estar no schema SQLite v6, v7 ou v8, com referências válidas.');
     return await target.transaction(async () => {
       await target.exec(`LOCK TABLE ${tables.join(',')} IN ACCESS EXCLUSIVE MODE`);
       for (const table of tables.filter(table => table !== 'companies')) {
@@ -25,6 +26,7 @@ export async function importSqlite(sourcePath, target) {
       for (const key of ['cpf','rg','cnh']) await target.exec(`ALTER TABLE clients DISABLE TRIGGER clients_${key}_unique`);
       const counts = {};
       for (const table of tables) {
+        if (table==='password_reset_requests' && version<8) { counts[table]=0; continue; }
         if (table==='user_access_companies' && source.pragma('user_version', {simple:true})===6) { counts[table]=0; continue; }
         const rows = source.prepare(`SELECT * FROM ${table}`).safeIntegers(true).all().map(row =>
           Object.fromEntries(Object.entries(row).map(([key,value]) => {

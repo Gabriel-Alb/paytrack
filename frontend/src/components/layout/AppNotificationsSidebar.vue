@@ -11,6 +11,11 @@
                 role="dialog" aria-modal="true" aria-labelledby="notifications-title">
                 <NotificationSidebarHeader ref="headerRef" @close="close" />
 
+                <RouterLink v-if="notifications.some(item => item.type === 'recovery')" to="/users#password-recovery"
+                    class="mx-4 mb-3 rounded-xl bg-green-50 p-3 text-xs font-semibold text-green-900" @click="close">
+                    Recuperações de senha pendentes: {{ notifications.filter(item => item.type === 'recovery').length }}. Avaliar solicitações
+                </RouterLink>
+
                 <NotificationFilters v-model="activeFilter" :filters="filters" />
                 <div class="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                     <template v-if="groupedNotifications.length">
@@ -35,6 +40,7 @@ import {
 } from 'vue'
 
 import NotificationEmptyState from './notifications/NotificationEmptyState.vue'
+import { RouterLink } from 'vue-router'
 import NotificationFilters from './notifications/NotificationFilters.vue'
 import NotificationGroup from './notifications/NotificationGroup.vue'
 import NotificationSidebarHeader from './notifications/NotificationSidebarHeader.vue'

@@ -6,6 +6,8 @@ export const authConfig = Object.freeze({
   absoluteMs: env.SESSION_MAX_AGE * 1000,
   idleMs: Math.min(env.SESSION_IDLE_AGE, env.SESSION_MAX_AGE) * 1000,
   anonymousMs: 30 * 60 * 1000,
+  recoveryRequestMs: 7 * 24 * 60 * 60 * 1000,
+  temporaryPasswordMs: 60 * 60 * 1000,
   password: { memoryCost: 19456, timeCost: 2, parallelism: 1 },
   limits: { requestAccount: 3, passwordIp: 10, passwordUser: 5, csrfIp: 100 },
 });
