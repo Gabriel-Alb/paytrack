@@ -5,6 +5,7 @@ export const findInstallment = (...args) => repository('installments').findInsta
 export const listInstallments = (...args) => repository('installments').listInstallments(...args);
 export const insertInstallment = (...args) => repository('installments').insertInstallment(...args);
 export const updateAmounts = (...args) => repository('installments').updateAmounts(...args);
+export const updateSchedule = (...args) => repository('installments').updateSchedule(...args);
 export const reconcileInstallments = (...args) => repository('installments').reconcileInstallments(...args);
 export const reconcileFees = (...args) => repository('installments').reconcileFees(...args);
 export const loanBalances = (...args) => repository('installments').loanBalances(...args);

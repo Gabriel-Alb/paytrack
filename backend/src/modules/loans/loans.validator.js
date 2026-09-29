@@ -19,7 +19,7 @@ const percentage = z
         "Juros devem ter no máximo duas casas decimais.",
       ),
   );
-export const loanSchema = z
+const loanFields = z
   .object({
     company_id: idSchema.optional(),
     client_id: idSchema,
@@ -35,14 +35,16 @@ export const loanSchema = z
       .optional(),
     notes,
   })
-  .strict()
-  .refine((data) => data.first_due_date >= data.loan_date, {
-    message: "O primeiro vencimento não pode ser anterior ao empréstimo.",
-    path: ["first_due_date"],
-  });
+  .strict();
+export const loanSchema = loanFields.refine((data) => data.first_due_date >= data.loan_date, {
+  message: "O primeiro vencimento não pode ser anterior ao empréstimo.",
+  path: ["first_due_date"],
+});
 export const loanPatchSchema = z
   .object({
-    notes,
+    ...loanFields.partial().shape,
+    interest_percentage: percentage.optional(),
+    late_fee_per_day: cents.optional(),
     status: z.literal("cancelled").optional(),
     revision: z.number().int().min(0),
   })

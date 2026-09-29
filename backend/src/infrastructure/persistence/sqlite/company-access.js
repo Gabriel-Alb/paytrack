@@ -1,7 +1,8 @@
-import { canAccessCompany } from '../../../application/company-access.js';
+import { canAccessCompany, companyAccessContext } from '../../../application/company-access.js';
 
 export function installCompanyAccess(db) {
   db.function('can_access_company', canAccessCompany);
+  db.function('is_company_admin', () => Number(companyAccessContext()?.role === 'admin'));
   db.exec(`CREATE TEMP VIEW scoped_clients AS SELECT * FROM main.clients;
     CREATE TEMP VIEW scoped_loans AS SELECT * FROM main.loans WHERE can_access_company(company_id);
     CREATE TEMP VIEW scoped_installments AS SELECT i.* FROM main.installments i JOIN scoped_loans l ON l.id=i.loan_id;

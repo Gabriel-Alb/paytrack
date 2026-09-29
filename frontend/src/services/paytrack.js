@@ -42,17 +42,24 @@ export const clientsApi = {
   async get(id) { return clientView(await request(`/clients/${id}`)) },
   async save(id,body) { return clientView(await request(id ? `/clients/${id}` : '/clients',{ method:id ? 'PATCH':'POST',body })) },
 }
+function loanPayload(form) {
+  return {
+    company_id:Number(form.companyId),client_id:Number(form.clientId),principal_amount:toCents(form.amount),interest_percentage:String(form.interest || 0),
+    installment_count:Number(form.installmentCount),late_fee_per_day:toCents(form.dailyLateFee),
+    loan_date:form.loanDate,first_due_date:form.firstPaymentDate,
+    installments:form.installments.map(toCents),
+    installment_overrides:Object.fromEntries(Object.entries(form.installmentOverrides || {}).map(([key,value]) => [key,toCents(value)])),
+  }
+}
+
 export const loansApi = {
   async list(query,signal) { const result=await request(`/loans?${queryString(query)}`,{ signal }); return { ...result,items:result.items.map(loanView) } },
   async get(id) { return loanView(await request(`/loans/${id}`)) },
   async create(form) {
-    return loanView(await request('/loans',{ method:'POST',body:{
-      company_id:Number(form.companyId),client_id:Number(form.clientId),principal_amount:toCents(form.amount),interest_percentage:String(form.interest || 0),
-      installment_count:Number(form.installmentCount),late_fee_per_day:toCents(form.dailyLateFee),
-      loan_date:form.loanDate,first_due_date:form.firstPaymentDate,
-      installments:form.installments.map(toCents),
-      installment_overrides:Object.fromEntries(Object.entries(form.installmentOverrides || {}).map(([key,value]) => [key,toCents(value)])),
-    } }))
+    return loanView(await request('/loans',{ method:'POST',body:loanPayload(form) }))
+  },
+  async update(id,revision,form) {
+    return loanView(await request(`/loans/${id}`,{ method:'PATCH',body:{ ...loanPayload(form),revision } }))
   },
   async confirm(id,revision,payments) {
     return loanView(await request(`/loans/${id}/payment-confirmation`,{ method:'PUT',body:{ revision,payments:payments.map((item) => ({

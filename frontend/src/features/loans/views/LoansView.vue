@@ -1,6 +1,6 @@
 <template>
     <div class="mx-auto -mt-4 w-full max-w-[1500px] sm:-mt-0">
-        <LoansGrid :loans="loans" :search-only="!!fixedStatus" @filter="filters = $event" @open-loan="openLoanInstallments">
+        <LoansGrid :loans="loans" :search-only="!!fixedStatus" @filter="filters = $event" @open-loan="openLoanInstallments" @edit="openEditLoan">
             <template #company-filter>
                 <CompanySelect v-if="user?.role === 'admin'" v-model="companyFilter" filter class="w-full sm:w-48 sm:shrink-0" />
             </template>
@@ -17,14 +17,14 @@
 
         <div ref="target" aria-hidden="true" />
 
-        <LoanFormModal :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
-            @save="createLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
+        <LoanFormModal v-if="isLoanModalOpen" :loan="editingLoan" :saving="pendingOperation" :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
+            @save="saveLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
 
         <ClientFormModal :model-value="isClientModalOpen" :client="null" @update:model-value="setClientModalOpen"
             @save="createClient" @close="returnToLoan" />
 
         <LoanInstallmentsModal v-model="isInstallmentsModalOpen" :loan="selectedLoan" @close="clearSelectedLoan"
-            @confirm-payments="registerLoanPayment" />
+            @confirm-payments="registerLoanPayment" @edit="openEditLoan" />
     </div>
 </template>
 
@@ -39,7 +39,7 @@ import LoanInstallmentsModal from '@/features/loans/components/LoanInstallmentsM
 import LoansGrid from '@/features/loans/components/LoansGrid.vue'
 import { clientsApi, loansApi } from '@/services/paytrack'
 import { toast } from '@/composables/useToast'
-import { perform } from '@/services/api'
+import { perform, pendingOperation } from '@/services/api'
 import { usePagedList } from '@/composables/usePagedList'
 
 const props = defineProps({
@@ -59,15 +59,26 @@ const isLoanModalOpen = ref(false)
 const isClientModalOpen = ref(false)
 const isInstallmentsModalOpen = ref(false)
 const selectedLoan = ref(null)
+const editingLoan = ref(null)
 const createEmptyDraft = () => ({ companyId:null, clientId:null, amount:null, interest:null, installmentCount:1,
   installments:[], installmentOverrides:{}, dailyLateFee:null, loanDate:'', firstPaymentDate:'' })
 const loanDraft = reactive(createEmptyDraft())
 function updateLoanDraft(draft) { Object.assign(loanDraft, draft) }
 function openNewLoan() {
+  editingLoan.value = null
   Object.assign(loanDraft, createEmptyDraft())
   isLoanModalOpen.value = true
 }
-function closeLoanModal() { isLoanModalOpen.value = false }
+function closeLoanModal() { if (!pendingOperation.value) isLoanModalOpen.value = false }
+function openEditLoan(loan) {
+  perform(async () => {
+    const current = await loansApi.get(loan.id)
+    editingLoan.value = current
+    Object.assign(loanDraft, createEmptyDraft(), current, { companyId:current.company_id, installmentOverrides:{} })
+    isInstallmentsModalOpen.value = false
+    isLoanModalOpen.value = true
+  })
+}
 function openLoanInstallments(loan) {
   perform(async () => { selectedLoan.value = await loansApi.get(loan.id); isInstallmentsModalOpen.value = true })
 }
@@ -89,10 +100,11 @@ function createClient(form) {
     isLoanModalOpen.value = true
   })
 }
-function createLoan(form) {
+function saveLoan(form) {
   perform(async () => {
-    await loansApi.create(form)
-    toast.success('Empréstimo cadastrado com sucesso.')
+    if (editingLoan.value) await loansApi.update(editingLoan.value.id, editingLoan.value.revision, form)
+    else await loansApi.create(form)
+    toast.success(editingLoan.value ? 'Empréstimo salvo com sucesso.' : 'Empréstimo cadastrado com sucesso.')
     isLoanModalOpen.value = false
     Object.assign(loanDraft, createEmptyDraft())
     await reload()

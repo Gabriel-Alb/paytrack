@@ -461,3 +461,168 @@ test('seed é atômico, idempotente e inclui todos os cenários', async () => {
   assert.ok(before[2].some((i) => i.status === 'partial'));
   assert.ok(before[4].some((f) => f.amount > f.paid_amount));
 });
+
+
+test('edição recalcula contrato com as regras do cadastro e preserva IDs das parcelas restantes', async () => {
+  let l = await loan({ first_due_date:addDays(today(), -2) });
+  const ids = l.installments.map(i => i.id);
+  l = (await api.patch('/api/loans/'+l.id).send({revision:l.revision,
+    principal_amount:20001, interest_percentage:'12.35', installment_count:4,
+    late_fee_per_day:250, loan_date:today(), first_due_date:addDays(today(), 1), notes:'Atualizado',
+  }).expect(200)).body;
+  assert.equal(l.interest_amount,2470);
+  assert.equal(l.total_amount,22471);
+  assert.deepEqual(l.installments.map(i=>i.amount),[5618,5618,5618,5617]);
+  assert.deepEqual(l.installments.slice(0,3).map(i=>i.id),ids);
+  assert.equal(l.installments[3].due_date,addDays(today(),4));
+  assert.equal(l.fee_remaining,0);
+  assert.equal(l.notes,'Atualizado');
+  assert.equal(l.revision,1);
+  l = (await api.patch('/api/loans/'+l.id).send({revision:l.revision,
+    installment_count:2,installment_overrides:{0:10000},late_fee_per_day:0,
+  }).expect(200)).body;
+  assert.deepEqual(l.installments.map(i=>i.amount),[10000,12471]);
+  assert.deepEqual(l.installments.map(i=>i.id),ids.slice(0,2));
+  assert.equal(l.late_fee_per_day,0);
+  assert.equal(Number(l.interest_percentage),12.35);
+});
+
+test('troca de cliente mantém condições, parcelas personalizadas e atualiza ambos os clientes', async () => {
+  const l = await loan({installments:[5000,3000,3000]});
+  const other = await client({name:'Novo cliente',cpf:'11144477735',rg:null,cnh:null});
+  const updated = (await api.patch('/api/loans/'+l.id).send({revision:l.revision,client_id:other.id}).expect(200)).body;
+  assert.equal(updated.client_id,other.id);
+  assert.equal(updated.client_name,other.name);
+  assert.equal(updated.created_by,l.created_by);
+  assert.deepEqual(updated.installments.map(i=>[i.id,i.amount,i.due_date]),l.installments.map(i=>[i.id,i.amount,i.due_date]));
+  assert.equal((await api.get('/api/clients/'+l.client_id)).body.status,'sem_contrato');
+  assert.equal((await api.get('/api/clients/'+other.id)).body.status,'ativo');
+});
+
+test('edição valida campos, cronologia, soma, limite e revisão sem mutações parciais', async () => {
+  const l = await loan();
+  for (const data of [{principal_amount:0},{principal_amount:1.5},{interest_percentage:'1.234'},
+    {installment_count:121},{late_fee_per_day:-1},{first_due_date:'2026-02-30'},
+    {loan_date:addDays(today(),1)},{installments:[1,1,1]},
+    {installment_overrides:{3:100}},{installments:[3667,3667,3666],installment_overrides:{0:1}},
+    {principal_amount:100000000000,interest_percentage:'1'},{created_by:123}]) {
+    const before = await snapshot();
+    await api.patch('/api/loans/'+l.id).send({revision:l.revision,...data}).expect(400);
+    assert.deepEqual(await snapshot(),before);
+  }
+  await api.patch('/api/loans/'+l.id).send({revision:l.revision,client_id:99999}).expect(404);
+  await api.patch('/api/loans/'+l.id).send({revision:l.revision,principal_amount:20000}).expect(200);
+  const before = await snapshot();
+  const stale = await api.patch('/api/loans/'+l.id).send({revision:l.revision,notes:'Obsoleto'}).expect(409);
+  assert.equal(stale.body.error.code,'STALE_LOAN');
+  assert.deepEqual(await snapshot(),before);
+});
+
+for (const state of ['partial','paid','fee','voided','cancelled']) {
+  test('edição aceita condições compatíveis e preserva histórico: '+state, async () => {
+    let l = await loan({installment_count:1,first_due_date:addDays(today(),-2)});
+    if (state==='cancelled') l=(await api.patch('/api/loans/'+l.id).send({revision:l.revision,status:'cancelled'}).expect(200)).body;
+    else if (state==='fee') l=(await api.post('/api/late-fees/'+l.installments[0].late_fee_id+'/payments')
+      .send({revision:l.revision,amount:100,payment_date:today()}).expect(201)).body.loan;
+    else l=await pay(l,state==='partial'?1000:11000);
+    if (state==='voided') l=await confirm(l,[]);
+    const history = l.payments;
+    const installmentId = l.installments[0].id;
+    l = (await api.patch('/api/loans/'+l.id).send({revision:l.revision,
+      principal_amount:30000,interest_percentage:'20',installment_count:2,
+      late_fee_per_day:150,loan_date:addDays(today(),-11),first_due_date:addDays(today(),-3),
+      installments:[20000,16000],
+    }).expect(200)).body;
+    assert.deepEqual(l.payments,history);
+    assert.equal(l.installments[0].id,installmentId);
+    assert.deepEqual(l.installments.map(i=>i.amount),[20000,16000]);
+    assert.equal(l.total_amount,36000);
+    assert.equal(l.interest_amount,6000);
+    assert.equal(l.status === 'cancelled',state === 'cancelled');
+    const other=await client({cpf:'11144477735',rg:null,cnh:null});
+    const saved=(await api.patch('/api/loans/'+l.id).send({revision:l.revision,client_id:other.id,
+      principal_amount:l.principal_amount,interest_percentage:l.interest_percentage,installment_count:l.installment_count,
+      late_fee_per_day:l.late_fee_per_day,loan_date:l.loan_date,first_due_date:l.first_due_date,
+      installments:l.installments.map(i=>i.amount),notes:'Correção cadastral',
+    }).expect(200)).body;
+    assert.deepEqual(saved.payments,l.payments);
+    assert.deepEqual(saved.installments.map(({updated_at:_updatedAt,...i})=>i),l.installments.map(({updated_at:_updatedAt,...i})=>i));
+    assert.equal(saved.paid_amount,l.paid_amount);
+    assert.equal(saved.fee_remaining,l.fee_remaining);
+    assert.equal(saved.total_amount,l.total_amount);
+  });
+}
+
+test('pagamento registrado durante edição impede salvar revisão antiga',async()=>{
+  const l=await loan();
+  await pay(l,100);
+  const before=await snapshot();
+  const error=await api.patch('/api/loans/'+l.id).send({revision:l.revision,principal_amount:20000}).expect(409);
+  assert.equal(error.body.error.code,'STALE_LOAN');
+  assert.deepEqual(await snapshot(),before);
+});
+
+for(const failure of [{name:'fail_edit_installment',event:'INSERT',table:'installments',condition:'NEW.installment_number=4'},
+  {name:'fail_edit_audit',event:'INSERT',table:'auth_audit_logs',condition:"NEW.event='loan_updated'"}]) {
+  test('edição faz rollback integral em falha: '+failure.name, async()=>{
+    const l=await loan();
+    await injectFailure(failure);
+    const before=await snapshot();
+    const audit=await database().prepare('SELECT * FROM auth_audit_logs').all();
+    await api.patch('/api/loans/'+l.id).send({revision:l.revision,principal_amount:20000,installment_count:4}).expect(409);
+    assert.deepEqual(await snapshot(),before);
+    assert.deepEqual(await database().prepare('SELECT * FROM auth_audit_logs').all(),audit);
+  });
+}
+
+
+test('pagamento parcial bloqueia redistribuição abaixo do recebido mesmo preservando a soma total',async()=>{
+  let l=await loan();
+  l=await pay(l,1000);
+  const before=await snapshot();
+  const error=await api.patch('/api/loans/'+l.id).send({revision:l.revision,installments:[500,5500,5000]}).expect(409);
+  assert.equal(error.body.error.code,'PAYMENT_EXCEEDS_BALANCE');
+  assert.deepEqual(await snapshot(),before);
+});
+
+test('edição rejeita datas e multas incompatíveis com recebimentos, sem alterações parciais', async () => {
+  let l = await loan({ installment_count:1, first_due_date:addDays(today(),-4) });
+  l = await pay(l, 1000, addDays(today(),-2));
+  l = (await api.post('/api/late-fees/'+l.installments[0].late_fee_id+'/payments')
+    .send({revision:l.revision,amount:200,payment_date:addDays(today(),-2)}).expect(201)).body.loan;
+  for (const [data, status, code] of [
+    [{loan_date:addDays(today(),-1),first_due_date:today()},400,'INVALID_PAYMENT_DATE'],
+    [{late_fee_per_day:0},409,'FEE_PAYMENT_EXCEEDS_BALANCE'],
+    [{late_fee_per_day:75},409,'FEE_PAYMENT_EXCEEDS_BALANCE'],
+    [{first_due_date:addDays(today(),-1)},409,'FEE_PAYMENT_EXCEEDS_BALANCE'],
+  ]) {
+    const before = await snapshot();
+    const result = await api.patch('/api/loans/'+l.id).send({revision:l.revision,...data}).expect(status);
+    assert.equal(result.body.error.code,code);
+    assert.deepEqual(await snapshot(),before);
+  }
+});
+
+for (const voided of [false,true]) {
+  test('redução de parcelas preserva histórico, inclusive estornado: '+voided, async () => {
+    let l = await loan();
+    l = await confirm(l,[select(3)]);
+    if (voided) l = await confirm(l,[]);
+    const before = await snapshot();
+    const result = await api.patch('/api/loans/'+l.id).send({revision:l.revision,installment_count:2}).expect(409);
+    assert.equal(result.body.error.code,'INSTALLMENT_HAS_PAYMENTS');
+    assert.deepEqual(await snapshot(),before);
+  });
+}
+
+test('redução remove somente parcelas sem histórico e mantém quitação e saldos exatos', async () => {
+  let l = await loan();
+  l = await pay(l,1000);
+  const history = l.payments;
+  l = (await api.patch('/api/loans/'+l.id).send({revision:l.revision,installment_count:2,
+    installments:[1000,10000]}).expect(200)).body;
+  assert.equal(l.installments[0].status,'paid');
+  assert.deepEqual(l.payments,history);
+  assert.equal(l.installments.length,2);
+  assert.equal((await api.get('/api/dashboard/summary')).body.portfolio,10000);
+});
