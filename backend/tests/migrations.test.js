@@ -40,7 +40,7 @@ test('migração preserva pagamentos, multas e referências; reabertura é idemp
     assert.equal((await db.prepare('SELECT amount FROM installments').get()).amount, 1000);
     assert.equal((await db.prepare('SELECT paid_amount FROM late_fees').get()).paid_amount, 100);
     assert.equal((await db.prepare('SELECT status FROM loans').get()).status, 'overdue');
-    assert.equal((await db.pragma('user_version', { simple: true })),8);
+    assert.equal((await db.pragma('user_version', { simple: true })), 10);
     assert.deepEqual((await db.pragma('foreign_key_check')), []);
     const payments = (await db.prepare('SELECT * FROM payments').all());
     (await closeDatabase());
@@ -77,5 +77,35 @@ test('falha durante migração restaura schema e dados anteriores', async () => 
   } finally {
     (await closeDatabase());
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test('migração de edição remove apenas trava do cliente e preserva pagamentos e empresa',async()=>{
+  const directory=mkdtempSync(join(tmpdir(),'paytrack-loan-edit-migration-'));
+  const path=join(directory,'legacy.db');
+  try {
+    let db=await openDatabase(path);
+    await db.exec("INSERT INTO clients(id,name,cpf) VALUES(1,'Original','52998224725'),(2,'Novo','11144477735');");
+    await db.exec("INSERT INTO loans(id,company_id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date) VALUES(1,1,1,1000,1000,1,'2026-01-01','2026-01-01');");
+    await db.exec("INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(1,1,1,1000,'2026-01-01'); INSERT INTO payments(installment_id,amount,payment_date) VALUES(1,100,'2026-01-01');");
+    const before=await db.prepare('SELECT * FROM payments').all();
+    await closeDatabase();
+    const legacy=new Database(path);
+    legacy.exec("CREATE TRIGGER loans_client_immutable BEFORE UPDATE OF client_id ON loans WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END; PRAGMA user_version=8;");
+    legacy.close();
+    db=await openDatabase(path);
+    assert.equal(await db.pragma('user_version',{simple:true}), 10);
+    await db.prepare('UPDATE loans SET client_id=2 WHERE id=1').run();
+    await assert.rejects(db.prepare('UPDATE loans SET company_id=2 WHERE id=1').run());
+    assert.deepEqual(await db.prepare('SELECT * FROM payments').all(),before);
+    assert.deepEqual(await db.pragma('foreign_key_check'),[]);
+    await closeDatabase();
+    db=await openDatabase(path);
+    assert.equal((await db.prepare('SELECT client_id FROM loans WHERE id=1').get()).client_id,2);
+    assert.deepEqual(await db.prepare('SELECT * FROM payments').all(),before);
+  } finally {
+    await closeDatabase();
+    rmSync(directory,{recursive:true,force:true});
   }
 });

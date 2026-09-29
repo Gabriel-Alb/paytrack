@@ -57,6 +57,11 @@ if (process.env.TEST_DATABASE_URL) {
       ]);
       assert.equal((await pool.query('SELECT count(*) AS n FROM clients')).rows[0].n,'2');
       assert.equal((await pool.query('SELECT amount FROM payments WHERE id=20')).rows[0].amount,'500');
+      await pool.query('UPDATE loans SET client_id=8 WHERE id=13');
+      assert.equal((await pool.query('SELECT client_id FROM loans WHERE id=13')).rows[0].client_id,'8');
+      assert.equal((await pool.query('SELECT amount FROM payments WHERE id=20')).rows[0].amount,'500');
+      await pool.query('UPDATE loans SET company_id=1 WHERE id=13');
+      await pool.query('UPDATE loans SET company_id=2 WHERE id=13');
       await pool.query("UPDATE clients SET name='Preservado' WHERE id=9");
       await assert.rejects(pool.query("INSERT INTO clients(name,cpf) VALUES('Duplicado','52998224725')"),{code:'23505'});
       await pool.query(`SELECT set_config('paytrack.access','{"role":"user","companyIds":[1]}',false)`);
@@ -109,7 +114,7 @@ if (process.env.TEST_DATABASE_URL) {
       assert.deepEqual(await db.prepare(`SELECT c.conname FROM pg_constraint c
         WHERE c.contype='f' AND c.connamespace=current_schema()::regnamespace
         AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid=c.conrelid AND i.indisvalid AND i.indkey[0]=c.conkey[1])`).all(),[]);
-      assert.equal((await checkSchema(db)).version,4);
+      assert.equal((await checkSchema(db)).version,6);
       await db.prepare("UPDATE schema_migrations SET checksum='invalid'").run();
       await assert.rejects(migratePostgres(pool),/Checksum/);
     } finally { await pool.end(); }
@@ -252,7 +257,7 @@ if (process.env.TEST_DATABASE_URL) {
       await migratePostgres(pool);
       assert.deepEqual((await pool.query('SELECT id,client_id,company_id FROM loans')).rows, [{id:'12',client_id:'8',company_id:'1'}]);
       assert.deepEqual((await pool.query('SELECT * FROM payments')).rows, before.data[tables.filter(table => !['user_access_companies','password_reset_requests'].includes(table)).indexOf('payments')]);
-      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2},{version:3},{version:4}]);
+      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2},{version:3},{version:4},{version:5},{version:6}]);
     } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
   });
 }

@@ -204,3 +204,65 @@ test('papel MANAGER não concede acesso financeiro a empresas sem vínculo',asyn
   await a.api.patch(`/api/loans/${loan.id}`).send({revision:loan.revision,status:'cancelled'}).expect(404);
   await a.api.post(`/api/installments/${loan.installments[0].id}/payments`).send({revision:loan.revision,amount:100,payment_date:today()}).expect(404);
 });
+
+
+test('editar empréstimo reutiliza acesso para administrador, usuário e múltiplas empresas', async()=>{
+  let {loan}=await create(b.api);
+  const other=(await a.api.post('/api/clients').send({...clientBody,cpf:'11144477735',name:'Cliente global'}).expect(201)).body;
+  const withoutAccess=await account('user');
+  for(const actor of [a,withoutAccess]) {
+    const before=await snapshot();
+    await actor.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,client_id:other.id,principal_amount:20000}).expect(404);
+    assert.deepEqual(await snapshot(),before);
+  }
+  for(const actor of [b,both,admin]) {
+    loan=(await actor.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,client_id:other.id,principal_amount:loan.principal_amount+100}).expect(200)).body;
+    assert.equal(loan.created_by,b.id);
+    assert.equal(loan.company_id,2);
+    const audit=await database().prepare("SELECT * FROM auth_audit_logs WHERE event='loan_updated' ORDER BY id DESC LIMIT 1").get();
+    assert.equal(audit.actor_id,actor.id);
+    assert.equal(audit.entity_id,loan.id);
+  }
+  const before=await snapshot();
+  await b.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,company_id:1}).expect(403);
+  await both.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,company_id:1}).expect(409);
+  await admin.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,company_id:999}).expect(403);
+  await request(app).patch('/api/loans/'+loan.id).send({revision:loan.revision,client_id:other.id}).expect(401);
+  await b.api.patch('/api/loans/'+loan.id).set('X-CSRF-Token','invalid').send({revision:loan.revision,client_id:other.id}).expect(403);
+  assert.deepEqual(await snapshot(),before);
+  await replaceUserCompanies(both.id,[1]);
+  await both.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,client_id:other.id}).expect(404);
+});
+
+test('administrador transfere contrato e histórico; escopo e auditoria acompanham a empresa', async () => {
+  let {loan,client} = await create(a.api,1);
+  loan = (await a.api.post('/api/installments/'+loan.installments[0].id+'/payments')
+    .send({revision:loan.revision,amount:100,payment_date:today()}).expect(201)).body.loan;
+  const history = loan.payments;
+  const ids = loan.installments.map(i=>i.id);
+  const saved = (await admin.api.patch('/api/loans/'+loan.id)
+    .send({revision:loan.revision,company_id:2,principal_amount:20000}).expect(200)).body;
+  assert.equal(saved.company_id,2);
+  assert.equal(saved.created_by,a.id);
+  assert.equal(saved.principal_amount,20000);
+  assert.deepEqual(saved.payments,history);
+  assert.deepEqual(saved.installments.map(i=>i.id),ids);
+  await a.api.get('/api/loans/'+loan.id).expect(404);
+  await b.api.get('/api/loans/'+loan.id).expect(200);
+  assert.equal((await admin.api.get('/api/clients?company_id=1')).body.total,0);
+  assert.equal((await admin.api.get('/api/clients?company_id=2')).body.items[0].id,client.id);
+  const audit = await database().prepare("SELECT * FROM auth_audit_logs WHERE event='loan_updated' ORDER BY id DESC LIMIT 1").get();
+  assert.equal(audit.actor_id,admin.id);
+  assert.equal(audit.entity_id,loan.id);
+  await withCompanyAccess({role:'user',companyIds:[1,2]}, async () => {
+    await assert.rejects(database().prepare('UPDATE loans SET company_id=1 WHERE id=?').run(loan.id));
+  });
+});
+
+test('falha na auditoria reverte transferência e alterações financeiras juntas', async () => {
+  const {loan} = await create(a.api,1);
+  await injectFailure({name:'fail_transfer_audit',event:'INSERT',table:'auth_audit_logs',condition:"NEW.event='loan_updated'"});
+  const before = await snapshot();
+  await admin.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,company_id:2,principal_amount:20000}).expect(409);
+  assert.deepEqual(await snapshot(),before);
+});
