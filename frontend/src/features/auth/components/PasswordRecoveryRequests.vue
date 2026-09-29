@@ -95,14 +95,13 @@ async function decide() {
     if (action.value === 'approve') { secret.value = result.temporaryPassword; expiresAt.value = result.expiresAt; recipient.value = item.email }
     else toast.success(result.message)
     selected.value = null
-    await load()
+    // UsersView refreshes the panel once when the committed decision arrives via SSE.
   } catch (error) { if (active) toast.error(error.message) }
   finally { busy.value = false }
 }
-watch(status, () => { page.value = 1; load() })
-watch(page, load)
-watch(() => props.revision, load)
+watch(status, () => { page.value = 1 }, { flush: 'sync' })
+watch([status, page, () => props.revision], load, { immediate: true })
 function hideSecret() { secret.value = ''; recipient.value = ''; expiresAt.value = null; selected.value = null }
-onMounted(() => { load(); window.addEventListener('pagehide',hideSecret) })
+onMounted(() => { window.addEventListener('pagehide',hideSecret) })
 onBeforeUnmount(() => { active = false; sequence++; hideSecret(); window.removeEventListener('pagehide',hideSecret) })
 </script>

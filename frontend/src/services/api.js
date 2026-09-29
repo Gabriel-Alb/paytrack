@@ -4,12 +4,20 @@ import { toast } from '../composables/useToast.js'
 export const pendingOperation = ref(false)
 // Vite embeds this value at build time; /api is the local proxy fallback.
 const baseUrl = (import.meta.env?.VITE_API_URL?.trim() || '/api').replace(/\/+$/, '')
-export const watchAccessChanges = (refresh) => {
+export const watchAccessChanges = (refresh, recheck = refresh) => {
   const events = new EventSource(`${baseUrl}/users/events`, { withCredentials: true })
+  let connected = false
+  events.onopen = () => {
+    if (connected) refresh()
+    connected = true
+  }
   events.onmessage = refresh
   // The server closes the stream when company management is revoked. Recheck
   // the session on disconnect as well, instead of retaining stale admin UI.
-  events.onerror = refresh
+  events.onerror = () => {
+    connected = true
+    recheck()
+  }
   return () => events.close()
 }
 let csrfToken = ''

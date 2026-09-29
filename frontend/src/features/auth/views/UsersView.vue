@@ -176,6 +176,9 @@ const totalPages = computed(() =>
 
 let sequence = 0
 let stopWatching
+let active = true
+let refreshing
+let refreshAgain = false
 
 async function load(background = false) {
   const id = ++sequence
@@ -209,39 +212,46 @@ async function load(background = false) {
 
 function updated() {
   selected.value = null
-  accessChanged()
+  // The committed mutation emits SSE; that is the single list-refresh trigger.
 }
 
-async function accessChanged() {
+async function checkAccess() {
   const current = await restoreAuth()
+  if (!active) return false
   if (!canAdminister(current)) {
     selected.value = null; items.value = []; total.value = 0; stopWatching?.()
     await router.replace(current ? '/' : '/login')
-    return
+    return false
   }
-  revision.value++
-  load(true)
+  return true
 }
 
-watch(status, () => {
-  page.value = 1
-  load()
-})
+function accessChanged() {
+  refreshAgain = true
+  if (!refreshing) refreshing = (async () => {
+    do {
+      refreshAgain = false
+      if (!await checkAccess()) return
+      revision.value++
+      await load(true)
+    } while (refreshAgain && active)
+  })().finally(() => { refreshing = undefined })
+  return refreshing
+}
 
-watch(page, () => {
-  load()
-})
+watch(status, () => { page.value = 1 }, { flush: 'sync' })
+watch([status, page], () => load(), { immediate: true })
 
 watch(() => [user.value?.role, ...(user.value?.managedCompanyIds ?? [])].join(','), () => {
   selected.value = null
 })
 
 onMounted(() => {
-  stopWatching = watchAccessChanges(accessChanged)
-  load()
+  stopWatching = watchAccessChanges(accessChanged, checkAccess)
 })
 
 onBeforeUnmount(() => {
+  active = false
   sequence++
   stopWatching?.()
 })
