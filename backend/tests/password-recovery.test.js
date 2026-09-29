@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from '../src/modules/auth/auth.service.j
 import { setMembership } from '../src/modules/companies/companies.repository.js';
 import { env } from '../src/config/env.js';
 import { authConfig } from '../src/config/auth.js';
+import { recoveryQuerySchema, usersQuerySchema } from '../src/modules/auth/auth.validator.js';
 
 const password = 'SenhaOriginal123';
 let adminId, userId;
@@ -31,6 +32,45 @@ async function login(email='admin@example.test',secret=password,status=200) {
   return {agent,result};
 }
 const rows = () => database().prepare('SELECT * FROM password_reset_requests ORDER BY id').all();
+
+test('query de recuperação aplica os mesmos defaults de /users sem converter página ausente em NaN', () => {
+  for (const query of [{},{status:'pending'},{status:'pending',page:undefined},{status:'pending',page:'1'}]) {
+    const parsed = recoveryQuerySchema.parse(query);
+    assert.deepEqual(parsed,{status:'pending',page:1});
+    assert.deepEqual(parsed,usersQuerySchema.parse(query));
+  }
+  const invalid = recoveryQuerySchema.safeParse({status:'pending',page:'abc'});
+  assert.equal(invalid.success,false);
+  assert.deepEqual(invalid.error.issues[0].path,['page']);
+});
+
+test('contrato de Administração mantém sessão e aceita status=pending&page=1 sem confundir a rota com um ID', async () => {
+  await create();
+  const {agent} = await login();
+  const before = await agent.get('/api/auth/me').expect(200);
+  const result = await agent.get('/api/users/password-reset-requests?status=pending&page=1').expect(200);
+  assert.equal(result.body.total,1);
+  assert.equal(result.body.items[0].status,'pending');
+  await agent.get('/api/users?status=pending&page=1').expect(200);
+  for (const url of ['/api/users/password-reset-requests','/api/users/password-reset-requests?status=pending']) {
+    assert.deepEqual((await agent.get(url).expect(200)).body,result.body);
+  }
+  assert.equal((await agent.get('/api/auth/me').expect(200)).body.user.id,before.body.user.id);
+  for (const status of ['completed','rejected','expired']) {
+    await agent.get(`/api/users/password-reset-requests?status=${status}&page=1`).expect(200);
+  }
+  for (const query of ['page=0','page=1.5','page=abc','status=active','status=pending&status=expired','page=1&page=2','unknown=1']) {
+    const invalid = await agent.get(`/api/users/password-reset-requests?${query}`).expect(400);
+    assert.equal(invalid.body.error.code,'VALIDATION_ERROR');
+    if (query==='page=abc') assert.equal(invalid.body.error.details[0].field,'page');
+  }
+  const {agent:manager} = await login('person@example.test');
+  await setMembership(userId,1,'MANAGER');
+  await manager.get('/api/auth/me').expect(200);
+  await manager.get('/api/users?status=pending&page=1').expect(200);
+  await manager.get('/api/users/password-reset-requests?status=pending&page=1').expect(403);
+  await request(app).get('/api/users/password-reset-requests?status=pending&page=1').expect(401);
+});
 async function create(email='person@example.test') {
   const agent = await browser();
   return agent.post('/api/auth/forgot-password').send({email}).expect(202);

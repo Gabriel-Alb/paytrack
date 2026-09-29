@@ -1,9 +1,9 @@
-import { beforeEach, afterEach, test } from 'node:test';
+import { beforeEach, afterEach, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { openDatabase, closeDatabase, database, injectFailure } from './database-helper.js';
-import { insertUser, byId } from '../src/modules/auth/auth.repository.js';
+import { insertUser, byId, audit, revoke } from '../src/modules/auth/auth.repository.js';
 import { newSession, reviewUser } from '../src/modules/auth/auth.service.js';
 import { setMembership, addRequestedCompany, requestCompanies } from '../src/modules/companies/companies.repository.js';
 import { changeMembership, authorizeGlobalAdministrator } from '../src/modules/companies/companies.service.js';
@@ -269,6 +269,39 @@ test('rebaixamentos simultâneos não deixam a empresa sem gerente ativo',async(
   assert.equal((await database().prepare("SELECT count(*) n FROM user_companies WHERE company_id=1 AND role='MANAGER'").get()).n,1);
 });
 
+test('SSE usa heartbeat sem refresh, detecta mudanças persistidas e encerra sessão revogada',async t=>{
+  let heartbeat;
+  const originalInterval = globalThis.setInterval;
+  mock.method(globalThis,'setInterval',(callback,ms,...args)=>{
+    if (ms===15000) heartbeat=callback;
+    return originalInterval(callback,ms,...args);
+  });
+  t.after(()=>mock.restoreAll());
+  const server=app.listen(0,'127.0.0.1');
+  const controller=new AbortController();
+  try {
+    if (!server.listening) await new Promise(resolve=>server.once('listening',resolve));
+    const response=await fetch(`http://127.0.0.1:${server.address().port}/api/users/events`,{
+      headers:{Cookie:`${authConfig.cookieName}=${admin.session.token}`},signal:controller.signal});
+    assert.equal(response.status,200);
+    const reader=response.body.getReader();
+    const read=async()=>new TextDecoder().decode((await reader.read()).value);
+    assert.match(await read(),/: connected/);
+    heartbeat();
+    assert.equal(await read(),': heartbeat\n\n');
+    // Simulates a commit by another API process, without an in-process event.
+    await audit('access_requested',null,member.id);
+    heartbeat();
+    assert.equal(await read(),'data: refresh\n\n');
+    heartbeat();
+    assert.equal(await read(),': heartbeat\n\n');
+    await admin.api.get('/api/auth/me').expect(200);
+    await revoke((await database().prepare('SELECT id FROM auth_sessions WHERE user_id=?').get(admin.id)).id);
+    heartbeat();
+    assert.equal((await reader.read()).done,true);
+  } finally {controller.abort();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
 test('SSE revalida permissões e encerra conexão de gerente rebaixado',async()=>{
   const server=app.listen(0,'127.0.0.1');
   const controller=new AbortController();
@@ -278,7 +311,7 @@ test('SSE revalida permissões e encerra conexão de gerente rebaixado',async()=
       headers:{Cookie:`${authConfig.cookieName}=${manager.session.token}`},signal:controller.signal});
     assert.equal(response.status,200);
     const reader=response.body.getReader();
-    assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
+    assert.match(new TextDecoder().decode((await reader.read()).value),/: connected/);
     await admin.api.patch(`/api/companies/1/users/${manager.id}`).send({role:'USER'}).expect(200);
     assert.equal((await reader.read()).done,true);
   } finally {controller.abort();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
