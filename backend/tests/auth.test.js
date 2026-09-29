@@ -120,7 +120,7 @@ test('solicitação pela API aparece na lista do master e emite evento após com
     });
     assert.equal(stream.status,200);assert.match(stream.headers.get('content-type'),/text\/event-stream/);
     const reader=stream.body.getReader();
-    assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
+    assert.match(new TextDecoder().decode((await reader.read()).value),/: connected/);
     for (const action of ['approve','reject']) {
       const input=action==='approve' ? data() : {...data(),email:'other@example.test',cpf:'12345678909',rg:'',cnh:''};
       await visitor.agent.post('/api/auth/request-access').send(input).expect(202);
@@ -343,7 +343,7 @@ for (const role of ['user','admin']) test(`aprovação persiste ${role} e backen
     try {
       const stream=await fetch(`http://127.0.0.1:${server.address().port}/api/users/events`,{headers:{Cookie:result.headers['set-cookie'][0].split(';')[0]},signal:abort.signal});
       assert.equal(stream.status,200);const reader=stream.body.getReader();
-      assert.match(new TextDecoder().decode((await reader.read()).value),/data: refresh/);
+      assert.match(new TextDecoder().decode((await reader.read()).value),/: connected/);
       (await database().prepare("UPDATE users SET role='user' WHERE id=?").run(person.id));
       accessEvents.emit('changed');assert.equal((await reader.read()).done,true);
     } finally {abort.abort();server.closeAllConnections();await new Promise((resolve)=>server.close(resolve))}

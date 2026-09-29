@@ -5,6 +5,7 @@ import { authConfig, cookieOptions } from '../../config/auth.js';
 import { accessEvents } from './auth.events.js';
 import { loadSession } from './auth.middleware.js';
 import { administrationScope, decideAccess } from '../companies/companies.service.js';
+import { accessRevision } from './auth.repository.js';
 
 export function setCookie(res,token,authenticated) {
   res.cookie(authConfig.cookieName,token,{...cookieOptions,maxAge:authenticated ? authConfig.absoluteMs : authConfig.anonymousMs});
@@ -40,22 +41,30 @@ export async function changePassword(req,res) {
 }
 export const listUsers = async (req,res) => res.json((await service.listUsers(validator.usersQuerySchema.parse(req.query),req.user)));
 export async function watchUsers(req,res) {
-  await administrationScope(req.user);
+  const state = async () => {
+    const scope = await administrationScope(req.user);
+    return JSON.stringify([scope.global,scope.companyIds,await accessRevision()]);
+  };
+  let previous = await state();
   res.set({'Content-Type':'text/event-stream','X-Accel-Buffering':'no'});
   res.flushHeaders();
-  const refresh = async () => {
-    try {
-      await loadSession(req,res,() => {});
+  res.write(': connected\n\n');
+  let checking = Promise.resolve();
+  const refresh = () => {
+    checking = checking.then(async () => {
       if (res.destroyed || res.writableEnded) return;
-      await administrationScope(req.user);
-      res.write('data: refresh\n\n');
-    } catch { res.end(); }
+      await loadSession(req,res,() => {});
+      const current = await state();
+      if (res.destroyed || res.writableEnded) return;
+      // Keep the connection alive without asking the browser to reload unchanged lists.
+      res.write(current === previous ? ': heartbeat\n\n' : 'data: refresh\n\n');
+      previous = current;
+    }).catch(() => { res.end(); });
   };
   accessEvents.on('changed',refresh);
-  // Recheck the session and refresh after reconnects or changes by another process.
+  // Recheck authorization and persisted changes, including in another process.
   const heartbeat = setInterval(refresh,15000);
   res.on('close',() => { clearInterval(heartbeat);accessEvents.off('changed',refresh); });
-  refresh();
 }
 export const reviewUser = async (req,res) => res.json((await service.reviewUser(idSchema.parse(req.params.id),req.user)));
 export const changeAccess = async (req,res) => res.json((await service.changeAccess(req.user,idSchema.parse(req.params.id),req.body)));

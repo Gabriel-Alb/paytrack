@@ -16,11 +16,31 @@ test('desconexão do SSE revalida acesso e limpeza encerra a assinatura', t => {
     close() { closed = true }
   }
   const stop = watchAccessChanges(() => { refreshes++ })
+  stream.onopen()
+  assert.equal(refreshes, 0)
   stream.onmessage()
   stream.onerror()
   assert.equal(refreshes, 2)
+  stream.onopen()
+  assert.equal(refreshes, 3)
   stop()
   assert.equal(closed, true)
+})
+
+test('desconexão pode revalidar sessão sem recarregar listas; reconexão sincroniza mudanças perdidas', t => {
+  const original = globalThis.EventSource
+  let stream, refreshes = 0, checks = 0
+  t.after(() => { globalThis.EventSource = original })
+  globalThis.EventSource = class { constructor() { stream = this } close() {} }
+  const stop = watchAccessChanges(() => refreshes++, () => checks++)
+  // Also recover when the very first connection fails after the initial list load.
+  stream.onerror()
+  stream.onerror()
+  assert.equal(refreshes,0)
+  assert.equal(checks,2)
+  stream.onopen()
+  assert.equal(refreshes,1)
+  stop()
 })
 
 test('administra somente com nível global ou empresas gerenciadas; USER não ganha poderes', () => {

@@ -27,6 +27,10 @@ export async function recordCompanyAction(event,actor,subjectId,companyId,detail
     VALUES(?,?,?,?,?,?,?,?)`).run(event,actor.id,subjectId,actor.name,'company',companyId,JSON.stringify({companyId,...details}),Date.now());
 }
 export const sessionByHash = async (hash) => (await database().prepare('SELECT * FROM auth_sessions WHERE token_hash=?').get(hash));
+// Persisted revision also detects changes made by another API instance.
+export const accessRevision = () => database().prepare(`SELECT
+  (SELECT COALESCE(MAX(id),0) FROM auth_audit_logs) AS revision,
+  (SELECT count(*) FROM password_reset_requests WHERE status IN ('pending','expired') AND expires_at<=?) AS expired`).get(Date.now());
 export async function insertSession({userId,tokenHash,csrfToken,now,expiresAt}) {
   (await database().prepare(`INSERT INTO auth_sessions(user_id,token_hash,csrf_token,created_at,expires_at,last_seen_at)
     VALUES (?,?,?,?,?,?)`).run(userId,tokenHash,csrfToken,now,expiresAt,now));

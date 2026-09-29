@@ -23,6 +23,18 @@ test('HTTP usa cookies e header CSRF em todos os verbos de escrita, nunca na URL
   assert.equal(calls.filter(({url})=>url.endsWith('/csrf')).length,1)
   for(const {url,options} of calls){assert.equal(options.credentials,'include');assert.ok(!url.includes('test-csrf-memory'));if(options.method!=='GET')assert.equal(options.headers['X-CSRF-Token'],'test-csrf-memory')}
 })
+
+test('restauração e listagem administrativa usam a mesma base e enviam cookies',async()=>{
+  const calls=[]
+  globalThis.fetch=async (url,options)=>{calls.push({url,options});return response(200,{})}
+  await request('/auth/me')
+  await request('/users/password-reset-requests?status=pending&page=1')
+  assert.deepEqual(calls.map(({url})=>url),['/api/auth/me','/api/users/password-reset-requests?status=pending&page=1'])
+  for (const {options} of calls) {
+    assert.equal(options.credentials,'include')
+    assert.equal(options.method,'GET')
+  }
+})
 test('CSRF rejeitado é atualizado e operação repetida uma única vez',async()=>{
   setCsrfToken('expired')
   const calls=[]

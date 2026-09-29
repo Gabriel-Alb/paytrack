@@ -17,6 +17,7 @@ test('recuperação completa no navegador, guarda de rotas, segredo único e lay
   const { insertUser } = await import('../../../backend/src/modules/auth/auth.repository.js')
   const { hashPassword } = await import('../../../backend/src/modules/auth/auth.service.js')
   const { setMembership } = await import('../../../backend/src/modules/companies/companies.repository.js')
+  const { createRequest } = await import('../../../backend/src/modules/auth/password-recovery.repository.js')
   const { createServer } = await import('vite')
   const root = process.env.E2E_ARTIFACT_DIR || mkdtempSync(join(tmpdir(),'paytrack-recovery-browser-'))
   mkdirSync(root,{recursive:true})
@@ -72,9 +73,20 @@ test('recuperação completa no navegador, guarda de rotas, segredo único e lay
   const admin = await pageFor()
   await signIn(admin,'admin@qa.test','Original123')
   await admin.waitForURL(url+'/')
+  const administrationResponses = []
+  admin.on('response', response => {
+    const path = new URL(response.url()).pathname
+    if (['/api/auth/me','/api/users','/api/users/password-reset-requests'].includes(path))
+      administrationResponses.push({path,status:response.status(),query:new URL(response.url()).search})
+  })
   await admin.goto(url+'/users')
   const panel = admin.locator('#password-recovery')
   await panel.getByText('person@qa.test',{exact:true}).waitFor()
+  // Allow the initial SSE handshake and one heartbeat to complete.
+  await admin.waitForTimeout(16000)
+  for (const path of ['/api/auth/me','/api/users','/api/users/password-reset-requests']) {
+    assert.deepEqual(administrationResponses.filter(item => item.path===path).map(item => item.status),[200],path)
+  }
   await admin.screenshot({path:join(root,'recovery-admin.png'),fullPage:true})
   await panel.getByRole('button',{name:'Aprovar',exact:true}).click()
   await admin.getByRole('button',{name:'Gerar senha temporária'}).click()
@@ -85,11 +97,36 @@ test('recuperação completa no navegador, guarda de rotas, segredo único e lay
   // Never capture the one-time password in screenshots or diagnostics.
   await admin.getByRole('button',{name:'Concluir e ocultar senha'}).click()
   await secret.waitFor({state:'detached'})
+  await panel.getByText('Nenhuma solicitação neste status.').waitFor()
+  assert.equal(administrationResponses.filter(item => item.path==='/api/users/password-reset-requests').length,2)
   await panel.getByLabel('Status',{exact:true}).selectOption('completed')
   await panel.getByText('person@qa.test',{exact:true}).waitFor()
   assert.equal(await panel.getByRole('button',{name:'Aprovar',exact:true}).count(),0)
   await admin.reload()
   assert.equal(await admin.getByTestId('temporary-password').count(),0)
+  // Real paginated fixtures verify that changing a filter on page 2 loads page 1 once.
+  for (let index=0;index<51;index++) {
+    await insertUser({name:`Pendente ${index}`,email:`pending${index}@qa.test`,cpf:null,passwordHash},'user','pending')
+    const recoveryId = await insertUser({name:`Recuperação ${index}`,email:`recovery${index}@qa.test`,cpf:null,passwordHash},'user','active')
+    await setMembership(recoveryId,1,'USER')
+    await createRequest(recoveryId,Date.now(),Date.now()+3600000)
+  }
+  await admin.reload()
+  await admin.getByRole('button',{name:'Próxima página',exact:true}).waitFor()
+  await admin.getByRole('button',{name:'Próxima página',exact:true}).click()
+  await admin.getByText('pending0@qa.test',{exact:true}).waitFor()
+  let start = administrationResponses.length
+  await admin.locator('#status').selectOption('active')
+  await admin.getByText('recovery50@qa.test',{exact:true}).last().waitFor()
+  await admin.waitForTimeout(200)
+  assert.deepEqual(administrationResponses.slice(start).filter(item => item.path==='/api/users').map(item => item.query),['?status=active&page=1'])
+  await panel.getByRole('button',{name:'Próxima',exact:true}).click()
+  await panel.getByText('recovery0@qa.test',{exact:true}).waitFor()
+  start = administrationResponses.length
+  await panel.getByLabel('Status',{exact:true}).selectOption('completed')
+  await panel.getByText('person@qa.test',{exact:true}).waitFor()
+  await admin.waitForTimeout(200)
+  assert.deepEqual(administrationResponses.slice(start).filter(item => item.path==='/api/users/password-reset-requests').map(item => item.query),['?status=completed&page=1'])
   await signIn(visitor,'person@qa.test',temporaryPassword)
   await visitor.waitForURL(url+'/change-required-password')
   await visitor.getByRole('heading',{name:'Criar nova senha'}).waitFor()
