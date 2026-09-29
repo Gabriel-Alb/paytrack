@@ -66,12 +66,16 @@ export async function insertLoan(data, actorId = null) {
   );
 }
 
-export async function updateLoan(id, notes, status) {
+export async function updateLoan(id, data) {
   (await database()
     .prepare(
-      "UPDATE loans SET notes=?, status=?, revision=revision+1, updated_at=utc_now() WHERE id=?",
+      `UPDATE loans SET company_id=@company_id, client_id=@client_id, principal_amount=@principal_amount,
+        interest_percentage=@interest_percentage, interest_amount=@interest_amount,
+        total_amount=@total_amount, installment_count=@installment_count,
+        late_fee_per_day=@late_fee_per_day, loan_date=@loan_date, first_due_date=@first_due_date,
+        notes=@notes, status=@status, revision=revision+1, updated_at=utc_now() WHERE id=@id`,
     )
-    .run(notes, status, id));
+    .run({...data, id}));
 }
 
 export async function bumpRevision(id) {

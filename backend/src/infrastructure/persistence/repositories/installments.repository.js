@@ -37,6 +37,20 @@ export async function updateAmounts(items) {
   for (const item of items) (await statement.run(item.amount, item.id));
 }
 
+// The service validates compatibility with receipts; retain IDs and payment history.
+export async function updateSchedule(loanId, items) {
+  await database().prepare(`DELETE FROM late_fees WHERE installment_id IN
+    (SELECT id FROM scoped_installments WHERE loan_id=? AND installment_number>?)`).run(loanId, items.length);
+  await database().prepare('DELETE FROM installments WHERE loan_id=? AND installment_number>?').run(loanId, items.length);
+  for (const item of items) {
+    await database().prepare(`INSERT INTO installments (loan_id, installment_number, amount, due_date)
+      VALUES (@loan_id, @installment_number, @amount, @due_date)
+      ON CONFLICT(loan_id, installment_number) DO UPDATE SET
+        amount=excluded.amount, due_date=excluded.due_date, updated_at=utc_now()`)
+      .run({...item, loan_id:loanId});
+  }
+}
+
 export async function reconcileInstallments(date, loanId) {
   (await database()
     .prepare(

@@ -239,9 +239,8 @@ CREATE INDEX IF NOT EXISTS idx_late_fees_status
     ON late_fees(status);
 
 CREATE TRIGGER IF NOT EXISTS loans_company_immutable BEFORE UPDATE OF company_id ON loans
-WHEN NEW.company_id<>OLD.company_id BEGIN SELECT RAISE(ABORT,'Loan company is immutable'); END;
-CREATE TRIGGER IF NOT EXISTS loans_client_immutable BEFORE UPDATE OF client_id ON loans
-WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END;
+WHEN NEW.company_id<>OLD.company_id AND NOT is_company_admin()
+BEGIN SELECT RAISE(ABORT,'Loan company is immutable'); END;
 
 CREATE INDEX IF NOT EXISTS idx_users_approved_by ON users(approved_by);
 CREATE INDEX IF NOT EXISTS idx_auth_audit_actor ON auth_audit_logs(actor_id);

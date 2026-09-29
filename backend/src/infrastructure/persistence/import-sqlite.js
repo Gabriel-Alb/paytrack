@@ -9,9 +9,9 @@ export async function importSqlite(sourcePath, target) {
   try {
     source.exec('BEGIN');
     const version = source.pragma('user_version', { simple:true });
-    if (![6,7,8].includes(version) || source.pragma('foreign_key_check').length ||
+    if (![6,7,8,9,10].includes(version) || source.pragma('foreign_key_check').length ||
       source.pragma('integrity_check')[0].integrity_check !== 'ok')
-      throw new Error('A origem precisa estar no schema SQLite v6, v7 ou v8, com referências válidas.');
+      throw new Error('A origem precisa estar no schema SQLite v6 a v10, com referências válidas.');
     return await target.transaction(async () => {
       await target.exec(`LOCK TABLE ${tables.join(',')} IN ACCESS EXCLUSIVE MODE`);
       for (const table of tables.filter(table => table !== 'companies')) {

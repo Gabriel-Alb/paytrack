@@ -1,6 +1,6 @@
 import { unitOfWork } from '../../application/persistence.js';
 import { env } from "../../config/env.js";
-import { today, addDays, visualStatus } from "../../shared/utils/dates.js";
+import { today, addDays, daysLate, visualStatus } from "../../shared/utils/dates.js";
 import { interestAmount } from "../../shared/utils/money.js";
 import {
   AppError,
@@ -16,9 +16,12 @@ import {
   refreshClient,
 } from "../installments/installments.service.js";
 import { listPayments } from "../payments/payments.repository.js";
+import { validatePaymentDate } from '../payments/payments.service.js';
 import { recordAction } from '../auth/auth.repository.js';
 
-import { resolveCompany } from '../../application/company-access.js';
+import { loanSchema } from './loans.validator.js';
+
+import { resolveCompany, companyAccessContext } from '../../application/company-access.js';
 
 async function auditLoan(event, actor, loan) {
   (await recordAction(event,actor,'loan',loan.id,{
@@ -118,41 +121,46 @@ export function assertRevision(loan, revision) {
     );
 }
 
+function calculateContract(data) {
+  const interest = interestAmount(
+    data.principal_amount,
+    data.interest_percentage,
+  );
+  const total = data.principal_amount + interest;
+  if (total > 100000000000)
+    throw new AppError(
+      400,
+      "AMOUNT_LIMIT",
+      "Total do contrato excede o limite permitido.",
+    );
+  const values =
+    data.installments ??
+    distributeInstallments(
+      total,
+      data.installment_count,
+      data.installment_overrides,
+    );
+  validateAmounts(values, data.installment_count, total);
+  if (data.installments && data.installment_overrides) {
+    for (const [index, amount] of Object.entries(
+      data.installment_overrides,
+    )) {
+      if (values[Number(index)] !== amount)
+        throw new AppError(
+          400,
+          "INVALID_OVERRIDE",
+          "Valor personalizado diverge da parcela enviada.",
+        );
+    }
+  }
+  return { interest, total, values };
+}
+
 export async function createLoan(data, actor) {
   return (await unitOfWork(async () => {
       requireRecord((await findClient(data.client_id)), "Cliente");
       const companyId = (await resolveCompany(data.company_id));
-      const interest = interestAmount(
-        data.principal_amount,
-        data.interest_percentage,
-      );
-      const total = data.principal_amount + interest;
-      if (total > 100000000000)
-        throw new AppError(
-          400,
-          "AMOUNT_LIMIT",
-          "Total do contrato excede o limite permitido.",
-        );
-      const values =
-        data.installments ??
-        distributeInstallments(
-          total,
-          data.installment_count,
-          data.installment_overrides,
-        );
-      validateAmounts(values, data.installment_count, total);
-      if (data.installments && data.installment_overrides) {
-        for (const [index, amount] of Object.entries(
-          data.installment_overrides,
-        )) {
-          if (values[Number(index)] !== amount)
-            throw new AppError(
-              400,
-              "INVALID_OVERRIDE",
-              "Valor personalizado diverge da parcela enviada.",
-            );
-        }
-      }
+      const { interest, total, values } = calculateContract(data);
       const id = (await repository.insertLoan({
         ...data,
         company_id: companyId,
@@ -184,16 +192,67 @@ export async function updateLoan(id, data, actor) {
           "Não é possível cancelar um contrato com histórico de pagamentos.",
         );
       }
-      (await repository.updateLoan(
-        id,
-        data.notes === undefined ? loan.notes : data.notes,
-        data.status ?? loan.status,
-      ));
-      (await refreshClient(loan.client_id));
+      if (data.company_id !== undefined) {
+        await resolveCompany(data.company_id);
+        if (data.company_id !== loan.company_id && companyAccessContext()?.role !== 'admin')
+          conflict('LOAN_COMPANY_IMMUTABLE', 'Somente administradores podem alterar a empresa do contrato.');
+      }
+      const fields = ['client_id', 'principal_amount', 'interest_percentage', 'installment_count',
+        'late_fee_per_day', 'loan_date', 'first_due_date', 'notes'];
+      const merged = Object.fromEntries(fields.map(key => [key, data[key] === undefined ? loan[key] : data[key]]));
+      const totalsChanged = ['principal_amount', 'interest_percentage', 'installment_count']
+        .some(key => Number(merged[key]) !== Number(loan[key]));
+      const contract = loanSchema.parse({ ...merged, company_id:data.company_id ?? loan.company_id,
+        ...(data.installments ? { installments:data.installments } :
+          !totalsChanged && !data.installment_overrides ? { installments:loan.installments.map(item => item.amount) } : {}),
+        ...(data.installment_overrides ? { installment_overrides:data.installment_overrides } : {}),
+      });
+      requireRecord(await findClient(contract.client_id), 'Cliente');
+      const { interest, total, values } = calculateContract(contract);
+      const financialChanged = totalsChanged ||
+        ['late_fee_per_day', 'loan_date', 'first_due_date'].some(key => contract[key] !== loan[key]) ||
+        values.some((amount, index) => amount !== loan.installments[index]?.amount);
+      if (financialChanged) assertCompatiblePayments(loan, contract, values);
+      await repository.updateLoan(id, { ...contract, interest_amount:interest, total_amount:total,
+        notes:contract.notes ?? null, status:data.status ?? loan.status });
+      if (financialChanged) {
+        await installments.updateSchedule(id, values.map((amount, index) => ({
+          installment_number:index + 1, amount, due_date:addDays(contract.first_due_date, index),
+        })));
+      }
+      await refreshFinancialState(id);
+      await refreshClient(loan.client_id);
+      if (contract.client_id !== loan.client_id) await refreshClient(contract.client_id);
       const result = (await getLoan(id));
       (await auditLoan(data.status==='cancelled' ? 'loan_cancelled' : 'loan_updated',actor,result));
       return result;
     }));
+}
+
+function assertCompatiblePayments(loan, contract, values) {
+  for (const installment of loan.installments) {
+    const index = installment.installment_number - 1;
+    const history = loan.payments.filter(payment => payment.installment_id === installment.id);
+    if (values[index] === undefined) {
+      if (history.length) conflict('INSTALLMENT_HAS_PAYMENTS', 'Não é possível remover uma parcela com histórico de pagamentos.');
+      continue;
+    }
+    if (values[index] < installment.paid_amount)
+      conflict('PAYMENT_EXCEEDS_BALANCE', 'O valor da parcela não pode ser inferior ao valor já recebido.');
+    const active = history.filter(payment => !payment.voided_at);
+    for (const payment of active) validatePaymentDate(payment.payment_date, contract.loan_date);
+    const paidAt = values[index] === installment.paid_amount
+      ? active.filter(payment => payment.amount > 0).map(payment => payment.payment_date).sort().at(-1)
+      : null;
+    let receivedFee = 0;
+    for (const payment of active.sort((a, b) => a.payment_date.localeCompare(b.payment_date) || a.id - b.id)) {
+      receivedFee += payment.late_fee_amount;
+      const date = paidAt && paidAt < payment.payment_date ? paidAt : payment.payment_date;
+      const fee = daysLate(addDays(contract.first_due_date, index), date) * contract.late_fee_per_day;
+      if (receivedFee > fee)
+        conflict('FEE_PAYMENT_EXCEEDS_BALANCE', 'As condições não podem reduzir a multa abaixo do valor recebido na data do pagamento.');
+    }
+  }
 }
 
 export async function updateInstallments(id, data, actor) {

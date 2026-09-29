@@ -33,7 +33,7 @@ export function openSqlite(path) {
     db.pragma("foreign_keys = OFF");
     db.transaction(() => {
       const version = db.pragma('user_version', { simple: true });
-      if (version > 8) throw new Error('Versão SQLite mais recente que a aplicação.');
+      if (version > 10) throw new Error('Versão SQLite mais recente que a aplicação.');
       migrate(db, schema);
       migrateAuth(db);
       if (version < 3) migrateRoles(db);
@@ -42,10 +42,12 @@ export function openSqlite(path) {
       if (version < 6) migrateLoanCompanies(db, schema);
       if (version < 7) migrateCompanyRoles(db);
       if (version < 8) migratePasswordRecovery(db);
+      if (version < 9) db.exec('DROP TRIGGER IF EXISTS loans_client_immutable');
+      if (version < 10) db.exec('DROP TRIGGER IF EXISTS loans_company_immutable');
       db.exec(schema);
       if (db.pragma("foreign_key_check").length)
         throw new Error("Banco contém referências inválidas.");
-      db.pragma("user_version = 8");
+      db.pragma("user_version = 10");
     }).immediate();
     db.pragma("foreign_keys = ON");
     installCompanyAccess(db);
