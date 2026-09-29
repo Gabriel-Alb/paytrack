@@ -11,6 +11,7 @@ export const audit = (...args) => repository('auth').audit(...args);
 export const recordAction = (...args) => repository('auth').recordAction(...args);
 export const recordCompanyAction = (...args) => repository('auth').recordCompanyAction(...args);
 export const sessionByHash = (...args) => repository('auth').sessionByHash(...args);
+export const accessRevision = (...args) => repository('auth').accessRevision(...args);
 export const insertSession = (...args) => repository('auth').insertSession(...args);
 export const touch = (...args) => repository('auth').touch(...args);
 export const revoke = (...args) => repository('auth').revoke(...args);
