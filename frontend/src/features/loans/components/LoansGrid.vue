@@ -44,7 +44,7 @@
         </div>
 
         <div v-if="filteredLoans.length" class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <LoanCard v-for="loan in filteredLoans" :key="loan.id" :loan="loan" @open="openLoan(loan)" />
+            <LoanCard v-for="loan in filteredLoans" :key="loan.id" :loan="loan" @open="openLoan(loan)" @edit="emit('edit', loan)" />
         </div>
 
         <div v-else
@@ -87,6 +87,7 @@ const props = defineProps({
 
 const emit = defineEmits([
     'open-loan',
+    'edit',
     'filter',
 ])
 

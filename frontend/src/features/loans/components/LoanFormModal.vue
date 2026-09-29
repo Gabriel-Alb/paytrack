@@ -1,14 +1,15 @@
 <template>
-    <BaseModal :model-value="open" title="Novo empréstimo" description="Preencha as condições combinadas com o cliente."
+    <BaseModal :model-value="open" :title="loan ? 'Editar empréstimo' : 'Novo empréstimo'"
+        :description="loan ? 'Atualize as condições combinadas com o cliente.' : 'Preencha as condições combinadas com o cliente.'"
         panel-class="sm:max-w-[860px]" content-class="overflow-x-hidden touch-pan-y" :close-on-backdrop="false"
         @update:model-value="handleModalModelValue">
         <form id="loan-form" class="w-full min-w-0 max-w-full space-y-7 overflow-x-hidden" @submit.prevent="submit"
             @keydown.enter.prevent>
-            <CompanySelect v-model="form.companyId" :active="open" />
-            <section class="min-w-0">
+            <fieldset v-if="!loan || user?.role === 'admin'" :disabled="saving"><CompanySelect v-model="form.companyId" :active="open" /></fieldset>
+            <fieldset :disabled="saving" class="min-w-0">
 
                 <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-                    <LoanClientSelect v-model="form.clientId" :clients="clients"
+                    <LoanClientSelect v-model="form.clientId" :clients="clients" :company-id="clientCompanyId"
                         @select-client="selectedClient = $event"
                         @request-new-client="requestNewClient" />
 
@@ -28,9 +29,9 @@
                         </div>
                     </label>
                 </div>
-            </section>
+            </fieldset>
 
-            <section class="min-w-0">
+            <fieldset :disabled="saving" class="min-w-0">
 
                 <div class="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
                     <label class="min-w-0">
@@ -152,22 +153,24 @@
                             class="block box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-black/[0.12] bg-white px-3 text-sm text-[#202124] outline-none transition focus:border-[#166534] focus:ring-2 focus:ring-[#166534]/10" />
                     </label>
                 </div>
-            </section>
+            </fieldset>
 
-            <LoanInstallmentsEditor v-model="form.installments" v-model:overrides="form.installmentOverrides"
-                :total="totalWithInterest" :count="form.installmentCount" />
+            <fieldset :disabled="saving">
+                <LoanInstallmentsEditor v-model="form.installments" v-model:overrides="form.installmentOverrides"
+                    :total="totalWithInterest" :count="form.installmentCount" />
+            </fieldset>
         </form>
 
         <template #footer>
-            <button type="button"
+            <button type="button" :disabled="saving"
                 class="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-black/[0.09] bg-white px-4 text-[13px] font-semibold text-black/55 transition-colors hover:bg-black/[0.02] active:bg-black/[0.04] sm:min-h-[38px]"
                 @click="close">
                 Cancelar
             </button>
 
-            <button type="submit" form="loan-form"
+            <button type="submit" form="loan-form" :disabled="saving"
                 class="inline-flex min-h-11 items-center justify-center rounded-[10px] border border-[#166534] bg-[#166534] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#14532d] active:bg-[#14532d] sm:min-h-[38px]">
-                Criar empréstimo
+                {{ saving ? 'Salvando…' : loan ? 'Salvar alterações' : 'Criar empréstimo' }}
             </button>
         </template>
     </BaseModal>
@@ -183,6 +186,7 @@ import {
 
 import CompanySelect from '@/components/base/CompanySelect.vue'
 import BaseModal from '@/components/base/BaseModal.vue'
+import { useAuth } from '@/composables/useAuth'
 
 import LoanClientSelect from './LoanClientSelect.vue'
 import LoanInstallmentsEditor from './LoanInstallmentsEditor.vue'
@@ -191,6 +195,8 @@ import { toCents, fromCents } from '@/services/paytrack'
 import { calculateLoanTotal } from '../utils/loanCalculations'
 
 const props = defineProps({
+    loan: { type:Object, default:null },
+    saving: Boolean,
     open: {
         type: Boolean,
         default: false,
@@ -228,6 +234,15 @@ const form = reactive({
 })
 
 const selectedClient = ref(null)
+const { user } = useAuth()
+const clientCompanyId = computed(() => props.loan && user.value?.role === 'admin' ? form.companyId : null)
+
+watch(() => form.companyId, (companyId, previous) => {
+    if (props.open && previous != null && companyId !== previous && props.loan && user.value?.role === 'admin') {
+        form.clientId = null
+        selectedClient.value = null
+    }
+})
 
 const totalWithInterest = computed(() =>
     calculateLoanTotal(
@@ -252,7 +267,7 @@ function handleModalModelValue(value) {
 }
 
 function close() {
-    emit('close')
+    if (!props.saving) emit('close')
 }
 
 function requestNewClient() {
@@ -273,6 +288,7 @@ function requestNewClient() {
 
 
 function submit() {
+    if (props.saving) return
     if (
         !form.companyId ||
         !form.clientId ||

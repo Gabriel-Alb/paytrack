@@ -106,6 +106,7 @@ import { clientsApi } from '@/services/paytrack'
 import { toast } from '@/composables/useToast'
 
 const props = defineProps({
+    companyId: { type: Number, default: null },
     modelValue: {
         type: [Number, String],
         default: null,
@@ -142,11 +143,19 @@ let searchTimer
 async function searchClients() {
   const version = ++requestVersion
   try {
-    const result = await clientsApi.list({ search:query.value, limit:50 })
+    const result = await clientsApi.list({ search:query.value, company_id:props.companyId ?? undefined, limit:50 })
     if (version === requestVersion) availableClients.value = result.items
   } catch (error) { if (version === requestVersion) toast.error(error) }
 }
 watch(query, () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchClients, 200) })
+watch(() => props.companyId, () => {
+    requestVersion++
+    clearTimeout(searchTimer)
+    availableClients.value = []
+    restoredClient.value = null
+    query.value = ''
+    searchClients()
+}, { flush: 'sync' })
 watch(() => props.modelValue, async id => {
     if (!id || selectedClient.value) return
     try {

@@ -400,7 +400,13 @@ watch(
         () => props.total,
         () => props.count,
     ],
-    () => {
+    (_, previous) => {
+        // Preserve current custom amounts when opening an existing contract.
+        if (!previous?.length && props.modelValue.length === normalizeCount(props.count) &&
+            props.modelValue.reduce((sum, value) => sum + toCents(value), 0) === toCents(props.total)) {
+            installments.value = [...props.modelValue]
+            return
+        }
         applyDistribution(
             props.overrides,
         )

@@ -3,9 +3,16 @@
         panel-class="sm:max-w-[780px]" content-class="sm:py-5" @update:model-value="updateModelValue"
         @close="closeModal">
         <div v-if="loan">
-            <p class="mb-4 text-xs leading-5 text-[#71717a] [overflow-wrap:anywhere]">
-                Empresa: <span class="font-medium text-[#3f3f46]">{{ loan.companyName }}</span>
-            </p>
+            <div class="mb-4 flex items-center justify-between gap-3">
+                <p class="text-xs leading-5 text-[#71717a] [overflow-wrap:anywhere]">
+                    Empresa: <span class="font-medium text-[#3f3f46]">{{ loan.companyName }}</span>
+                </p>
+                <button type="button"
+                    class="flex h-9 w-9 items-center justify-center rounded-lg text-[#71717a] transition-[background-color,color,transform] duration-200 hover:bg-[#f4f4f5] hover:text-[#27272a] active:scale-95"
+                    :aria-label="`Editar empréstimo de ${loan.clientName}`" title="Editar" @click.stop="emit('edit', loan)" @keydown.stop>
+                    <span class="mdi mdi-pencil text-[18px]" aria-hidden="true" />
+                </button>
+            </div>
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                 <div class="min-w-0 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3 sm:p-4">
                     <p class="text-[9px] font-semibold uppercase tracking-[0.06em] text-[#71717a] sm:text-[10px]">
@@ -601,6 +608,7 @@ const emit = defineEmits([
     'update:modelValue',
     'close',
     'confirm-payments',
+    'edit',
 ])
 
 const paymentSelections = ref({})

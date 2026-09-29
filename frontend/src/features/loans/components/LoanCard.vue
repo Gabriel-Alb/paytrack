@@ -97,6 +97,11 @@
                     ">
                     {{ lateDaysLabel }}
                 </p>
+                <button type="button"
+                    class="flex h-9 w-9 items-center justify-center rounded-lg text-[#71717a] transition-[background-color,color,transform] duration-200 hover:bg-[#f4f4f5] hover:text-[#27272a] active:scale-95"
+                    :aria-label="`Editar empréstimo de ${loan.clientName}`" title="Editar" @click.stop="emit('edit', loan)" @keydown.stop>
+                    <span class="mdi mdi-pencil text-[18px]" aria-hidden="true" />
+                </button>
             </div>
         </BaseInfoCard>
     </div>
@@ -116,6 +121,7 @@ const props = defineProps({
 
 const emit = defineEmits([
     'open',
+    'edit',
 ])
 
 const statusLabel = computed(() => {
