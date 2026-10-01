@@ -25,6 +25,9 @@ import { database } from "./config/database.js";
 export const app = express();
 app.disable("x-powered-by");
 if (env.TRUST_PROXY) app.set("trust proxy", env.TRUST_PROXY.split(","));
+// Render's public ingress is the immediate proxy; explicit proxy lists take precedence.
+else if (env.NODE_ENV === "production" && env.RENDER === "true")
+  app.set("trust proxy", 1);
 app.use(
   helmet({
     strictTransportSecurity:

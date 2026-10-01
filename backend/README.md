@@ -128,6 +128,14 @@ A reconstrução preserva inclusive clientes legados com documentos repetidos. G
 
 ## PostgreSQL em produção
 
+### Proxy no Render
+
+Com `NODE_ENV=production` e `RENDER=true` (variável automática da plataforma), a API usa `trust proxy = 1` quando `TRUST_PROXY` está ausente. A configuração é aplicada na criação do Express, antes dos middlewares: os limites de login, solicitação de acesso e CSRF passam a usar o IP encaminhado pelo proxy imediato. Cookies, sessão, CORS e validação CSRF mantêm suas regras, inclusive no mobile.
+
+O padrão pressupõe o ingresso público do Render diretamente no Express. Se houver proxies adicionais ou acesso direto pela rede privada, confira a cadeia real antes de adotá-lo. Listas explícitas de IPs/CIDRs em `TRUST_PROXY` têm precedência (inclusive no Compose); a variável não aceita `1` nem `true`. Desenvolvimento, testes e produção fora do Render continuam sem confiar em proxies por padrão. Clientes que compartilham um IP público ainda compartilham seu limite; a normalização IPv6 do `express-rate-limit` é preservada.
+
+### Banco de dados
+
 Injete no ambiente do processo:
 
 ```dotenv
