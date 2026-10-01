@@ -21,6 +21,7 @@ if (!['production', 'test'].includes(process.env.NODE_ENV))
 const values = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    RENDER: z.string().optional(),
     TRUST_PROXY: z.string().refine(trustedProxies, 'Use loopback ou IPs/CIDRs explícitos separados por vírgula.').optional(),
     COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('strict'),
     SESSION_MAX_AGE: z.coerce.number().int().min(300).max(86400).default(86400),
