@@ -63,7 +63,7 @@
 
                     <p class="mt-1 text-[11px] leading-5 text-[#71717a]">
                         Clique na parcela para visualizar os detalhes. Clique no
-                        número para registrar ou remover o pagamento.
+                        número para registrar um pagamento.
                     </p>
                 </div>
 
@@ -87,9 +87,7 @@
                                     :class="isPaid(installment.number)
                                             ? 'bg-[#166534] text-white hover:bg-[#14532d]'
                                             : 'bg-[#f4f4f5] text-[#52525b] hover:bg-[#166534] hover:text-white'
-                                        " :aria-label="isPaid(installment.number)
-                                            ? `Remover pagamento da parcela ${installment.number}`
-                                            : `Marcar parcela ${installment.number} como paga`
+                                        " :aria-label="`Registrar pagamento da parcela ${installment.number}`
                                         " @click.stop="togglePayment(installment)">
                                     <span v-if="isPaid(installment.number)" class="mdi mdi-check text-lg"
                                         aria-hidden="true" />
@@ -208,292 +206,60 @@
                         <div v-if="isExpanded(installment.number)"
                             class="min-w-0 border-t border-black/[0.07] bg-white px-3 pb-3 pt-3 sm:px-3.5 sm:pb-3.5"
                             @click.stop>
-                            <template v-if="!isPaid(installment.number)">
-                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                    <InfoItem label="Vencimento" :value="formatDate(installment.dueDate)
-                                        " />
+                            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <InfoItem label="Valor original da parcela" :value="formatCurrency(installment.value)" />
+                                <InfoItem label="Saldo restante da parcela" :value="money(balance(installment).remaining)" />
+                                <InfoItem label="Multa acumulada" :value="money(balance(installment).fee)" />
+                                <InfoItem label="Multa pendente" :value="money(balance(installment).feeRemaining)" />
+                                <InfoItem label="Total atualmente devido" :value="money(balance(installment).remaining + balance(installment).feeRemaining)" wrapper-class="col-span-2" />
+                            </div>
 
-                                    <InfoItem label="Dias de atraso" :value="installment.currentLateDays > 0
-                                            ? `${installment.currentLateDays} dias`
-                                            : 'Em dia'
-                                        " :value-class="installment.currentLateDays > 0
-                                                ? 'text-[#b91c1c]'
-                                                : 'text-[#3f3f46]'
-                                            " />
-
-                                    <InfoItem label="Multa diária" :value="formatCurrency(dailyLateFee)
-                                        " />
-
-                                    <InfoItem label="Multa acumulada" :value="formatCurrency(
-                                        installment.currentLateFee,
-                                    )
-                                        " :value-class="installment.currentLateFee > 0
-                                                ? 'text-[#b91c1c]'
-                                                : 'text-[#3f3f46]'
-                                            " />
-                                </div>
-                            </template>
-
-                            <template v-else>
-                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                    <InfoItem label="Vencimento" :value="formatDate(installment.dueDate)
-                                        " />
-
-                                    <InfoItem label="Pago em" :value="formatDate(
-                                        getPaymentDate(
-                                            installment.number,
-                                        ),
-                                    )
-                                        " />
-
-                                    <InfoItem label="Valor da parcela" :value="formatCurrency(installment.value)
-                                        " />
-
-                                    <InfoItem label="Dias de atraso" :value="getPaymentLateDays(
-                                        installment.number,
-                                    ) > 0
-                                            ? `${getPaymentLateDays(installment.number)} dias`
-                                            : 'Sem atraso'
-                                        " :value-class="getPaymentLateDays(
-                                            installment.number,
-                                        ) > 0
-                                                ? 'text-[#b91c1c]'
-                                                : 'text-[#3f3f46]'
-                                            " />
-
-                                    <InfoItem label="Multa diária" :value="formatCurrency(dailyLateFee)
-                                        " />
-
-                                    <InfoItem label="Multa acumulada" :value="formatCurrency(
-                                        getPaymentLateFee(
-                                            installment.number,
-                                        ),
-                                    )
-                                        " />
-
-                                    <InfoItem label="Total recebido" :value="formatCurrency(
-                                        getPaymentTotal(installment),
-                                    )
-                                        " value-class="text-[#166534]" wrapper-class="col-span-2" />
-                                </div>
-
-                                <div class="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div class="min-w-0 overflow-hidden">
-                                        <label :for="`payment-date-${installment.number}`"
-                                            class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
-                                            Data do pagamento
-                                        </label>
-
-                                        <div class="min-w-0 overflow-hidden">
-                                            <input :id="`payment-date-${installment.number}`" :value="getPaymentDate(
-                                                installment.number,
-                                            )
-                                                " type="date" :max="today"
-                                                class="block h-10 w-full min-w-0 max-w-full appearance-none rounded-xl border border-black/[0.10] bg-white px-3 text-[12px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-150 focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.07)] [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left"
-                                                @input="
-                                                    updatePaymentDate(
-                                                        installment,
-                                                        $event.target.value,
-                                                    )
-                                                    " />
-                                        </div>
+                            <div v-if="getPayment(installment.number)" class="mt-3">
+                                <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label :for="`payment-date-${installment.number}`" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">Data do pagamento</label>
+                                        <input :id="`payment-date-${installment.number}`" v-model="paymentSelections[installment.number].paidAt"
+                                            type="date" :min="loan.loanDate" :max="today"
+                                            class="block h-10 w-full min-w-0 rounded-xl border border-black/[0.10] bg-white px-3 text-[12px] text-[#27272a] outline-none focus:border-[#166534]/40" />
                                     </div>
-
-                                    <div class="min-w-0">
-                                        <p
-                                            class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
-                                            Pagamento registrado por
-                                        </p>
-
-                                        <div
-                                            class="flex h-10 w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-black/[0.07] bg-[#fafafa] px-3">
-                                            <span class="mdi mdi-account-outline shrink-0 text-[17px] text-[#71717a]"
-                                                aria-hidden="true" />
-
-                                            <p class="min-w-0 flex-1 truncate text-[12px] font-medium text-[#52525b]">
-                                                {{
-                                                    getRegisteredBy(
-                                                        installment.number,
-                                                    )
-                                                }}
-                                            </p>
-
-                                            <span class="mdi mdi-lock-outline shrink-0 text-[14px] text-[#71717a]"
-                                                aria-hidden="true" />
-                                        </div>
+                                    <div>
+                                        <label :for="`payment-amount-${installment.number}`" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">Valor recebido</label>
+                                        <input :id="`payment-amount-${installment.number}`" v-model="paymentSelections[installment.number].receivedAmount"
+                                            type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0,00"
+                                            class="block h-10 w-full min-w-0 rounded-xl border border-black/[0.10] bg-white px-3 text-[12px] text-[#27272a] outline-none focus:border-[#166534]/40" />
                                     </div>
                                 </div>
-
-                                <div v-if="
-                                    getPaymentDate(installment.number) &&
-                                    getPaymentLateDays(
-                                        installment.number,
-                                    ) > 0
-                                " class="mt-3 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div class="min-w-0">
-                                            <p class="text-[11px] font-semibold text-[#3f3f46]">
-                                                Multa de
-                                                {{
-                                                    formatCurrency(
-                                                        getPaymentLateFee(
-                                                            installment.number,
-                                                        ),
-                                                    )
-                                                }}
-                                                recebida?
-                                            </p>
-
-                                            <p class="mt-0.5 text-[9px] leading-4 text-[#71717a]">
-                                                Informe o valor recebido junto
-                                                com a parcela.
-                                            </p>
-                                        </div>
-
-                                        <div class="flex shrink-0 flex-wrap items-center gap-1.5">
-                                            <button type="button"
-                                                class="inline-flex h-8 min-w-[48px] items-center justify-center rounded-lg border px-2.5 text-[10px] font-semibold transition-colors duration-150"
-                                                :class="getLateFeeOption(
-                                                    installment.number,
-                                                ) === 'full'
-                                                        ? 'border-[#166534] bg-[#166534] text-white'
-                                                        : 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#166534]/30 hover:text-[#166534]'
-                                                    " @click="
-                                                    setLateFeeOption(
-                                                        installment.number,
-                                                        'full',
-                                                    )
-                                                    ">
-                                                Sim
-                                            </button>
-
-                                            <button type="button"
-                                                class="inline-flex h-8 min-w-[48px] items-center justify-center rounded-lg border px-2.5 text-[10px] font-semibold transition-colors duration-150"
-                                                :class="getLateFeeOption(
-                                                    installment.number,
-                                                ) === 'none'
-                                                        ? 'border-[#b91c1c] bg-[#b91c1c] text-white'
-                                                        : 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#b91c1c]/30 hover:text-[#b91c1c]'
-                                                    " @click="
-                                                    setLateFeeOption(
-                                                        installment.number,
-                                                        'none',
-                                                    )
-                                                    ">
-                                                Não
-                                            </button>
-
-                                            <button type="button"
-                                                class="inline-flex h-8 items-center justify-center rounded-lg border px-2.5 text-[10px] font-semibold transition-colors duration-150"
-                                                :class="getLateFeeOption(
-                                                    installment.number,
-                                                ) === 'custom'
-                                                        ? 'border-[#52525b] bg-[#52525b] text-white'
-                                                        : 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#52525b]/30'
-                                                    " @click="
-                                                    setLateFeeOption(
-                                                        installment.number,
-                                                        'custom',
-                                                    )
-                                                    ">
-                                                Outro valor
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="
-                                        getLateFeeOption(
-                                            installment.number,
-                                        ) === 'custom'
-                                    " class="mt-3 min-w-0 sm:max-w-[220px]">
-                                        <label :for="`custom-late-fee-${installment.number}`"
-                                            class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
-                                            Valor da multa recebido
-                                        </label>
-
-                                        <div class="relative min-w-0">
-                                            <span
-                                                class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-[#71717a]">
-                                                R$
-                                            </span>
-
-                                            <input :id="`custom-late-fee-${installment.number}`" :value="getCustomLateFeeValue(
-                                                installment.number,
-                                            )
-                                                " type="number" inputmode="decimal" min="0" :max="getPaymentLateFee(
-                                                    installment.number,
-                                                )
-                                                    " step="0.01" placeholder="0,00"
-                                                class="block h-9 w-full min-w-0 max-w-full rounded-lg border border-black/[0.10] bg-white pl-9 pr-3 text-[11px] text-[#27272a] outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-[#71717a] focus:border-[#166534]/40 focus:shadow-[0_0_0_3px_rgba(22,101,52,0.07)]"
-                                                @input="
-                                                    updateCustomLateFee(
-                                                        installment.number,
-                                                        $event.target.value,
-                                                    )
-                                                    " />
-                                        </div>
-                                    </div>
-
-                                    <div v-if="
-                                        getLateFeeOption(
-                                            installment.number,
-                                        )
-                                    " class="mt-3 grid grid-cols-2 gap-2 border-t border-black/[0.07] pt-3">
-                                        <div>
-                                            <p
-                                                class="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
-                                                Multa recebida
-                                            </p>
-
-                                            <p class="mt-1 text-[11px] font-semibold text-[#3f3f46]">
-                                                {{
-                                                    formatCurrency(
-                                                        getLateFeeReceivedAmount(
-                                                            installment.number,
-                                                        ),
-                                                    )
-                                                }}
-                                            </p>
-                                        </div>
-
-                                        <div>
-                                            <p
-                                                class="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">
-                                                Saldo da multa
-                                            </p>
-
-                                            <p class="mt-1 text-[11px] font-semibold" :class="hasPendingLateFee(
-                                                installment.number,
-                                            )
-                                                    ? 'text-[#b91c1c]'
-                                                    : 'text-[#3f3f46]'
-                                                ">
-                                                {{
-                                                    formatCurrency(
-                                                        getOutstandingLateFee(
-                                                            installment.number,
-                                                        ),
-                                                    )
-                                                }}
-                                            </p>
-                                        </div>
-                                    </div>
+                                <label class="mt-3 flex items-center gap-2 text-[12px] text-[#3f3f46]">
+                                    <input v-model="paymentSelections[installment.number].feeOnly" type="checkbox" class="accent-[#166534]" />
+                                    Pagamento somente da multa
+                                </label>
+                                <p class="mt-2 text-[10px] text-[#71717a]">Pagamento registrado por {{ registeredBy }}</p>
+                                <div class="mt-3 grid grid-cols-2 gap-2" aria-live="polite">
+                                    <InfoItem label="Destinado à multa" :value="money(allocation(installment).feeAmount)" />
+                                    <InfoItem label="Destinado à parcela" :value="money(allocation(installment).amount)" />
+                                    <InfoItem label="Saldo da parcela após pagamento" :value="money(allocation(installment).remaining)" />
+                                    <InfoItem label="Multa pendente após pagamento" :value="money(allocation(installment).feeRemaining)" />
                                 </div>
+                                <p v-if="paymentError(installment)" role="alert" class="mt-2 text-[11px] text-[#b91c1c]">{{ paymentError(installment) }}</p>
+                                <p v-else class="mt-2 text-[11px] text-[#71717a]">{{ allocation(installment).remaining > 0 ? 'A parcela continuará em aberto.' : 'A parcela será quitada.' }}</p>
+                                <button type="button" class="mt-3 h-8 rounded-lg px-2.5 text-[10px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2]" @click="removePayment(installment.number)">Cancelar lançamento</button>
+                            </div>
+                            <button v-else-if="balance(installment).remaining + balance(installment).feeRemaining > 0" type="button"
+                                class="mt-3 h-8 rounded-lg bg-[#166534] px-3 text-[11px] font-semibold text-white hover:bg-[#14532d]"
+                                @click="togglePayment(installment)">Registrar pagamento</button>
 
-                                <div class="mt-3 flex items-center justify-end border-t border-black/[0.07] pt-3">
-                                    <button type="button"
-                                        class="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-semibold text-[#b91c1c] transition-colors hover:bg-[#fef2f2]"
-                                        @click="
-                                            removePayment(
-                                                installment.number,
-                                            )
-                                            ">
-                                        <span class="mdi mdi-close text-[15px]" aria-hidden="true" />
-
-                                        Remover pagamento
+                            <div v-if="installmentPayments(installment).length" class="mt-3 border-t border-black/[0.07] pt-3">
+                                <p class="text-[11px] font-semibold text-[#3f3f46]">Recebimentos registrados</p>
+                                <div v-for="payment in installmentPayments(installment)" :key="payment.id" class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#71717a]">
+                                    <div :class="{ 'line-through': voidPaymentIds.includes(payment.id) }">
+                                        <p>{{ formatDate(payment.payment_date) }} · {{ money(payment.amount + payment.late_fee_amount) }} · {{ payment.registered_by || 'Não identificado' }}</p>
+                                        <p>Parcela: {{ money(payment.amount) }} · Multa: {{ money(payment.late_fee_amount) }}</p>
+                                    </div>
+                                    <button type="button" class="h-8 rounded-lg px-2.5 font-semibold text-[#b91c1c] hover:bg-[#fef2f2]" @click="toggleVoid(payment.id)">
+                                        {{ voidPaymentIds.includes(payment.id) ? 'Desfazer estorno' : 'Estornar pagamento' }}
                                     </button>
                                 </div>
-                            </template>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -612,562 +378,112 @@ const emit = defineEmits([
 ])
 
 const paymentSelections = ref({})
+const voidPaymentIds = ref([])
 const expandedInstallment = ref(null)
-
 const today = ref(currentDate())
-
-const modalDescription = computed(() => {
-    if (!props.loan) {
-        return ''
-    }
-
-    return `${props.loan.clientName} · Empréstimo #${props.loan.id}`
-})
-
-const totalInstallments = computed(() => {
-    return Math.max(
-        Number(props.loan?.installmentCount) || 0,
-        0,
-    )
-})
-
-const dailyLateFee = computed(() => {
-    return Number(props.loan?.dailyLateFee) || 0
-})
-
-const installments = computed(() =>
-  (props.loan?.installmentRows ?? []).map((item) => ({ ...item, value: Number(item.value) })),
+const modalDescription = computed(() => props.loan ? `${props.loan.clientName} · Empréstimo #${props.loan.id}` : '')
+const totalInstallments = computed(() => props.loan?.installmentCount || 0)
+const dailyLateFee = computed(() => Number(props.loan?.dailyLateFee) || 0)
+const installments = computed(() => (props.loan?.installmentRows ?? []).map(item => ({ ...item, value: Number(item.value) })))
+const paidInstallmentsCount = computed(() => installments.value.filter(item => isPaid(item.number)).length)
+const amountPaid = computed(() => Number(fromCents(installments.value.reduce((total, item) => {
+    const current = balance(item)
+    return total + current.paid + current.feePaid
+}, 0))))
+const hasIncompletePayments = computed(() =>
+    (!Object.keys(paymentSelections.value).length && !voidPaymentIds.value.length) ||
+    installments.value.some(item => getPayment(item.number) && paymentError(item)),
 )
 
-const paidInstallmentsCount = computed(() => {
-  return Object.keys(paymentSelections.value).length
-})
-
-function partialPaid(installment) {
-  return installment.status === 'paid' ? 0 : installment.paid_amount
+function money(cents) { return formatCurrency(fromCents(cents)) }
+function installmentPayments(installment) {
+    return (props.loan?.paymentHistory ?? []).filter(payment => payment.installment_id === installment.id && !payment.voided_at)
 }
-const amountPaid = computed(() =>
-  Number(
-    fromCents(
-      installments.value.reduce((total, item) => {
-        const payment = getPayment(item.number)
-        return (
-          total +
-          (payment?.paidAt
-            ? item.amount + toCents(getLateFeeReceivedAmount(item.number))
-            : partialPaid(item) + (item.status === 'paid' ? 0 : item.late_fee_paid_amount))
-        )
-      }, 0),
-    ),
-  ),
-)
-const outstandingLateFeeDebt = computed(() =>
-  Number(
-    fromCents(
-      installments.value.reduce(
-        (total, item) =>
-          total +
-          (isPaid(item.number)
-            ? toCents(getOutstandingLateFee(item.number))
-            : Math.max(
-                0,
-                item.late_fee_amount - (item.status === 'paid' ? 0 : item.late_fee_paid_amount),
-              )),
-        0,
-      ),
-    ),
-  ),
-)
-const remainingInstallmentsValue = computed(() =>
-  Number(
-    fromCents(
-      installments.value.reduce(
-        (total, item) => total + (isPaid(item.number) ? 0 : item.amount - partialPaid(item)),
-        0,
-      ),
-    ),
-  ),
-)
-const outstandingBalance = computed(() =>
-  Number(
-    fromCents(toCents(remainingInstallmentsValue.value) + toCents(outstandingLateFeeDebt.value)),
-  ),
-)
-
-const hasIncompletePayments = computed(() => {
-    return Object.values(
-        paymentSelections.value,
-    ).some((payment) => {
-        if (!payment.paidAt) {
-            return true
-        }
-
-        if (
-            Number(payment.lateDays) <=
-            0
-        ) {
-            return false
-        }
-
-        if (!payment.lateFeeOption) {
-            return true
-        }
-
-        if (
-            payment.lateFeeOption ===
-            'custom' &&
-            (
-                payment.customLateFeeValue ===
-                '' ||
-                payment.customLateFeeValue ===
-                null
-            )
-        ) {
-            return true
-        }
-
-        return false
-    })
-})
-
-function getInstallmentContainerClass(
-    installment,
-) {
-    if (
-        hasPendingLateFee(
-            installment.number,
-        )
-    ) {
-        return 'border-[#d97706]/20 bg-[#fffdfa]'
-    }
-
-    if (
-        isPaid(
-            installment.number,
-        )
-    ) {
-        return 'border-[#166534]/20 bg-[#f0fdf4]'
-    }
-
-    if (installment.isOverdue) {
-        return 'border-[#b91c1c]/15 bg-white'
-    }
-
-    return 'border-black/[0.08] bg-white'
+function balance(installment) {
+    const active = installmentPayments(installment).filter(payment => !voidPaymentIds.value.includes(payment.id))
+    const paid = active.reduce((sum, payment) => sum + payment.amount, 0)
+    const feePaid = active.reduce((sum, payment) => sum + payment.late_fee_amount, 0)
+    const date = getPayment(installment.number)?.paidAt || today.value
+    const paidAt = paid >= installment.amount ? active.filter(payment => payment.amount > 0).map(payment => payment.payment_date).sort().at(-1) : null
+    const feeDate = paidAt && paidAt < date ? paidAt : date
+    const fee = installment.late_fee_status === 'waived' ? 0 : calculateLateDays(installment.dueDate, feeDate) * props.loan.late_fee_per_day
+    return { paid, feePaid, fee, remaining: Math.max(0, installment.amount - paid), feeRemaining: Math.max(0, fee - feePaid) }
 }
-
+function receivedCents(payment) {
+    try {
+        const value = toCents(payment?.receivedAmount)
+        return value > 0 && value <= 100000000000 ? value : 0
+    } catch { return 0 }
+}
+function allocation(installment) {
+    const current = balance(installment)
+    const payment = getPayment(installment.number)
+    const received = receivedCents(payment)
+    const feeAmount = Math.min(received, current.feeRemaining)
+    const amount = payment?.feeOnly ? 0 : Math.min(current.remaining, received - feeAmount)
+    return { feeAmount, amount, remaining: current.remaining - amount, feeRemaining: current.feeRemaining - feeAmount }
+}
+function paymentError(installment) {
+    const payment = getPayment(installment.number)
+    if (!payment) return ''
+    if (!payment.paidAt || payment.paidAt < props.loan.loanDate || payment.paidAt > today.value)
+        return 'Informe uma data entre a data do empréstimo e hoje.'
+    const lastDate = installmentPayments(installment).filter(item => !voidPaymentIds.value.includes(item.id)).map(item => item.payment_date).sort().at(-1)
+    if (lastDate && payment.paidAt < lastDate) return 'O pagamento não pode anteceder os recebimentos já registrados.'
+    const received = receivedCents(payment)
+    if (!received) return 'Informe um valor maior que zero, com até duas casas decimais, dentro do limite permitido.'
+    const current = balance(installment)
+    if (received > (payment.feeOnly ? current.feeRemaining : current.remaining + current.feeRemaining))
+        return payment.feeOnly ? 'O valor excede a multa pendente.' : 'O valor excede o total devido.'
+    return ''
+}
+function getInstallmentContainerClass(installment) {
+    if (hasPendingLateFee(installment.number)) return 'border-[#d97706]/20 bg-[#fffdfa]'
+    if (isPaid(installment.number)) return 'border-[#166534]/20 bg-[#f0fdf4]'
+    return installment.isOverdue ? 'border-[#b91c1c]/15 bg-white' : 'border-black/[0.08] bg-white'
+}
 function isPaid(number) {
-    return Object.prototype.hasOwnProperty.call(
-        paymentSelections.value,
-        number,
-    )
+    const installment = installments.value.find(item => item.number === number)
+    return installment && balance(installment).remaining === 0
 }
-
-function isExpanded(number) {
-    return (
-        expandedInstallment.value ===
-        number
-    )
-}
-
-function toggleExpanded(number) {
-    expandedInstallment.value =
-        isExpanded(number)
-            ? null
-            : number
-}
-
-function getPayment(number) {
-    return (
-        paymentSelections.value[number] ??
-        null
-    )
-}
-
+function isExpanded(number) { return expandedInstallment.value === number }
+function toggleExpanded(number) { expandedInstallment.value = isExpanded(number) ? null : number }
+function getPayment(number) { return paymentSelections.value[number] ?? null }
 function getPaymentDate(number) {
-    return (
-        getPayment(number)?.paidAt ??
-        ''
-    )
+    return installments.value.find(item => item.number === number)?.paid_at || ''
 }
-
-function getRegisteredBy(number) {
-    return (
-        getPayment(number)?.registeredBy ||
-        registeredBy.value
-    )
-}
-
-function getPaymentLateDays(number) {
-    return (
-        Number(
-            getPayment(number)?.lateDays,
-        ) || 0
-    )
-}
-
-function getPaymentLateFee(number) {
-    return (
-        Number(
-            getPayment(number)
-                ?.lateFeeAmount,
-        ) || 0
-    )
-}
-
-function getLateFeeOption(number) {
-    return (
-        getPayment(number)
-            ?.lateFeeOption ?? null
-    )
-}
-
-function getCustomLateFeeValue(number) {
-    return (
-        getPayment(number)
-            ?.customLateFeeValue ?? ''
-    )
-}
-
-function getLateFeeReceivedAmount(number) {
-    const payment =
-        getPayment(number)
-
-    if (!payment) {
-        return 0
-    }
-
-    if (
-        Number(payment.lateDays) <=
-        0
-    ) {
-        return 0
-    }
-
-    const lateFeeAmount =
-        Number(
-            payment.lateFeeAmount,
-        ) || 0
-
-    if (
-        payment.lateFeeOption ===
-        'full'
-    ) {
-        return lateFeeAmount
-    }
-
-    if (
-        payment.lateFeeOption ===
-        'custom'
-    ) {
-        return Math.min(
-            Math.max(
-                Number(
-                    payment.customLateFeeValue,
-                ) || 0,
-                0,
-            ),
-            lateFeeAmount,
-        )
-    }
-
-    return 0
-}
-
 function getOutstandingLateFee(number) {
-    const expected =
-        getPaymentLateFee(number)
-
-    const received =
-        getLateFeeReceivedAmount(
-            number,
-        )
-
-    return Number(fromCents(Math.max(toCents(expected) - toCents(received), 0)))
+    const installment = installments.value.find(item => item.number === number)
+    return installment ? Number(fromCents(balance(installment).feeRemaining)) : 0
 }
-
-function hasPendingLateFee(number) {
-    return (
-        isPaid(number) &&
-        getOutstandingLateFee(number) >
-        0
-    )
-}
-
-function getPaymentTotal(installment) {
-    return Number(fromCents(installment.amount + toCents(getLateFeeReceivedAmount(installment.number))))
-}
-
+function hasPendingLateFee(number) { return isPaid(number) && getOutstandingLateFee(number) > 0 }
 function togglePayment(installment) {
-    const number =
-        installment.number
-
-    if (isPaid(number)) {
-        removePayment(number)
-        return
-    }
-
-    paymentSelections.value = {
-        ...paymentSelections.value,
-
-        [number]: {
-            installmentNumber:
-                number,
-
-            paidAt: '',
-
-            registeredBy:
-                registeredBy.value,
-
-            lateDays: 0,
-
-            lateFeeAmount: 0,
-
-            lateFeeOption: null,
-
-            customLateFeeValue: '',
-        },
-    }
-
-    expandedInstallment.value =
-        number
-}
-
-function updatePaymentDate(
-    installment,
-    paidAt,
-) {
-    const payment =
-        getPayment(
-            installment.number,
-        )
-
-    if (!payment) {
-        return
-    }
-
-    const lateDays =
-        paidAt
-            ? calculateLateDays(
-                installment.dueDate,
-                paidAt,
-            )
-            : 0
-
-    const lateFeeAmount =
-        Number(fromCents(lateDays * toCents(dailyLateFee.value)))
-
-    paymentSelections.value = {
-        ...paymentSelections.value,
-
-        [installment.number]: {
-            ...payment,
-
-            paidAt,
-            registeredBy: registeredBy.value,
-
-            lateDays,
-
-            lateFeeAmount,
-
-            lateFeeOption:
-                lateDays > 0
-                    ? null
-                    : 'full',
-
-            customLateFeeValue:
-                '',
-        },
+    expandedInstallment.value = installment.number
+    if (getPayment(installment.number)) return
+    const current = balance(installment)
+    if (current.remaining + current.feeRemaining <= 0) return
+    paymentSelections.value[installment.number] = {
+        installmentNumber: installment.number, paidAt: today.value, receivedAmount: '', feeOnly: false,
     }
 }
-
-function setLateFeeOption(
-    number,
-    option,
-) {
-    const payment =
-        getPayment(number)
-
-    if (!payment) {
-        return
-    }
-
-    paymentSelections.value = {
-        ...paymentSelections.value,
-
-        [number]: {
-            ...payment,
-
-            lateFeeOption:
-                option,
-            registeredBy: registeredBy.value,
-
-            customLateFeeValue:
-                option === 'custom'
-                    ? payment.customLateFeeValue ??
-                    ''
-                    : '',
-        },
-    }
+function removePayment(number) { delete paymentSelections.value[number] }
+function toggleVoid(id) {
+    voidPaymentIds.value = voidPaymentIds.value.includes(id)
+        ? voidPaymentIds.value.filter(value => value !== id) : [...voidPaymentIds.value, id]
 }
-
-function updateCustomLateFee(
-    number,
-    value,
-) {
-    if (value !== '' && !/^\d+(\.\d{0,2})?$/.test(String(value))) return
-    const payment =
-        getPayment(number)
-
-    if (!payment) {
-        return
-    }
-
-    const maximumValue =
-        Number(
-            payment.lateFeeAmount,
-        ) || 0
-
-    const normalizedValue =
-        value === ''
-            ? ''
-            : Math.min(
-                Math.max(
-                    Number(value) || 0,
-                    0,
-                ),
-                maximumValue,
-            )
-
-    paymentSelections.value = {
-        ...paymentSelections.value,
-
-        [number]: {
-            ...payment,
-
-            customLateFeeValue:
-                normalizedValue,
-            registeredBy: registeredBy.value,
-        },
-    }
-}
-
-function removePayment(number) {
-    const nextPayments = {
-        ...paymentSelections.value,
-    }
-
-    delete nextPayments[number]
-
-    paymentSelections.value =
-        nextPayments
-
-    if (
-        expandedInstallment.value ===
-        number
-    ) {
-        expandedInstallment.value =
-            null
-    }
-}
-
 function initializeSelections() {
-  today.value = currentDate()
-  expandedInstallment.value = null
-  paymentSelections.value = Object.fromEntries(
-    (props.loan?.payments ?? []).map((payment) => {
-      const fee = Number(payment.lateFeeAmount)
-      const received = Number(payment.lateFeeReceivedAmount)
-      const option = received >= fee ? 'full' : received > 0 ? 'custom' : 'none'
-      return [
-        payment.installmentNumber,
-        {
-          ...payment,
-          lateFeeOption: option,
-          customLateFeeValue: option === 'custom' ? received : '',
-        },
-      ]
-    }),
-  )
+    today.value = currentDate()
+    expandedInstallment.value = null
+    paymentSelections.value = {}
+    voidPaymentIds.value = []
 }
-
 function confirm() {
-    if (
-        !props.loan ||
-        hasIncompletePayments.value
-    ) {
-        return
-    }
-
-    const payments =
-        Object.values(
-            paymentSelections.value,
-        )
-            .map((payment) => {
-                const number =
-                    Number(
-                        payment.installmentNumber,
-                    )
-
-                const receivedAmount =
-                    getLateFeeReceivedAmount(
-                        number,
-                    )
-
-                const lateFeeAmount =
-                    Number(
-                        payment.lateFeeAmount,
-                    ) || 0
-
-                return {
-                    installmentNumber:
-                        number,
-
-                    paidAt:
-                        payment.paidAt,
-
-
-                    lateDays:
-                        Number(
-                            payment.lateDays,
-                        ) || 0,
-
-                    lateFeeAmount,
-
-                    lateFeeReceivedAmount:
-                        receivedAmount,
-
-                    lateFeePaid:
-                        lateFeeAmount <= 0 ||
-                        receivedAmount >=
-                        lateFeeAmount,
-
-                    lateFeeOption:
-                        payment.lateFeeOption,
-                }
-            })
-            .sort(
-                (first, second) =>
-                    first.installmentNumber -
-                    second.installmentNumber,
-            )
-
+    if (!props.loan || hasIncompletePayments.value) return
     emit('confirm-payments', {
-        loanId:
-            props.loan.id,
-
-        payments,
-
-        amountPaid:
-            amountPaid.value,
-
-        outstandingLateFeeDebt:
-            outstandingLateFeeDebt.value,
-
-        outstandingBalance:
-            outstandingBalance.value,
+        loanId: props.loan.id,
+        payments: Object.values(paymentSelections.value),
+        voidPaymentIds: voidPaymentIds.value,
     })
-
 }
 
 function cancel() {
@@ -1281,6 +597,7 @@ watch(
     [
         () => props.modelValue,
         () => props.loan?.id,
+        () => props.loan?.revision,
     ],
     ([open]) => {
         if (open) {
