@@ -31,12 +31,42 @@ export function assertPayable(loan) {
 
 export async function previewPayment(id, data) {
   const installment = requireRecord((await findInstallment(id)), "Parcela");
+  const loan = await getLoan(installment.loan_id);
+  const current = loan.installments.find(item => item.id === id);
   validatePaymentDate(data.payment_date, installment.loan_date);
-  const lateDays = daysLate(installment.due_date, installment.paid_at || data.payment_date);
+  const lateDays = daysLate(current.due_date, current.paid_at && current.paid_at < data.payment_date
+    ? current.paid_at : data.payment_date);
   return {
     days_late: lateDays,
     late_fee_amount: lateDays * installment.late_fee_per_day,
+    late_fee_remaining: pendingFee(current, loan, data.payment_date),
+    remaining_amount: current.amount - current.paid_amount,
   };
+}
+
+function pendingFee(installment, loan, date) {
+  if (installment.late_fee_status === 'waived') return 0;
+  const feeDate = installment.paid_at && installment.paid_at < date ? installment.paid_at : date;
+  return Math.max(0, daysLate(installment.due_date, feeDate) * loan.late_fee_per_day - installment.late_fee_paid_amount);
+}
+
+async function receivePayment(loan, installment, data, actor) {
+  validatePaymentDate(data.payment_date, loan.loan_date);
+  const previousDate = await repository.lastPaymentDate(installment.id);
+  if (previousDate && data.payment_date < previousDate)
+    conflict('PAYMENT_DATE_CONFLICT', 'O pagamento não pode anteceder os recebimentos já registrados.');
+  const fee = pendingFee(installment, loan, data.payment_date);
+  const balance = installment.amount - installment.paid_amount;
+  if (data.amount > (data.fee_only ? fee : balance + fee))
+    conflict(data.fee_only ? 'FEE_PAYMENT_EXCEEDS_BALANCE' : 'PAYMENT_EXCEEDS_BALANCE',
+      data.fee_only ? 'O pagamento excede o saldo da multa na data informada.' : 'O pagamento excede o total devido na data informada.');
+  const lateFeeAmount = Math.min(data.amount, fee);
+  return repository.insertPayment({
+    ...data,
+    installment_id: installment.id,
+    amount: data.fee_only ? 0 : data.amount - lateFeeAmount,
+    late_fee_amount: lateFeeAmount,
+  }, actor);
 }
 
 export async function registerPayment(id, data, actor) {
@@ -45,20 +75,8 @@ export async function registerPayment(id, data, actor) {
       const loan = (await getLoan(installment.loan_id));
       assertRevision(loan, data.revision);
       assertPayable(loan);
-      validatePaymentDate(data.payment_date, loan.loan_date);
-      const previousDate = (await repository.lastPaymentDate(id));
-      if (previousDate && data.payment_date < previousDate)
-        conflict("PAYMENT_DATE_CONFLICT", "O pagamento não pode anteceder os recebimentos já registrados.");
       const current = loan.installments.find((item) => item.id === id);
-      if (data.amount > current.amount - current.paid_amount)
-        conflict(
-          "PAYMENT_EXCEEDS_BALANCE",
-          "O pagamento excede o saldo da parcela.",
-        );
-      const paymentId = (await repository.insertPayment({
-        ...data,
-        installment_id: id,
-      },actor));
+      const paymentId = await receivePayment(loan, current, data, actor);
       (await refreshFinancialState(loan.id));
       (await bumpRevision(loan.id));
       return {
@@ -123,9 +141,25 @@ async function reconcileSelection(loan, installment, selection, actor) {
 
 export async function confirmPayments(id, data, actor) {
   return (await unitOfWork(async () => {
-      const loan = (await getLoan(id));
+      let loan = (await getLoan(id));
       assertRevision(loan, data.revision);
       assertPayable(loan);
+      if (data.receipts) {
+        for (const paymentId of data.void_payment_ids ?? []) {
+          const payment = requireRecord(loan.payments.find(item => item.id === paymentId), 'Pagamento');
+          if (payment.voided_at) conflict('PAYMENT_ALREADY_VOIDED', 'O pagamento já foi estornado.');
+          await repository.voidPayment(paymentId, actor);
+        }
+        loan = await getLoan(id);
+        for (const receipt of data.receipts) {
+          const installment = requireRecord(loan.installments.find(item => item.installment_number === receipt.installment_number), 'Parcela');
+          await receivePayment(loan, installment, receipt, actor);
+          loan = await getLoan(id);
+        }
+        await refreshFinancialState(id);
+        await bumpRevision(id);
+        return getLoan(id);
+      }
       if (
         data.payments.some(
           (payment) => payment.installment_number > loan.installment_count,

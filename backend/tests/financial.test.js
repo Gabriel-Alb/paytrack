@@ -211,7 +211,7 @@ test('pagamento parcial, complementação e quitação atualizam todos os status
 });
 test('parcela paga mantém multa independente pendente, parcial e quitada', async () => {
   let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
-  l = await pay(l, 11000);
+  l = await confirm(l, [select(1)]);
   const i = l.installments[0];
   assert.equal(i.status, 'paid');
   assert.equal(i.amount, 11000);
@@ -285,7 +285,7 @@ test('valida excesso de pagamento, multa e cronologia', async () => {
   let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
   await api
     .post(`/api/installments/${l.installments[0].id}/payments`)
-    .send({ amount: 11001, payment_date: today(), revision: l.revision })
+    .send({ amount: 11501, payment_date: today(), revision: l.revision })
     .expect(409);
   l = await pay(l, 1000);
   await api
@@ -418,7 +418,7 @@ test('prévia congela multa na quitação e multa retroativa não excede saldo d
     .post(`/api/late-fees/${feeId}/payments`)
     .send({ amount: 500, payment_date: addDays(today(), -2), revision: l.revision })
     .expect(409);
-  l = await pay(l, 11000, addDays(today(), -2));
+  l = await pay(l, 11250, addDays(today(), -2));
   const preview = (
     await api
       .post(`/api/installments/${l.installments[0].id}/payment-preview`)
@@ -553,6 +553,183 @@ for (const state of ['partial','paid','fee','voided','cancelled']) {
   });
 }
 
+async function receipts(l, entries = [], voidIds = [], status = 200) {
+  return (await api.put(`/api/loans/${l.id}/payment-confirmation`).send({
+    revision: l.revision, receipts: entries.map(entry => ({ installment_number: 1, payment_date: today(), ...entry })),
+    void_payment_ids: voidIds,
+  }).expect(status)).body;
+}
+
+test('valor recebido integral quita a parcela e registra a divisão e o autor na auditoria', async () => {
+  let l = await loan({ installment_count: 1 });
+  l = await pay(l, 11000);
+  assert.equal(l.installments[0].status, 'paid');
+  assert.equal(l.installments[0].paid_at, today());
+  assert.equal(l.payments[0].amount, 11000);
+  assert.equal(l.payments[0].late_fee_amount, 0);
+  const audit = await database().prepare("SELECT * FROM auth_audit_logs WHERE event='payment_created'").get();
+  const details = JSON.parse(audit.details);
+  assert.equal(audit.actor_id, l.payments[0].created_by);
+  assert.equal(details.amount, 11000);
+  assert.equal(details.installment_amount, 11000);
+  assert.equal(details.late_fee_amount, 0);
+  assert.equal(details.remaining_amount, 0);
+});
+
+test('R$ 90 recebidos de R$ 110 deixam R$ 20 em aberto e relatório parcial', async () => {
+  let l = await loan({ installment_count: 1 });
+  l = await receipts(l, [{ amount: 9000 }]);
+  const i = l.installments[0];
+  assert.equal(i.amount - i.paid_amount, 2000);
+  assert.equal(i.status, 'partial');
+  assert.equal(i.paid_at, null);
+  assert.equal(l.status, 'active');
+  assert.equal(l.paid_installments, 0);
+  const report = (await api.get('/api/reports').query({ start: today(), end: today() }).expect(200)).body;
+  assert.equal(report.summary.received, 9000);
+  assert.equal(report.summary.pending, 2000);
+  assert.equal(report.summary.paid, 0);
+  assert.equal(report.summary.partial, 1);
+});
+
+test('somente multa mantém R$ 110 da parcela e multa paga não volta a ser cobrada', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2), late_fee_per_day: 1000 });
+  l = (await api.post(`/api/installments/${l.installments[0].id}/payments`).send({
+    revision: l.revision, amount: 2000, payment_date: today(), fee_only: true,
+  }).expect(201)).body.loan;
+  assert.equal(l.installments[0].paid_amount, 0);
+  assert.equal(l.installments[0].late_fee_paid_amount, 2000);
+  assert.equal(l.installments[0].status, 'overdue');
+  assert.equal(l.installments[0].paid_at, null);
+  assert.equal(l.status, 'overdue');
+  for (let n = 0; n < 2; n++) {
+    l = (await api.get(`/api/loans/${l.id}`).expect(200)).body;
+    assert.equal(l.installments[0].late_fee_amount - l.installments[0].late_fee_paid_amount, 0);
+  }
+  const preview = (await api.post(`/api/installments/${l.installments[0].id}/payment-preview`)
+    .send({ payment_date: today() }).expect(200)).body;
+  assert.equal(preview.late_fee_remaining, 0);
+  assert.equal(preview.remaining_amount, 11000);
+  l = await receipts(l, [{ amount: 3000 }]);
+  assert.equal(l.payments.at(-1).late_fee_amount, 0);
+  assert.equal(l.payments.at(-1).amount, 3000);
+  assert.equal(l.installments[0].amount - l.installments[0].paid_amount, 8000);
+});
+
+test('R$ 50 abatem R$ 20 de multa e R$ 30 da parcela; caixa e lucro usam a divisão', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2), late_fee_per_day: 1000 });
+  l = await receipts(l, [{ amount: 5000 }]);
+  assert.equal(l.payments[0].amount, 3000);
+  assert.equal(l.payments[0].late_fee_amount, 2000);
+  assert.equal(l.installments[0].amount - l.installments[0].paid_amount, 8000);
+  assert.equal(l.installments[0].status, 'partial');
+  const report = (await api.get('/api/reports').query({ mode: 'month', start: addDays(today(), -10), end: today() }).expect(200)).body;
+  assert.equal(report.summary.received, 5000);
+  assert.equal(report.summary.receivedLateFees, 2000);
+  assert.equal(report.summary.realizedProfit, 2273);
+  assert.equal(report.summary.pending, 8000);
+  const audit = await database().prepare("SELECT details FROM auth_audit_logs WHERE event='payment_created'").get();
+  assert.equal(JSON.parse(audit.details).remaining_amount, 8000);
+});
+
+test('múltiplos parciais só quitam ao receber o último centavo', async () => {
+  let l = await loan({ installment_count: 1 });
+  for (const amount of [3000, 4000, 3999]) {
+    l = await receipts(l, [{ amount }]);
+    assert.equal(l.installments[0].status, 'partial');
+    assert.equal(l.installments[0].paid_at, null);
+    assert.equal(l.paid_installments, 0);
+  }
+  l = await receipts(l, [{ amount: 1 }]);
+  assert.equal(l.installments[0].paid_amount, 11000);
+  assert.equal(l.installments[0].status, 'paid');
+  assert.equal(l.paid_installments, 1);
+  assert.equal(l.status, 'paid');
+});
+
+test('multa parcial e dias adicionais descontam apenas multa ainda não recebida', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -3), late_fee_per_day: 1000 });
+  l = await receipts(l, [{ amount: 1000, fee_only: true, payment_date: addDays(today(), -1) }]);
+  assert.equal(l.installments[0].late_fee_amount - l.installments[0].late_fee_paid_amount, 2000);
+  l = await receipts(l, [{ amount: 2500 }]);
+  assert.equal(l.payments.at(-1).late_fee_amount, 2000);
+  assert.equal(l.payments.at(-1).amount, 500);
+  assert.equal(l.installments[0].late_fee_paid_amount, 3000);
+  assert.equal(l.installments[0].paid_amount, 500);
+});
+
+for (const feeOnly of [false, true]) {
+  test(`estorno individual restaura saldos e auditoria sem remover outros pagamentos: somente multa=${feeOnly}`, async () => {
+    let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2), late_fee_per_day: 1000 });
+    l = await receipts(l, [{ amount: feeOnly ? 2000 : 5000, fee_only: feeOnly }]);
+    const first = l.payments[0];
+    l = await receipts(l, [{ amount: 1000 }]);
+    l = await receipts(l, [], [first.id]);
+    assert.ok(l.payments[0].voided_at);
+    assert.equal(l.payments[1].voided_at, null);
+    assert.equal(l.installments[0].paid_amount, 1000);
+    assert.equal(l.installments[0].late_fee_paid_amount, 0);
+    assert.equal(l.installments[0].late_fee_amount, 2000);
+    assert.equal(l.installments[0].status, 'partial');
+    const audit = await database().prepare("SELECT * FROM auth_audit_logs WHERE event='payment_voided'").get();
+    assert.equal(audit.actor_id, first.created_by);
+    const details = JSON.parse(audit.details);
+    assert.equal(details.amount, first.amount + first.late_fee_amount);
+    assert.equal(details.installment_amount, first.amount);
+    assert.equal(details.late_fee_amount, 2000);
+    assert.equal(details.remaining_amount, 10000);
+    const report = (await api.get('/api/reports').query({ mode: 'month', start: addDays(today(), -10), end: today() }).expect(200)).body;
+    assert.equal(report.summary.received, 1000);
+    assert.equal(report.summary.receivedLateFees, 0);
+    assert.equal(report.summary.pending, 12000);
+    await receipts(l, [], [first.id], 409);
+  });
+}
+
+test('estorno da última complementação reabre uma parcela quitada', async () => {
+  let l = await loan({ installment_count: 1 });
+  l = await receipts(l, [{ amount: 9000 }, { amount: 2000 }]);
+  assert.equal(l.status, 'paid');
+  l = await receipts(l, [], [l.payments.at(-1).id]);
+  assert.equal(l.installments[0].status, 'partial');
+  assert.equal(l.installments[0].paid_amount, 9000);
+  assert.equal(l.installments[0].paid_at, null);
+  assert.equal(l.status, 'active');
+});
+
+test('valida centavos, excesso, cronologia, revisão e isolamento no novo fluxo', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2), late_fee_per_day: 1000 });
+  for (const amount of [0, -1, 0.5, 100000000001, '100'])
+    await receipts(l, [{ amount }], [], 400);
+  await receipts(l, [{ amount: 2001, fee_only: true }], [], 409);
+  await receipts(l, [{ amount: 13001 }], [], 409);
+  await receipts(l, [{ amount: 1, installment_number: 2 }], [], 404);
+  await receipts(l, [], [999999], 404);
+  await receipts(l, [{ amount: 1, created_by: 1 }], [], 400);
+  const stale = l;
+  l = await receipts(l, [{ amount: 1000 }]);
+  await receipts(stale, [{ amount: 1000 }], [], 409);
+  await receipts(l, [{ amount: 1, payment_date: addDays(today(), -1) }], [], 409);
+  const before = await snapshot();
+  await receipts(l, [{ amount: 999999 }], [l.payments[0].id], 409);
+  assert.deepEqual(await snapshot(), before);
+  const other = (await api.post('/api/loans').send({ company_id: 2, client_id: l.client_id,
+    principal_amount: 10000, installment_count: 1, loan_date: today(), first_due_date: today() }).expect(201)).body;
+  await receipts(other, [], [l.payments[0].id], 404);
+});
+
+test('multa dispensada e pagamentos antigos preservam seus valores', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2), late_fee_per_day: 1000 });
+  await database().prepare("UPDATE late_fees SET status='waived' WHERE installment_id=?").run(l.installments[0].id);
+  l = await receipts(l, [{ amount: 9000 }]);
+  assert.equal(l.payments[0].amount, 9000);
+  assert.equal(l.payments[0].late_fee_amount, 0);
+  const old = l.payments[0];
+  l = await receipts(l, [{ amount: 2000 }]);
+  assert.equal(l.status, 'paid');
+  assert.deepEqual(l.payments[0], old);
+});
+
 test('pagamento registrado durante edição impede salvar revisão antiga',async()=>{
   const l=await loan();
   await pay(l,100);
@@ -587,7 +764,7 @@ test('pagamento parcial bloqueia redistribuição abaixo do recebido mesmo prese
 
 test('edição rejeita datas e multas incompatíveis com recebimentos, sem alterações parciais', async () => {
   let l = await loan({ installment_count:1, first_due_date:addDays(today(),-4) });
-  l = await pay(l, 1000, addDays(today(),-2));
+  l = await pay(l, 1000, addDays(today(),-4));
   l = (await api.post('/api/late-fees/'+l.installments[0].late_fee_id+'/payments')
     .send({revision:l.revision,amount:200,payment_date:addDays(today(),-2)}).expect(201)).body.loan;
   for (const [data, status, code] of [
