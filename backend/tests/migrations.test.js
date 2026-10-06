@@ -39,8 +39,8 @@ test('migração preserva pagamentos, multas e referências; reabertura é idemp
     assert.equal((await db.prepare('SELECT SUM(late_fee_amount) n FROM payments').get()).n, 100);
     assert.equal((await db.prepare('SELECT amount FROM installments').get()).amount, 1000);
     assert.equal((await db.prepare('SELECT paid_amount FROM late_fees').get()).paid_amount, 100);
-    assert.equal((await db.prepare('SELECT status FROM loans').get()).status, 'overdue');
-    assert.equal((await db.pragma('user_version', { simple: true })), 11);
+    assert.equal((await db.prepare('SELECT status FROM loans').get()).status, 'active');
+    assert.equal((await db.pragma('user_version', { simple: true })), 12);
     assert.deepEqual((await db.pragma('foreign_key_check')), []);
     const payments = (await db.prepare('SELECT * FROM payments').all());
     (await closeDatabase());
@@ -95,7 +95,7 @@ test('migração de edição remove apenas trava do cliente e preserva pagamento
     legacy.exec("CREATE TRIGGER loans_client_immutable BEFORE UPDATE OF client_id ON loans WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END; PRAGMA user_version=8;");
     legacy.close();
     db=await openDatabase(path);
-    assert.equal(await db.pragma('user_version',{simple:true}), 11);
+    assert.equal(await db.pragma('user_version',{simple:true}), 12);
     await db.prepare('UPDATE loans SET client_id=2 WHERE id=1').run();
     await assert.rejects(db.prepare('UPDATE loans SET company_id=2 WHERE id=1').run());
     assert.deepEqual(await db.prepare('SELECT * FROM payments').all(),before);
@@ -107,5 +107,42 @@ test('migração de edição remove apenas trava do cliente e preserva pagamento
   } finally {
     await closeDatabase();
     rmSync(directory,{recursive:true,force:true});
+  }
+});
+
+test('migração v11 preserva multa original, recebida e abono legado, inclusive na reabertura', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'paytrack-waiver-migration-'));
+  const path = join(directory, 'legacy.db');
+  try {
+    const legacy = new Database(path);
+    const current = readFileSync(new URL('../../SQL/schema.sql', import.meta.url), 'utf8');
+    legacy.exec(current.replace(/^.*waived_amount.*\r?\n/m, ''));
+    legacy.exec(`INSERT INTO companies(id,name) VALUES(1,'Empresa de teste');
+      INSERT INTO clients(id,name,cpf) VALUES(1,'Legado','52998224725');
+      INSERT INTO client_companies(client_id,company_id) VALUES(1,1);
+      INSERT INTO loans(id,company_id,client_id,principal_amount,total_amount,installment_count,late_fee_per_day,loan_date,first_due_date)
+        VALUES(1,1,1,1000,1000,1,10,'2026-01-01','2026-01-02');
+      INSERT INTO installments(id,loan_id,installment_number,amount,due_date,paid_amount,paid_at)
+        VALUES(1,1,1,1000,'2026-01-02',1000,'2026-01-12');
+      INSERT INTO payments(installment_id,amount,late_fee_amount,payment_date) VALUES(1,1000,30,'2026-01-12');
+      INSERT INTO late_fees(installment_id,days_late,amount,paid_amount,status) VALUES(1,10,100,30,'waived');
+      PRAGMA user_version=11;`);
+    const receipts = legacy.prepare('SELECT * FROM payments').all();
+    legacy.close();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const db = await openDatabase(path);
+      await refreshFinancialState();
+      const fee = await db.prepare('SELECT * FROM late_fees').get();
+      assert.equal(fee.amount, 100);
+      assert.equal(fee.paid_amount, 30);
+      assert.equal(fee.waived_amount, 70);
+      assert.equal(fee.status, 'waived');
+      assert.deepEqual(await db.prepare('SELECT * FROM payments').all(), receipts);
+      assert.deepEqual(await db.pragma('foreign_key_check'), []);
+      await closeDatabase();
+    }
+  } finally {
+    await closeDatabase();
+    rmSync(directory, { recursive: true, force: true });
   }
 });

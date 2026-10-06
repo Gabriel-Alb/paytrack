@@ -84,7 +84,7 @@
                             <div class="flex min-w-0 flex-1 items-center gap-3">
                                 <button type="button"
                                     class="group relative flex size-9 shrink-0 items-center justify-center rounded-lg text-[12px] font-semibold transition-[background-color,color,transform] duration-150 active:scale-95"
-                                    :class="isPaid(installment.number)
+                                    :class="isSettled(installment)
                                             ? 'bg-[#166534] text-white hover:bg-[#14532d]'
                                             : 'bg-[#f4f4f5] text-[#52525b] hover:bg-[#166534] hover:text-white'
                                         " :aria-label="`Registrar pagamento da parcela ${installment.number}`
@@ -112,21 +112,22 @@
                                             Parcela {{ installment.number }}
                                         </p>
 
-                                        <span v-if="
-                                            installment.isOverdue &&
-                                            !isPaid(installment.number)
-                                        "
+                                        <span v-if="isOverdue(installment)"
                                             class="rounded-md bg-[#b91c1c] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white">
                                             Atrasada
                                         </span>
 
-                                        <span v-if="
-                                            hasPendingLateFee(
-                                                installment.number,
-                                            )
-                                        "
+                                        <span v-if="intermediateStatus(installment)"
                                             class="rounded-md bg-[#d97706] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white">
-                                            Multa pendente
+                                            {{ intermediateStatus(installment) }}
+                                        </span>
+                                        <span v-if="balance(installment).feeWaived > 0"
+                                            class="rounded-md bg-[#d97706] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white">
+                                            Multa abonada
+                                        </span>
+                                        <span v-if="isSettled(installment)"
+                                            class="rounded-md bg-[#166534] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white">
+                                            Pago
                                         </span>
                                     </div>
 
@@ -178,7 +179,7 @@
                                             }}
                                         </span>
 
-                                        <span class="mt-1 text-[10px] font-semibold text-[#b91c1c] sm:text-[11px]">
+                                        <span class="mt-1 text-[10px] font-semibold text-[#d97706] sm:text-[11px]">
                                             +
                                             {{
                                                 formatCurrency(
@@ -211,12 +212,24 @@
                                 <InfoItem label="Pago em" :value="formatDate(balance(installment).paidAt)" />
                                 <InfoItem label="Valor da parcela" :value="formatCurrency(installment.value)" />
                                 <InfoItem label="Dias de atraso" :value="balance(installment).lateDays > 0 ? `${balance(installment).lateDays} dias` : 'Sem atraso'"
-                                    :value-class="balance(installment).lateDays > 0 ? 'text-[#b91c1c]' : 'text-[#3f3f46]'" />
+                                    :value-class="isOverdue(installment) ? 'text-[#b91c1c]' : balance(installment).lateDays > 0 ? 'text-[#b45309]' : 'text-[#3f3f46]'" />
                                 <InfoItem label="Multa diária" :value="formatCurrency(dailyLateFee)" />
-                                <InfoItem label="Multa acumulada" :value="money(balance(installment).feeRemaining)" />
+                                <InfoItem label="Multa acumulada" :value="money(balance(installment).fee)" />
                                 <InfoItem label="Total recebido" :value="money(balance(installment).paid + balance(installment).feePaid)"
                                     value-class="text-[#166534]" wrapper-class="col-span-2" />
                             </div>
+
+                            <div v-if="balance(installment).fee > 0 || balance(installment).feeWaived > 0" class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] leading-5 text-[#71717a]">
+                                <p>Multa recebida: {{ money(balance(installment).feePaid) }} · Abonada: {{ money(balance(installment).feeWaived) }} · Pendente: {{ money(balance(installment).feeRemaining) }}</p>
+                                <button v-if="canWaive(installment) || waiverSelections[installment.id]" type="button"
+                                    :disabled="!!getPayment(installment.number)"
+                                    :title="getPayment(installment.number) ? 'Cancele ou confirme o lançamento antes de abonar a multa.' : ''"
+                                    class="rounded-lg border border-[#d97706]/20 px-2.5 py-1 font-semibold text-[#b45309] hover:bg-[#fffdfa] disabled:opacity-40"
+                                    @click="toggleWaiver(installment)">
+                                    {{ waiverSelections[installment.id] ? 'Desfazer abono' : 'Abonar multa' }}
+                                </button>
+                            </div>
+                            <p v-if="waiverSelections[installment.id]" class="mt-1 text-[10px] text-[#b45309]">Abono de {{ money(waiverSelections[installment.id]) }} será registrado ao confirmar.</p>
 
                             <div v-if="getPayment(installment.number)" class="mt-3">
                                 <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -269,10 +282,16 @@
                                     <button type="button" class="h-8 rounded-lg px-2.5 text-[10px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2]" @click="removePayment(installment.number)">Cancelar lançamento</button>
                                 </div>
                             </div>
-                            <button v-else-if="balance(installment).remaining + balance(installment).feeRemaining > 0" type="button"
+                            <button v-else-if="!waiverSelections[installment.id] && balance(installment).remaining + balance(installment).feeRemaining > 0" type="button"
                                 class="mt-3 h-8 rounded-lg bg-[#166534] px-3 text-[11px] font-semibold text-white hover:bg-[#14532d]"
                                 @click="togglePayment(installment)">Registrar pagamento</button>
 
+                            <div v-if="installmentWaivers(installment).length" class="mt-3 space-y-1 text-[10px] leading-5 text-[#71717a]">
+                                <p class="font-semibold text-[#52525b]">Histórico de abonos</p>
+                                <p v-for="waiver in installmentWaivers(installment)" :key="waiver.id">
+                                    {{ new Date(waiver.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) }} · Multa abonada: {{ money(waiver.waived_amount) }} · {{ waiver.actor_name || 'Não identificado' }}
+                                </p>
+                            </div>
                             <div v-if="installmentPayments(installment).length" class="mt-3 border-t border-black/[0.07] pt-3">
                                 <p class="text-[11px] font-semibold text-[#3f3f46]">Recebimentos registrados</p>
                                 <div v-for="payment in installmentPayments(installment)" :key="payment.id" class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#71717a]">
@@ -405,6 +424,7 @@ const lateFeeOptions = [
     { value: 'custom', label: 'Outro valor', selectedClass: 'border-[#52525b] bg-[#52525b] text-white', defaultClass: 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#52525b]/30' },
 ]
 const voidPaymentIds = ref([])
+const waiverSelections = ref({})
 const expandedInstallment = ref(null)
 const today = ref(currentDate())
 const modalDescription = computed(() => props.loan ? `${props.loan.clientName} · Empréstimo #${props.loan.id}` : '')
@@ -417,7 +437,7 @@ const amountPaid = computed(() => Number(fromCents(installments.value.reduce((to
     return total + current.paid + current.feePaid
 }, 0))))
 const hasIncompletePayments = computed(() =>
-    (!Object.keys(paymentSelections.value).length && !voidPaymentIds.value.length) ||
+    (!Object.keys(paymentSelections.value).length && !voidPaymentIds.value.length && !Object.keys(waiverSelections.value).length) ||
     installments.value.some(item => getPayment(item.number) && paymentError(item)),
 )
 
@@ -433,8 +453,37 @@ function balance(installment) {
     const paidAt = paid >= installment.amount ? active.filter(payment => payment.amount > 0).map(payment => payment.payment_date).sort().at(-1) : null
     const feeDate = paidAt && paidAt < date ? paidAt : date
     const lateDays = calculateLateDays(installment.dueDate, feeDate)
-    const fee = installment.late_fee_status === 'waived' ? 0 : lateDays * props.loan.late_fee_per_day
-    return { paid, paidAt, lateDays, feePaid, remaining: Math.max(0, installment.amount - paid), feeRemaining: Math.max(0, fee - feePaid) }
+    const fee = lateDays * props.loan.late_fee_per_day
+    const feeWaived = (installment.late_fee_waived_amount || 0) + (waiverSelections.value[installment.id] || 0)
+    return { paid, paidAt, lateDays, fee, feePaid, feeWaived, hasReceipt: active.length > 0,
+        remaining: Math.max(0, installment.amount - paid), feeRemaining: Math.max(0, fee - feePaid - feeWaived) }
+}
+function installmentWaivers(installment) {
+    return (props.loan?.fee_waivers ?? []).filter(waiver => waiver.installment_id === installment.id)
+}
+function canWaive(installment) {
+    const current = balance(installment)
+    return current.hasReceipt && current.feeRemaining > 0
+}
+function toggleWaiver(installment) {
+    if (waiverSelections.value[installment.id]) delete waiverSelections.value[installment.id]
+    else if (canWaive(installment)) waiverSelections.value[installment.id] = balance(installment).feeRemaining
+}
+function isSettled(installment) {
+    const current = balance(installment)
+    return !current.remaining && !current.feeRemaining && !current.feeWaived
+}
+function isOverdue(installment) {
+    const current = balance(installment)
+    return current.remaining > 0 && current.lateDays > 0 && !current.hasReceipt
+}
+function intermediateStatus(installment) {
+    const current = balance(installment)
+    if (!current.remaining) return current.feeRemaining ? 'Parcela paga · Multa pendente' : ''
+    if (current.feeWaived > 0 && !current.feeRemaining) return 'Parcela pendente'
+    if (current.feePaid > 0) return current.feeRemaining ? 'Multa parcial · Parcela pendente' : 'Multa paga · Parcela pendente'
+    if (current.paid > 0) return 'Parcela parcialmente paga'
+    return current.feeWaived > 0 ? 'Parcela pendente' : ''
 }
 function receivedCents(payment) {
     try {
@@ -467,6 +516,8 @@ function paymentError(installment) {
     const received = receivedCents(payment)
     if (!received) return 'Informe um valor maior que zero, com até duas casas decimais, dentro do limite permitido.'
     const current = balance(installment)
+    if (!payment.feeOnly && received === current.remaining && current.feeWaived > 0 && current.fee < current.feePaid + current.feeWaived)
+        return 'A data da quitação não pode reduzir a multa já recebida ou abonada.'
     if (received > (payment.feeOnly ? current.feeRemaining : current.remaining))
         return payment.feeOnly ? 'O valor excede a multa pendente.' : 'O valor excede o saldo da parcela.'
     if (asksLateFee(installment)) {
@@ -477,9 +528,9 @@ function paymentError(installment) {
     return ''
 }
 function getInstallmentContainerClass(installment) {
-    if (hasPendingLateFee(installment.number)) return 'border-[#d97706]/20 bg-[#fffdfa]'
-    if (isPaid(installment.number)) return 'border-[#166534]/20 bg-[#f0fdf4]'
-    return installment.isOverdue ? 'border-[#b91c1c]/15 bg-white' : 'border-black/[0.08] bg-white'
+    if (intermediateStatus(installment) || balance(installment).feeWaived > 0) return 'border-[#d97706]/20 bg-[#fffdfa]'
+    if (isSettled(installment)) return 'border-[#166534]/20 bg-[#f0fdf4]'
+    return isOverdue(installment) ? 'border-[#b91c1c]/15 bg-white' : 'border-black/[0.08] bg-white'
 }
 function isPaid(number) {
     const installment = installments.value.find(item => item.number === number)
@@ -499,6 +550,7 @@ function getOutstandingLateFee(number) {
 function hasPendingLateFee(number) { return isPaid(number) && getOutstandingLateFee(number) > 0 }
 function togglePayment(installment) {
     expandedInstallment.value = installment.number
+    if (waiverSelections.value[installment.id]) return
     if (getPayment(installment.number)) return
     const current = balance(installment)
     if (current.remaining + current.feeRemaining <= 0) return
@@ -509,6 +561,8 @@ function togglePayment(installment) {
 }
 function removePayment(number) { delete paymentSelections.value[number] }
 function toggleVoid(id) {
+    const installmentId = props.loan.paymentHistory.find(payment => payment.id === id)?.installment_id
+    delete waiverSelections.value[installmentId]
     voidPaymentIds.value = voidPaymentIds.value.includes(id)
         ? voidPaymentIds.value.filter(value => value !== id) : [...voidPaymentIds.value, id]
 }
@@ -517,6 +571,7 @@ function initializeSelections() {
     expandedInstallment.value = null
     paymentSelections.value = {}
     voidPaymentIds.value = []
+    waiverSelections.value = {}
 }
 function confirm() {
     if (!props.loan || hasIncompletePayments.value) return
@@ -526,6 +581,7 @@ function confirm() {
             ...getPayment(item.number), lateFeeReceivedCents: lateFeeReceived(item),
         })),
         voidPaymentIds: voidPaymentIds.value,
+        waiveInstallmentIds: Object.keys(waiverSelections.value).map(Number),
     })
 }
 

@@ -16,6 +16,7 @@ import {
   refreshClient,
 } from "../installments/installments.service.js";
 import { listPayments } from "../payments/payments.repository.js";
+import { listWaivers } from '../late-fees/late-fees.repository.js';
 import { validatePaymentDate } from '../payments/payments.service.js';
 import { recordAction } from '../auth/auth.repository.js';
 
@@ -36,7 +37,7 @@ function presentLoan(loan) {
     ...loan,
     display_status: ["paid", "cancelled"].includes(loan.status)
       ? loan.status
-      : visualStatus(loan.days_late, loan.fee_remaining > 0),
+      : visualStatus(loan.collection_days_late),
   };
 }
 
@@ -47,6 +48,7 @@ export async function getLoan(id) {
     ...presentLoan(loan),
     installments: (await installments.listInstallments(id)),
     payments: (await listPayments(id)),
+    fee_waivers: (await listWaivers(id)),
   };
 }
 
@@ -236,6 +238,10 @@ export async function updateLoan(id, data, actor) {
 function assertCompatiblePayments(loan, contract, values) {
   for (const installment of loan.installments) {
     const index = installment.installment_number - 1;
+    if (installment.late_fee_waived_amount > 0 &&
+        (values[index] !== installment.amount || contract.late_fee_per_day !== loan.late_fee_per_day ||
+          addDays(contract.first_due_date, index) !== installment.due_date))
+      conflict('INSTALLMENT_HAS_WAIVER', 'Preserve as condições da parcela com histórico de abono de multa.');
     const history = loan.payments.filter(payment => payment.installment_id === installment.id);
     if (values[index] === undefined) {
       if (history.length) conflict('INSTALLMENT_HAS_PAYMENTS', 'Não é possível remover uma parcela com histórico de pagamentos.');

@@ -10,6 +10,7 @@ import { bumpRevision } from "../loans/loans.repository.js";
 import { findInstallment } from "../installments/installments.repository.js";
 import { refreshFinancialState } from "../installments/installments.service.js";
 import * as repository from "./payments.repository.js";
+import { waiveInstallmentFee } from '../late-fees/late-fees.service.js';
 
 export function validatePaymentDate(date, loanDate) {
   if (date > today() || date < loanDate) {
@@ -45,9 +46,9 @@ export async function previewPayment(id, data) {
 }
 
 function pendingFee(installment, loan, date) {
-  if (installment.late_fee_status === 'waived') return 0;
   const feeDate = installment.paid_at && installment.paid_at < date ? installment.paid_at : date;
-  return Math.max(0, daysLate(installment.due_date, feeDate) * loan.late_fee_per_day - installment.late_fee_paid_amount);
+  return Math.max(0, daysLate(installment.due_date, feeDate) * loan.late_fee_per_day
+    - installment.late_fee_paid_amount - installment.late_fee_waived_amount);
 }
 
 async function receivePayment(loan, installment, data, actor) {
@@ -57,6 +58,10 @@ async function receivePayment(loan, installment, data, actor) {
     conflict('PAYMENT_DATE_CONFLICT', 'O pagamento não pode anteceder os recebimentos já registrados.');
   const fee = pendingFee(installment, loan, data.payment_date);
   const balance = installment.amount - installment.paid_amount;
+  if (!data.fee_only && data.amount === balance && installment.late_fee_waived_amount > 0 &&
+      daysLate(installment.due_date, data.payment_date) * loan.late_fee_per_day <
+        installment.late_fee_paid_amount + installment.late_fee_waived_amount)
+    conflict('WAIVER_DATE_CONFLICT', 'A data da quitação não pode reduzir a multa já recebida ou abonada.');
   if (data.amount > (data.fee_only ? fee : balance))
     conflict(data.fee_only ? 'FEE_PAYMENT_EXCEEDS_BALANCE' : 'PAYMENT_EXCEEDS_BALANCE',
       data.fee_only ? 'O pagamento excede o saldo da multa na data informada.' : 'O pagamento excede o saldo da parcela.');
@@ -101,7 +106,7 @@ async function reconcileSelection(loan, installment, selection, actor) {
   const fee =
     daysLate(installment.due_date, selection.payment_date) *
     loan.late_fee_per_day;
-  if (selection.late_fee_received_amount > fee)
+  if (selection.late_fee_received_amount + installment.late_fee_waived_amount > fee)
     conflict(
       "FEE_PAYMENT_EXCEEDS_BALANCE",
       "O valor recebido de multa excede a multa calculada.",
@@ -159,6 +164,10 @@ export async function confirmPayments(id, data, actor) {
         for (const receipt of data.receipts) {
           const installment = requireRecord(loan.installments.find(item => item.installment_number === receipt.installment_number), 'Parcela');
           await receivePayment(loan, installment, receipt, actor);
+          loan = await getLoan(id);
+        }
+        for (const installmentId of data.waive_installment_ids ?? []) {
+          await waiveInstallmentFee(loan, installmentId, actor);
           loan = await getLoan(id);
         }
         await refreshFinancialState(id);

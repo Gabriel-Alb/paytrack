@@ -9,9 +9,9 @@ export async function importSqlite(sourcePath, target) {
   try {
     source.exec('BEGIN');
     const version = source.pragma('user_version', { simple:true });
-    if (![6,7,8,9,10,11].includes(version) || source.pragma('foreign_key_check').length ||
+    if (![6,7,8,9,10,11,12].includes(version) || source.pragma('foreign_key_check').length ||
       source.pragma('integrity_check')[0].integrity_check !== 'ok')
-      throw new Error('A origem precisa estar no schema SQLite v6 a v11, com referências válidas.');
+      throw new Error('A origem precisa estar no schema SQLite v6 a v12, com referências válidas.');
     return await target.transaction(async () => {
       await target.exec(`LOCK TABLE ${tables.join(',')} IN ACCESS EXCLUSIVE MODE`);
       for (const table of tables.filter(table => table !== 'companies')) {
@@ -38,6 +38,8 @@ export async function importSqlite(sourcePath, target) {
           })));
         for (const original of rows) {
           const row = table === 'users' ? { ...original, approved_by:null } : original;
+          if (table === 'late_fees' && row.waived_amount === undefined)
+            row.waived_amount = row.status === 'waived' ? Math.max(0, row.amount-row.paid_amount) : 0;
           const columns = Object.keys(row);
           // Column names come from the known source schema, never CLI/user input.
           if (columns.some(column => !/^[a-z_]+$/.test(column))) throw new Error('Coluna de origem inválida.');

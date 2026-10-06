@@ -1,4 +1,5 @@
 import { database } from "../connection.js";
+import { noReceipt, feeRemaining } from './financial-sql.js';
 
 export async function findInstallment(id) {
   return (await database()
@@ -14,6 +15,9 @@ export async function listInstallments(loanId) {
     .prepare(
       `SELECT i.*, f.id AS late_fee_id, COALESCE(f.amount, 0) AS late_fee_amount,
     COALESCE(f.paid_amount, 0) AS late_fee_paid_amount, COALESCE(f.days_late, 0) AS days_late,
+    COALESCE(f.waived_amount, 0) AS late_fee_waived_amount,
+    COALESCE(${feeRemaining}, 0) AS late_fee_remaining,
+    CASE WHEN ${noReceipt} THEN 0 ELSE 1 END AS has_receipt,
     f.status AS late_fee_status, f.paid_at AS late_fee_paid_at
     FROM scoped_installments i LEFT JOIN scoped_late_fees f ON f.installment_id=i.id
     WHERE i.loan_id=? ORDER BY i.installment_number`,
@@ -64,6 +68,7 @@ export async function reconcileInstallments(date, loanId) {
     .prepare(
       `UPDATE installments SET status=CASE
       WHEN paid_amount>=amount THEN 'paid' WHEN paid_amount>0 THEN 'partial'
+      WHEN EXISTS(SELECT 1 FROM scoped_payments p WHERE p.installment_id=installments.id AND p.voided_at IS NULL AND p.late_fee_amount>0) THEN 'partial'
       WHEN due_date<@date THEN 'overdue' ELSE 'pending' END,
     paid_at=CASE WHEN paid_amount>=amount THEN paid_at ELSE NULL END,
     updated_at=utc_now()
@@ -81,8 +86,7 @@ export async function reconcileFees(date, loanId) {
     FROM scoped_installments i JOIN scoped_loans l ON l.id=i.loan_id
     WHERE l.status<>'cancelled' AND (CAST(@loan AS BIGINT) IS NULL OR l.id=@loan)
       AND l.late_fee_per_day>0 AND i.due_date<COALESCE(i.paid_at,@date)
-    ON CONFLICT(installment_id) DO UPDATE SET days_late=excluded.days_late, amount=excluded.amount, updated_at=utc_now()
-    WHERE late_fees.status<>'waived'`,
+    ON CONFLICT(installment_id) DO UPDATE SET days_late=excluded.days_late, amount=excluded.amount, updated_at=utc_now()`,
     )
     .run({ date, loan: loanId }));
   (await database()
@@ -100,13 +104,13 @@ export async function reconcileFees(date, loanId) {
     .prepare(
       `UPDATE late_fees SET amount=days_late*(SELECT l.late_fee_per_day FROM scoped_loans l
     JOIN scoped_installments i ON i.loan_id=l.id WHERE i.id=installment_id), updated_at=utc_now()
-    WHERE status<>'waived' AND installment_id IN (SELECT id FROM scoped_installments WHERE CAST(@loan AS BIGINT) IS NULL OR loan_id=@loan)`,
+    WHERE installment_id IN (SELECT id FROM scoped_installments WHERE CAST(@loan AS BIGINT) IS NULL OR loan_id=@loan)`,
     )
     .run({ loan: loanId }));
   (await database()
     .prepare(
-      `UPDATE late_fees SET status=CASE WHEN status='waived' THEN 'waived'
-      WHEN paid_amount>=amount THEN 'paid' WHEN paid_amount>0 THEN 'partial' ELSE 'pending' END,
+      `UPDATE late_fees SET status=CASE WHEN waived_amount>0 AND paid_amount+waived_amount>=amount THEN 'waived'
+      WHEN paid_amount>=amount THEN 'paid' WHEN paid_amount+waived_amount>0 THEN 'partial' ELSE 'pending' END,
     paid_at=CASE WHEN paid_amount>=amount THEN paid_at ELSE NULL END
     WHERE installment_id IN (SELECT id FROM scoped_installments WHERE CAST(@loan AS BIGINT) IS NULL OR loan_id=@loan)`,
     )
@@ -118,7 +122,8 @@ export async function loanBalances(loanId, date) {
     .prepare(
       `SELECT l.id, l.client_id, l.status,
     COALESCE(SUM(i.amount-i.paid_amount),0) AS remaining,
-    COALESCE(SUM(CASE WHEN f.status<>'waived' THEN greatest(0,f.amount-f.paid_amount) ELSE 0 END),0) AS fee_remaining,
+    COALESCE(SUM(${feeRemaining}),0) AS fee_remaining,
+    COALESCE(MAX(CASE WHEN i.paid_amount<i.amount AND ${noReceipt} THEN greatest(0,CAST(day_number(@date)-day_number(i.due_date) AS INTEGER)) ELSE 0 END),0) AS collection_days_late,
     COALESCE(MAX(CASE WHEN i.paid_amount<i.amount THEN greatest(0,CAST(day_number(@date)-day_number(i.due_date) AS INTEGER)) ELSE 0 END),0) AS days_late
     FROM scoped_loans l LEFT JOIN scoped_installments i ON i.loan_id=l.id LEFT JOIN scoped_late_fees f ON f.installment_id=i.id
     WHERE (CAST(@loan AS BIGINT) IS NULL OR l.id=@loan) AND l.status<>'cancelled' GROUP BY l.id, l.client_id, l.principal_amount, l.interest_percentage, l.interest_amount, l.total_amount, l.installment_count, l.late_fee_per_day, l.loan_date, l.first_due_date, l.status, l.notes, l.created_by, l.revision, l.created_at, l.updated_at, l.company_id`,
@@ -142,8 +147,8 @@ export async function clientBalances(clientId, attentionDays, date) {
     (SELECT COUNT(*) FROM scoped_loans WHERE client_id=c.id AND status IN ('active','overdue')) AS open_count,
     EXISTS(SELECT 1 FROM scoped_loans l JOIN scoped_installments i ON i.loan_id=l.id LEFT JOIN scoped_late_fees f ON f.installment_id=i.id
       WHERE l.client_id=c.id AND l.status<>'cancelled' AND
-      ((i.paid_amount<i.amount AND day_number(@date)-day_number(i.due_date)>@attention)
-        OR (i.status='paid' AND f.amount>f.paid_amount AND f.status<>'waived'))) AS negative
+      i.paid_amount<i.amount AND day_number(@date)-day_number(i.due_date)>@attention
+      AND ${noReceipt}) AS negative
     FROM scoped_clients c WHERE CAST(@client AS BIGINT) IS NULL OR c.id=@client`,
     )
     .all({ client: clientId, attention: attentionDays, date }));
