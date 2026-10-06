@@ -65,6 +65,7 @@ export const loansApi = {
   async confirm(id,revision,payments,voidPaymentIds=[]) {
     return loanView(await request(`/loans/${id}/payment-confirmation`,{ method:'PUT',body:{ revision,void_payment_ids:voidPaymentIds,receipts:payments.map((item) => ({
       installment_number:item.installmentNumber,payment_date:item.paidAt,amount:toCents(item.receivedAmount),fee_only:item.feeOnly,
+      late_fee_received_amount:item.lateFeeReceivedCents ?? 0,
     })) } }))
   },
 }

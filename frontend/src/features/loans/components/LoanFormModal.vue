@@ -235,10 +235,11 @@ const form = reactive({
 
 const selectedClient = ref(null)
 const { user } = useAuth()
-const clientCompanyId = computed(() => props.loan && user.value?.role === 'admin' ? form.companyId : null)
+const clientCompanyId = computed(() => form.companyId)
 
 watch(() => form.companyId, (companyId, previous) => {
-    if (props.open && previous != null && companyId !== previous && props.loan && user.value?.role === 'admin') {
+    if (props.open && companyId !== previous && (previous != null ||
+        (selectedClient.value && !selectedClient.value.companyIds?.includes(companyId)))) {
         form.clientId = null
         selectedClient.value = null
     }

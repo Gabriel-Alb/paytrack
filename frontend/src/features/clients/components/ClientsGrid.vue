@@ -54,6 +54,9 @@
                         <p class="mt-1 text-[12px] text-[#71717a]">
                             CPF: {{ client.cpf }}
                         </p>
+                        <p class="mt-1 break-words text-[12px] text-[#71717a]">
+                            {{ client.companies?.length ? client.companies.map(company => company.name).join(', ') : 'Sem empresa — vinculação pendente' }}
+                        </p>
                     </div>
 
                     <span class="shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.04em]"
