@@ -130,6 +130,13 @@ CREATE TABLE IF NOT EXISTS clients (
         ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS client_companies (
+    client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+    PRIMARY KEY (client_id, company_id)
+);
+CREATE INDEX IF NOT EXISTS idx_client_companies_company ON client_companies(company_id, client_id);
+
 CREATE TABLE IF NOT EXISTS loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
