@@ -42,8 +42,11 @@ antigo. Corrigiu também a emissão de eventos antes do commit na aprovação le
   são relidos dentro da transação administrativa; o servidor não confia em IDs de
   empresas, papel ou responsável enviados pelo cliente. Transações serializadas
   protegem decisões concorrentes e o último gerente nos dois bancos.
-- Clientes continuam globais conforme o modelo anterior; contratos, parcelas,
-  pagamentos, multas, históricos, dashboard e relatórios respeitam os vínculos.
+- Clientes usam vínculos muitos-para-muitos em `client_companies`. Usuários veem
+  clientes de suas empresas; somente admin global gerencia vínculos existentes.
+  Contratos, parcelas, pagamentos, multas, históricos, dashboard e relatórios
+  mantêm o escopo por empresa. Consulte [CLIENT_COMPANIES.md](CLIENT_COMPANIES.md)
+  para migração, clientes antigos e procedimento de publicação desta alteração.
 
 ## Endpoints
 
