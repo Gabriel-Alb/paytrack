@@ -1,7 +1,36 @@
 import { database } from "../connection.js";
 
 export async function findClient(id) {
-  return (await database().prepare("SELECT * FROM scoped_clients WHERE id = ?").get(id));
+  const client = await database().prepare("SELECT * FROM scoped_clients WHERE id = ?").get(id);
+  return client ? (await withCompanies([client]))[0] : undefined;
+}
+
+async function withCompanies(clients) {
+  if (!clients.length) return clients;
+  const companies = await database().prepare(`SELECT cc.client_id, c.id, c.name
+    FROM client_companies cc JOIN companies c ON c.id=cc.company_id
+    WHERE cc.client_id IN (${clients.map(() => '?').join(',')}) AND can_access_company(c.id)
+    ORDER BY c.name, c.id`).all(...clients.map(client => client.id));
+  return clients.map(client => {
+    const links = companies.filter(company => company.client_id === client.id).map(({id,name}) => ({id,name}));
+    return {...client, companies:links, companyIds:links.map(company => company.id)};
+  });
+}
+
+export async function clientHasCompany(id, companyId) {
+  return Boolean(await database().prepare('SELECT 1 FROM client_companies WHERE client_id=? AND company_id=? AND can_access_company(company_id)').get(id, companyId));
+}
+
+export async function replaceClientCompanies(id, companyIds) {
+  // Keep existing links used by financial history. The service authorizes this action.
+  const placeholders = companyIds.map(() => '?').join(',');
+  const used = await database().prepare(`SELECT 1 FROM loans WHERE client_id=? AND company_id NOT IN (${placeholders}) LIMIT 1`).get(id, ...companyIds);
+  if (used) return false;
+  await database().prepare(`DELETE FROM client_companies WHERE client_id=? AND company_id NOT IN (${placeholders})`).run(id, ...companyIds);
+  for (const companyId of companyIds) {
+    await database().prepare('INSERT INTO client_companies(client_id, company_id) VALUES(?, ?) ON CONFLICT(client_id, company_id) DO NOTHING').run(id, companyId);
+  }
+  return true;
 }
 
 export async function findDuplicate({ cpf, rg, cnh }, exceptId = 0) {
@@ -14,7 +43,7 @@ export async function findDuplicate({ cpf, rg, cnh }, exceptId = 0) {
 
 export async function listClients({ search, status, company_id, limit, offset }) {
   const where = `WHERE (ascii_lower(c.name) LIKE ascii_lower(@search) ESCAPE '!' OR ascii_lower(c.cpf) LIKE ascii_lower(@document) ESCAPE '!')
-    AND (CAST(@status AS TEXT) IS NULL OR c.status = @status) AND (CAST(@company AS BIGINT) IS NULL OR EXISTS(SELECT 1 FROM scoped_loans l WHERE l.client_id=c.id AND l.company_id=@company))`;
+    AND (CAST(@status AS TEXT) IS NULL OR c.status = @status) AND (CAST(@company AS BIGINT) IS NULL OR EXISTS(SELECT 1 FROM client_companies cc WHERE cc.client_id=c.id AND cc.company_id=@company AND can_access_company(cc.company_id)))`;
   const params = {
     search: `%${search.replaceAll('!', '!!')}%`,
     document: `%${search.replace(/[.\-\s]/g, "").replaceAll("!", "!!")}%`,
@@ -30,7 +59,7 @@ export async function listClients({ search, status, company_id, limit, offset })
     FROM scoped_clients c ${where} ORDER BY c.id DESC LIMIT @limit OFFSET @offset`,
     )
     .all({ ...params, limit, offset }));
-  return { items, total };
+  return { items:await withCompanies(items), total };
 }
 
 export async function insertClient(client, actorId = null) {

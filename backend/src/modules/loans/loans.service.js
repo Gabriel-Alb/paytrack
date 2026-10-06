@@ -8,7 +8,7 @@ import {
   conflict,
 } from "../../shared/errors/AppError.js";
 import { pagination } from "../../shared/utils/validation.js";
-import { findClient } from "../clients/clients.repository.js";
+import { findClient, clientHasCompany } from "../clients/clients.repository.js";
 import * as repository from "./loans.repository.js";
 import * as installments from "../installments/installments.repository.js";
 import {
@@ -158,8 +158,10 @@ function calculateContract(data) {
 
 export async function createLoan(data, actor) {
   return (await unitOfWork(async () => {
-      requireRecord((await findClient(data.client_id)), "Cliente");
       const companyId = (await resolveCompany(data.company_id));
+      requireRecord((await findClient(data.client_id)), "Cliente");
+      if (!await clientHasCompany(data.client_id, companyId))
+        conflict('CLIENT_COMPANY_MISMATCH', 'O cliente não está vinculado à empresa do empréstimo.');
       const { interest, total, values } = calculateContract(data);
       const id = (await repository.insertLoan({
         ...data,
@@ -208,6 +210,8 @@ export async function updateLoan(id, data, actor) {
         ...(data.installment_overrides ? { installment_overrides:data.installment_overrides } : {}),
       });
       requireRecord(await findClient(contract.client_id), 'Cliente');
+      if (!await clientHasCompany(contract.client_id, contract.company_id))
+        conflict('CLIENT_COMPANY_MISMATCH', 'O cliente não está vinculado à empresa do empréstimo.');
       const { interest, total, values } = calculateContract(contract);
       const financialChanged = totalsChanged ||
         ['late_fee_per_day', 'loan_date', 'first_due_date'].some(key => contract[key] !== loan[key]) ||

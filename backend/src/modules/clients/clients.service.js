@@ -1,6 +1,8 @@
 import { unitOfWork } from '../../application/persistence.js';
 import * as repository from "./clients.repository.js";
-import { requireRecord, conflict } from "../../shared/errors/AppError.js";
+import { AppError, requireRecord, conflict } from "../../shared/errors/AppError.js";
+import { companyAccessContext, resolveCompany } from '../../application/company-access.js';
+import { clientSchema, clientPatchSchema } from './clients.validator.js';
 import {
   refreshFinancialState,
   refreshClient,
@@ -40,7 +42,9 @@ export async function listClients(query) {
 }
 
 export async function createClient(data, actor) {
+  data = clientSchema.parse(data);
   return (await unitOfWork(async () => {
+      for (const companyId of data.companyIds) await resolveCompany(companyId);
       const client = {
         rg: null,
         cnh: null,
@@ -51,14 +55,24 @@ export async function createClient(data, actor) {
       };
       (await checkDocuments(client));
       const id = (await repository.insertClient(client,actor?.id));
+      await repository.replaceClientCompanies(id, data.companyIds);
       (await recordAction('client_created',actor,'client',id,{customer:client.name}));
       return (await getClient(id));
     }));
 }
 
 export async function updateClient(id, data, actor) {
+  data = clientPatchSchema.parse(data);
   return (await unitOfWork(async () => {
       const previous = requireRecord((await repository.findClient(id)), "Cliente");
+      if (data.companyIds !== undefined) {
+        const access = companyAccessContext();
+        if (access && access.role !== 'admin')
+          throw new AppError(403, 'CLIENT_COMPANIES_FORBIDDEN', 'Somente administradores podem editar os vínculos do cliente.');
+        for (const companyId of data.companyIds) await resolveCompany(companyId);
+        if (!await repository.replaceClientCompanies(id, data.companyIds))
+          conflict('CLIENT_COMPANY_HAS_LOANS', 'Mantenha as empresas que possuem empréstimos deste cliente.');
+      }
       const client = {
         ...previous,
         ...data,

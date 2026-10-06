@@ -32,6 +32,7 @@ export function validCpf(value) {
 
 export const clientSchema = z
   .object({
+    companyIds: z.array(idSchema).min(1).max(100).refine(ids => new Set(ids).size === ids.length, 'Empresas duplicadas.'),
     name: z.string().trim().min(2).max(150),
     cpf: document.refine(validCpf, "CPF inválido."),
     rg: z
