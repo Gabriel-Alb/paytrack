@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS late_fees (
     days_late INTEGER NOT NULL DEFAULT 0 CHECK (days_late >= 0),
     amount INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
     paid_amount INTEGER NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
+    waived_amount INTEGER NOT NULL DEFAULT 0 CHECK (waived_amount >= 0),
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'partial', 'paid', 'waived')),
     paid_at TEXT,

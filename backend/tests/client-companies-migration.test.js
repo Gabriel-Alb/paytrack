@@ -45,7 +45,7 @@ test('SQLite v10 → v11 só adiciona vínculos, preserva todos os registros e p
     assert.equal(db.prepare('SELECT COUNT(*) n FROM clients WHERE id=20').get().n,1);
     db.close(); db = openSqlite(path);
     assert.deepEqual(preserved.map(table=>db.prepare(`SELECT * FROM ${table} ORDER BY id`).all()),before);
-    assert.equal(db.pragma('user_version',{simple:true}),11);
+    assert.equal(db.pragma('user_version',{simple:true}),12);
     assert.deepEqual(db.pragma('foreign_key_check'),[]);
   } finally { db?.close(); rmSync(directory,{recursive:true,force:true}); }
 });
@@ -72,7 +72,9 @@ test('PostgreSQL v6 → v7 preserva registros, sequências, órfãos e vínculos
     assert.deepEqual(await Promise.all(preserved.map(async table=>(await pool.query(`SELECT * FROM ${table} ORDER BY id`)).rows)),before);
     await pool.query('DROP TRIGGER guard_clients ON clients');
     await migratePostgres(pool); await migratePostgres(pool);
-    assert.deepEqual(await Promise.all(preserved.map(async table=>(await pool.query(`SELECT * FROM ${table} ORDER BY id`)).rows)),before);
+    const migrated = before.map((rows, index) => preserved[index] === 'late_fees'
+      ? rows.map(row => ({ ...row, waived_amount: '0' })) : rows);
+    assert.deepEqual(await Promise.all(preserved.map(async table=>(await pool.query(`SELECT * FROM ${table} ORDER BY id`)).rows)),migrated);
     assert.deepEqual((await pool.query('SELECT sequencename,last_value FROM pg_sequences WHERE schemaname=$1 ORDER BY sequencename',[schema])).rows,sequences);
     assert.deepEqual((await pool.query('SELECT * FROM client_companies ORDER BY client_id,company_id')).rows.map(row=>({client_id:Number(row.client_id),company_id:Number(row.company_id)})),expected);
     assert.equal((await pool.query('SELECT COUNT(*) n FROM clients WHERE id=20')).rows[0].n,'1');

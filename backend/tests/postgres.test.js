@@ -109,12 +109,12 @@ if (process.env.TEST_DATABASE_URL) {
     try {
       await migratePostgres(pool);
       await migratePostgres(pool);
-      assert.equal((await db.prepare('SELECT count(*) AS n FROM schema_migrations').get()).n,7);
+      assert.equal((await db.prepare('SELECT count(*) AS n FROM schema_migrations').get()).n,8);
       assert.equal((await db.prepare('SELECT count(*) AS n FROM companies').get()).n,2);
       assert.deepEqual(await db.prepare(`SELECT c.conname FROM pg_constraint c
         WHERE c.contype='f' AND c.connamespace=current_schema()::regnamespace
         AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid=c.conrelid AND i.indisvalid AND i.indkey[0]=c.conkey[1])`).all(),[]);
-      assert.equal((await checkSchema(db)).version,7);
+      assert.equal((await checkSchema(db)).version,8);
       await db.prepare("UPDATE schema_migrations SET checksum='invalid'").run();
       await assert.rejects(migratePostgres(pool),/Checksum/);
     } finally { await pool.end(); }
@@ -257,7 +257,43 @@ if (process.env.TEST_DATABASE_URL) {
       await migratePostgres(pool);
       assert.deepEqual((await pool.query('SELECT id,client_id,company_id FROM loans')).rows, [{id:'12',client_id:'8',company_id:'1'}]);
       assert.deepEqual((await pool.query('SELECT * FROM payments')).rows, before.data[tables.filter(table => !['client_companies','user_access_companies','password_reset_requests'].includes(table)).indexOf('payments')]);
-      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2},{version:3},{version:4},{version:5},{version:6},{version:7}]);
+      assert.deepEqual((await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows, [{version:1},{version:2},{version:3},{version:4},{version:5},{version:6},{version:7},{version:8}]);
     } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
   });
 }
+
+test('PostgreSQL v7 migra abono legado sem mudar recebimentos e reverte falha no backfill', { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const schema = 'paytrack_waiver_' + randomUUID().replaceAll('-', '');
+  const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL, max: 1, options: `-c search_path=${schema}` });
+  try {
+    await pool.query(`CREATE SCHEMA ${schema}; CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, checksum TEXT NOT NULL)`);
+    for (const [index, file] of ['001-initial.sql', '002-loan-companies.sql', '003-company-roles.sql', '004-password-recovery.sql', '005-loan-editing.sql', '006-loan-company-editing.sql', '007-client-companies.sql'].entries()) {
+      const sql = readFileSync(new URL('../src/infrastructure/persistence/postgres/' + file, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+      await pool.query(sql);
+      await pool.query('INSERT INTO schema_migrations VALUES($1,$2)', [index + 1, createHash('sha256').update(sql).digest('hex')]);
+    }
+    await pool.query(`SELECT set_config('paytrack.access','{"role":"admin","companyIds":[]}',false);
+      INSERT INTO clients(id,name,cpf) VALUES(1,'Legado','52998224725');
+      INSERT INTO client_companies(client_id,company_id) VALUES(1,1);
+      INSERT INTO loans(id,company_id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
+        VALUES(1,1,1,1000,1000,1,'2026-01-01','2026-01-02');
+      INSERT INTO installments(id,loan_id,installment_number,amount,due_date) VALUES(1,1,1,1000,'2026-01-02');
+      INSERT INTO payments(installment_id,amount,late_fee_amount,payment_date) VALUES(1,0,30,'2026-01-12');
+      INSERT INTO late_fees(installment_id,amount,paid_amount,status) VALUES(1,100,30,'waived');
+      CREATE FUNCTION reject_waiver() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected waiver failure'; END $$;
+      CREATE TRIGGER reject_waiver BEFORE UPDATE ON late_fees FOR EACH ROW EXECUTE FUNCTION reject_waiver();`);
+    const receipts = (await pool.query('SELECT * FROM payments')).rows;
+    await assert.rejects(migratePostgres(pool), /injected waiver failure/);
+    assert.equal((await pool.query("SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='late_fees' AND column_name='waived_amount'")).rows.length, 0);
+    assert.equal((await pool.query('SELECT MAX(version) AS version FROM schema_migrations')).rows[0].version, 7);
+    await pool.query('DROP TRIGGER reject_waiver ON late_fees; DROP FUNCTION reject_waiver()');
+    await migratePostgres(pool);
+    await migratePostgres(pool);
+    await verifyPostgres(pool);
+    assert.deepEqual((await pool.query('SELECT amount,paid_amount,waived_amount FROM scoped_late_fees')).rows, [{ amount: '100', paid_amount: '30', waived_amount: '70' }]);
+    assert.deepEqual((await pool.query('SELECT * FROM payments')).rows, receipts);
+  } finally {
+    await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await pool.end();
+  }
+});
