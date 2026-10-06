@@ -20,7 +20,7 @@
         <LoanFormModal v-if="isLoanModalOpen" :loan="editingLoan" :saving="pendingOperation" :open="isLoanModalOpen" :clients="clients" :draft="loanDraft" @close="closeLoanModal"
             @save="saveLoan" @request-new-client="openClientModal" @update:draft="updateLoanDraft" />
 
-        <ClientFormModal :model-value="isClientModalOpen" :client="null" @update:model-value="setClientModalOpen"
+        <ClientFormModal :model-value="isClientModalOpen" :client="null" :initial-company-id="loanDraft.companyId" @update:model-value="setClientModalOpen"
             @save="createClient" @close="returnToLoan" />
 
         <LoanInstallmentsModal v-model="isInstallmentsModalOpen" :loan="selectedLoan" @close="clearSelectedLoan"
@@ -95,6 +95,7 @@ function createClient(form) {
     const client = await clientsApi.save(null, form)
     toast.success('Cliente cadastrado com sucesso.')
     clients.value = [client]
+    if (!client.companyIds.includes(loanDraft.companyId)) loanDraft.companyId = client.companyIds[0]
     loanDraft.clientId = client.id
     isClientModalOpen.value = false
     isLoanModalOpen.value = true

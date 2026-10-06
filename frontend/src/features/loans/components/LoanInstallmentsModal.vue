@@ -207,11 +207,15 @@
                             class="min-w-0 border-t border-black/[0.07] bg-white px-3 pb-3 pt-3 sm:px-3.5 sm:pb-3.5"
                             @click.stop>
                             <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                <InfoItem label="Valor original da parcela" :value="formatCurrency(installment.value)" />
-                                <InfoItem label="Saldo restante da parcela" :value="money(balance(installment).remaining)" />
-                                <InfoItem label="Multa acumulada" :value="money(balance(installment).fee)" />
-                                <InfoItem label="Multa pendente" :value="money(balance(installment).feeRemaining)" />
-                                <InfoItem label="Total atualmente devido" :value="money(balance(installment).remaining + balance(installment).feeRemaining)" wrapper-class="col-span-2" />
+                                <InfoItem label="Vencimento" :value="formatDate(installment.dueDate)" />
+                                <InfoItem label="Pago em" :value="formatDate(balance(installment).paidAt)" />
+                                <InfoItem label="Valor da parcela" :value="formatCurrency(installment.value)" />
+                                <InfoItem label="Dias de atraso" :value="balance(installment).lateDays > 0 ? `${balance(installment).lateDays} dias` : 'Sem atraso'"
+                                    :value-class="balance(installment).lateDays > 0 ? 'text-[#b91c1c]' : 'text-[#3f3f46]'" />
+                                <InfoItem label="Multa diária" :value="formatCurrency(dailyLateFee)" />
+                                <InfoItem label="Multa acumulada" :value="money(balance(installment).feeRemaining)" />
+                                <InfoItem label="Total recebido" :value="money(balance(installment).paid + balance(installment).feePaid)"
+                                    value-class="text-[#166534]" wrapper-class="col-span-2" />
                             </div>
 
                             <div v-if="getPayment(installment.number)" class="mt-3">
@@ -223,26 +227,47 @@
                                             class="block h-10 w-full min-w-0 rounded-xl border border-black/[0.10] bg-white px-3 text-[12px] text-[#27272a] outline-none focus:border-[#166534]/40" />
                                     </div>
                                     <div>
-                                        <label :for="`payment-amount-${installment.number}`" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">Valor recebido</label>
+                                        <label :for="`payment-amount-${installment.number}`" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">Valor pago</label>
+                                        <div class="relative min-w-0">
+                                        <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-[#71717a]">R$</span>
                                         <input :id="`payment-amount-${installment.number}`" v-model="paymentSelections[installment.number].receivedAmount"
                                             type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0,00"
-                                            class="block h-10 w-full min-w-0 rounded-xl border border-black/[0.10] bg-white px-3 text-[12px] text-[#27272a] outline-none focus:border-[#166534]/40" />
+                                            class="block h-10 w-full min-w-0 rounded-xl border border-black/[0.10] bg-white pl-9 pr-3 text-[12px] text-[#27272a] outline-none focus:border-[#166534]/40" />
+                                        </div>
                                     </div>
                                 </div>
                                 <label class="mt-3 flex items-center gap-2 text-[12px] text-[#3f3f46]">
                                     <input v-model="paymentSelections[installment.number].feeOnly" type="checkbox" class="accent-[#166534]" />
                                     Pagamento somente da multa
                                 </label>
-                                <p class="mt-2 text-[10px] text-[#71717a]">Pagamento registrado por {{ registeredBy }}</p>
-                                <div class="mt-3 grid grid-cols-2 gap-2" aria-live="polite">
-                                    <InfoItem label="Destinado à multa" :value="money(allocation(installment).feeAmount)" />
-                                    <InfoItem label="Destinado à parcela" :value="money(allocation(installment).amount)" />
-                                    <InfoItem label="Saldo da parcela após pagamento" :value="money(allocation(installment).remaining)" />
-                                    <InfoItem label="Multa pendente após pagamento" :value="money(allocation(installment).feeRemaining)" />
+                                <div v-if="asksLateFee(installment)" class="mt-3 rounded-xl border border-black/[0.07] bg-[#fafafa] p-3">
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="min-w-0">
+                                            <p class="text-[11px] font-semibold text-[#3f3f46]">Multa de {{ money(balance(installment).feeRemaining) }} recebida?</p>
+                                            <p class="mt-0.5 text-[9px] leading-4 text-[#71717a]">Informe o valor recebido junto com a parcela.</p>
+                                        </div>
+                                        <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+                                            <button v-for="option in lateFeeOptions" :key="option.value" type="button"
+                                                class="inline-flex h-8 min-w-[48px] items-center justify-center rounded-lg border px-2.5 text-[10px] font-semibold transition-colors duration-150"
+                                                :class="getPayment(installment.number).lateFeeOption === option.value ? option.selectedClass : option.defaultClass"
+                                                :aria-pressed="getPayment(installment.number).lateFeeOption === option.value"
+                                                @click="paymentSelections[installment.number].lateFeeOption = option.value">{{ option.label }}</button>
+                                        </div>
+                                    </div>
+                                    <div v-if="getPayment(installment.number).lateFeeOption === 'custom'" class="mt-3 min-w-0 sm:max-w-[220px]">
+                                        <label :for="`custom-late-fee-${installment.number}`" class="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.05em] text-[#71717a]">Valor da multa recebido</label>
+                                        <div class="relative min-w-0">
+                                            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-[#71717a]">R$</span>
+                                            <input :id="`custom-late-fee-${installment.number}`" v-model="paymentSelections[installment.number].customLateFee"
+                                                type="number" inputmode="decimal" min="0" :max="fromCents(balance(installment).feeRemaining)" step="0.01" placeholder="0,00"
+                                                class="block h-9 w-full min-w-0 rounded-lg border border-black/[0.10] bg-white pl-9 pr-3 text-[11px] text-[#27272a] outline-none focus:border-[#166534]/40" />
+                                        </div>
+                                    </div>
                                 </div>
                                 <p v-if="paymentError(installment)" role="alert" class="mt-2 text-[11px] text-[#b91c1c]">{{ paymentError(installment) }}</p>
-                                <p v-else class="mt-2 text-[11px] text-[#71717a]">{{ allocation(installment).remaining > 0 ? 'A parcela continuará em aberto.' : 'A parcela será quitada.' }}</p>
-                                <button type="button" class="mt-3 h-8 rounded-lg px-2.5 text-[10px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2]" @click="removePayment(installment.number)">Cancelar lançamento</button>
+                                <div class="mt-3 flex justify-end border-t border-black/[0.07] pt-3">
+                                    <button type="button" class="h-8 rounded-lg px-2.5 text-[10px] font-semibold text-[#b91c1c] hover:bg-[#fef2f2]" @click="removePayment(installment.number)">Cancelar lançamento</button>
+                                </div>
                             </div>
                             <button v-else-if="balance(installment).remaining + balance(installment).feeRemaining > 0" type="button"
                                 class="mt-3 h-8 rounded-lg bg-[#166534] px-3 text-[11px] font-semibold text-white hover:bg-[#14532d]"
@@ -295,10 +320,6 @@ import {
 } from 'vue'
 
 import BaseModal from '@/components/base/BaseModal.vue'
-import { useAuth } from '@/composables/useAuth'
-
-const { user } = useAuth()
-const registeredBy = computed(() => user.value?.name || 'Não identificado')
 
 const InfoItem = defineComponent({
     props: {
@@ -378,6 +399,11 @@ const emit = defineEmits([
 ])
 
 const paymentSelections = ref({})
+const lateFeeOptions = [
+    { value: 'full', label: 'Sim', selectedClass: 'border-[#166534] bg-[#166534] text-white', defaultClass: 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#166534]/30 hover:text-[#166534]' },
+    { value: 'none', label: 'Não', selectedClass: 'border-[#b91c1c] bg-[#b91c1c] text-white', defaultClass: 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#b91c1c]/30 hover:text-[#b91c1c]' },
+    { value: 'custom', label: 'Outro valor', selectedClass: 'border-[#52525b] bg-[#52525b] text-white', defaultClass: 'border-black/[0.08] bg-white text-[#52525b] hover:border-[#52525b]/30' },
+]
 const voidPaymentIds = ref([])
 const expandedInstallment = ref(null)
 const today = ref(currentDate())
@@ -406,8 +432,9 @@ function balance(installment) {
     const date = getPayment(installment.number)?.paidAt || today.value
     const paidAt = paid >= installment.amount ? active.filter(payment => payment.amount > 0).map(payment => payment.payment_date).sort().at(-1) : null
     const feeDate = paidAt && paidAt < date ? paidAt : date
-    const fee = installment.late_fee_status === 'waived' ? 0 : calculateLateDays(installment.dueDate, feeDate) * props.loan.late_fee_per_day
-    return { paid, feePaid, fee, remaining: Math.max(0, installment.amount - paid), feeRemaining: Math.max(0, fee - feePaid) }
+    const lateDays = calculateLateDays(installment.dueDate, feeDate)
+    const fee = installment.late_fee_status === 'waived' ? 0 : lateDays * props.loan.late_fee_per_day
+    return { paid, paidAt, lateDays, feePaid, remaining: Math.max(0, installment.amount - paid), feeRemaining: Math.max(0, fee - feePaid) }
 }
 function receivedCents(payment) {
     try {
@@ -415,13 +442,20 @@ function receivedCents(payment) {
         return value > 0 && value <= 100000000000 ? value : 0
     } catch { return 0 }
 }
-function allocation(installment) {
+function asksLateFee(installment) {
     const current = balance(installment)
     const payment = getPayment(installment.number)
-    const received = receivedCents(payment)
-    const feeAmount = Math.min(received, current.feeRemaining)
-    const amount = payment?.feeOnly ? 0 : Math.min(current.remaining, received - feeAmount)
-    return { feeAmount, amount, remaining: current.remaining - amount, feeRemaining: current.feeRemaining - feeAmount }
+    return payment && !payment.feeOnly && current.remaining > 0 && receivedCents(payment) === current.remaining && current.feeRemaining > 0
+}
+function lateFeeReceived(installment) {
+    if (!asksLateFee(installment)) return 0
+    const payment = getPayment(installment.number)
+    if (payment.lateFeeOption === 'full') return balance(installment).feeRemaining
+    if (payment.lateFeeOption === 'none') return 0
+    if (payment.lateFeeOption === 'custom' && String(payment.customLateFee).trim() !== '') {
+        try { return toCents(payment.customLateFee) } catch { return -1 }
+    }
+    return -1
 }
 function paymentError(installment) {
     const payment = getPayment(installment.number)
@@ -433,8 +467,13 @@ function paymentError(installment) {
     const received = receivedCents(payment)
     if (!received) return 'Informe um valor maior que zero, com até duas casas decimais, dentro do limite permitido.'
     const current = balance(installment)
-    if (received > (payment.feeOnly ? current.feeRemaining : current.remaining + current.feeRemaining))
-        return payment.feeOnly ? 'O valor excede a multa pendente.' : 'O valor excede o total devido.'
+    if (received > (payment.feeOnly ? current.feeRemaining : current.remaining))
+        return payment.feeOnly ? 'O valor excede a multa pendente.' : 'O valor excede o saldo da parcela.'
+    if (asksLateFee(installment)) {
+        if (!payment.lateFeeOption) return 'Informe se a multa foi recebida.'
+        const fee = lateFeeReceived(installment)
+        if (fee < 0 || fee > current.feeRemaining) return 'Informe um valor de multa válido, com até duas casas decimais, até o saldo pendente.'
+    }
     return ''
 }
 function getInstallmentContainerClass(installment) {
@@ -450,7 +489,8 @@ function isExpanded(number) { return expandedInstallment.value === number }
 function toggleExpanded(number) { expandedInstallment.value = isExpanded(number) ? null : number }
 function getPayment(number) { return paymentSelections.value[number] ?? null }
 function getPaymentDate(number) {
-    return installments.value.find(item => item.number === number)?.paid_at || ''
+    const installment = installments.value.find(item => item.number === number)
+    return installment ? balance(installment).paidAt : ''
 }
 function getOutstandingLateFee(number) {
     const installment = installments.value.find(item => item.number === number)
@@ -463,7 +503,8 @@ function togglePayment(installment) {
     const current = balance(installment)
     if (current.remaining + current.feeRemaining <= 0) return
     paymentSelections.value[installment.number] = {
-        installmentNumber: installment.number, paidAt: today.value, receivedAmount: '', feeOnly: false,
+        installmentNumber: installment.number, paidAt: today.value, receivedAmount: '', feeOnly: current.remaining === 0,
+        lateFeeOption: '', customLateFee: '',
     }
 }
 function removePayment(number) { delete paymentSelections.value[number] }
@@ -481,7 +522,9 @@ function confirm() {
     if (!props.loan || hasIncompletePayments.value) return
     emit('confirm-payments', {
         loanId: props.loan.id,
-        payments: Object.values(paymentSelections.value),
+        payments: installments.value.filter(item => getPayment(item.number)).map(item => ({
+            ...getPayment(item.number), lateFeeReceivedCents: lateFeeReceived(item),
+        })),
         voidPaymentIds: voidPaymentIds.value,
     })
 }
