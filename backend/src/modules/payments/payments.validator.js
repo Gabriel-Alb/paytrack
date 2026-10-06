@@ -10,6 +10,7 @@ export const paymentSchema = z
   .object({
     amount: positiveCents,
     fee_only: z.boolean().default(false),
+    late_fee_received_amount: cents.default(0),
     payment_date: dateSchema,
     payment_method: z.string().trim().max(50).optional(),
     notes,

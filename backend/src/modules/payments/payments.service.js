@@ -57,14 +57,19 @@ async function receivePayment(loan, installment, data, actor) {
     conflict('PAYMENT_DATE_CONFLICT', 'O pagamento não pode anteceder os recebimentos já registrados.');
   const fee = pendingFee(installment, loan, data.payment_date);
   const balance = installment.amount - installment.paid_amount;
-  if (data.amount > (data.fee_only ? fee : balance + fee))
+  if (data.amount > (data.fee_only ? fee : balance))
     conflict(data.fee_only ? 'FEE_PAYMENT_EXCEEDS_BALANCE' : 'PAYMENT_EXCEEDS_BALANCE',
-      data.fee_only ? 'O pagamento excede o saldo da multa na data informada.' : 'O pagamento excede o total devido na data informada.');
-  const lateFeeAmount = Math.min(data.amount, fee);
+      data.fee_only ? 'O pagamento excede o saldo da multa na data informada.' : 'O pagamento excede o saldo da parcela.');
+  const extraFee = data.late_fee_received_amount ?? 0;
+  if (extraFee > 0 && (data.fee_only || data.amount !== balance))
+    conflict('INVALID_FEE_PAYMENT', 'A multa adicional só pode ser recebida junto à quitação da parcela.');
+  if (extraFee > fee)
+    conflict('FEE_PAYMENT_EXCEEDS_BALANCE', 'O pagamento excede o saldo da multa na data informada.');
+  const lateFeeAmount = data.fee_only ? data.amount : extraFee;
   return repository.insertPayment({
     ...data,
     installment_id: installment.id,
-    amount: data.fee_only ? 0 : data.amount - lateFeeAmount,
+    amount: data.fee_only ? 0 : data.amount,
     late_fee_amount: lateFeeAmount,
   }, actor);
 }
