@@ -18,7 +18,7 @@ export function loanView(loan) {
   const installments = loan.installments?.map((item) => ({
     ...item,number:item.installment_number,value:fromCents(item.amount),dueDate:item.due_date,
     currentLateDays:item.days_late,currentLateFee:fromCents(item.late_fee_amount),
-    isOverdue:item.status!=='paid' && item.due_date<currentDate(),
+    isOverdue:item.status!=='paid' && !item.has_receipt && item.due_date<currentDate(),
   }))
   return { ...loan,companyName:loan.company_name,clientId:loan.client_id,clientName:loan.client_name,amount:fromCents(loan.principal_amount),
     interest:loan.interest_percentage,totalWithInterest:fromCents(loan.total_amount),profit:fromCents(loan.interest_amount),
@@ -62,8 +62,8 @@ export const loansApi = {
   async update(id,revision,form) {
     return loanView(await request(`/loans/${id}`,{ method:'PATCH',body:{ ...loanPayload(form),revision } }))
   },
-  async confirm(id,revision,payments,voidPaymentIds=[]) {
-    return loanView(await request(`/loans/${id}/payment-confirmation`,{ method:'PUT',body:{ revision,void_payment_ids:voidPaymentIds,receipts:payments.map((item) => ({
+  async confirm(id,revision,payments,voidPaymentIds=[],waiveInstallmentIds=[]) {
+    return loanView(await request(`/loans/${id}/payment-confirmation`,{ method:'PUT',body:{ revision,void_payment_ids:voidPaymentIds,waive_installment_ids:waiveInstallmentIds,receipts:payments.map((item) => ({
       installment_number:item.installmentNumber,payment_date:item.paidAt,amount:toCents(item.receivedAmount),fee_only:item.feeOnly,
       late_fee_received_amount:item.lateFeeReceivedCents ?? 0,
     })) } }))

@@ -111,9 +111,9 @@ function saveLoan(form) {
     await reload()
   })
 }
-function registerLoanPayment({ loanId, payments, voidPaymentIds }) {
+function registerLoanPayment({ loanId, payments, voidPaymentIds, waiveInstallmentIds }) {
   perform(async () => {
-    selectedLoan.value = await loansApi.confirm(loanId, selectedLoan.value.revision, payments, voidPaymentIds)
+    selectedLoan.value = await loansApi.confirm(loanId, selectedLoan.value.revision, payments, voidPaymentIds, waiveInstallmentIds)
     toast.success('Pagamentos atualizados com sucesso.')
     isInstallmentsModalOpen.value = false
     await reload()
