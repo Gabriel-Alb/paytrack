@@ -70,6 +70,11 @@ export const loansApi = {
   },
 }
 
+export async function getReportMetrics(query,signal) {
+  const result=await request(`/reports?${queryString({ ...query,mode:'metrics' })}`,{ signal })
+  return Object.fromEntries(Object.entries(result).map(([key,value]) => [key,fromCents(value)]))
+}
+
 export async function getMonthlyReport(query,signal) {
   const result=await request(`/reports?${queryString({ ...query,mode:'month' })}`,{ signal })
   const mapMoney = (record,keys) => ({ ...record,...Object.fromEntries(keys.map((key) => [key,fromCents(record[key])])) })
