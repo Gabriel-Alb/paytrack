@@ -4,8 +4,12 @@
       <div class="report-metrics-row">
         <ReportMetrics
           v-model="selectedMonth"
-          :summary="data?.summary"
-          :available="!!data"
+          v-model:company="selectedCompany"
+          :companies="companies"
+          :companies-loading="companiesLoading"
+          :summary="metrics"
+          :available="!!metrics"
+          :aria-busy="metricsLoading"
         />
       </div>
 
@@ -81,6 +85,11 @@ import '../reports.css'
 
 const {
   selectedMonth,
+  selectedCompany,
+  companies,
+  companiesLoading,
+  metrics,
+  metricsLoading,
   selectedWeek,
   selectedDay,
   selectedStatus,

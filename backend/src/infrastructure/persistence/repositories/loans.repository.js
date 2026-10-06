@@ -18,10 +18,11 @@ export async function findLoan(id, date) {
     .get({ id, date }));
 }
 
-export async function loansDueInPeriod(start, end, date) {
-  return (await database().prepare(`${select} WHERE l.status<>'cancelled' AND EXISTS (
+export async function loansDueInPeriod(start, end, date, company_id) {
+  return (await database().prepare(`${select} WHERE l.status<>'cancelled'
+    AND (@company_id=0 OR l.company_id=@company_id) AND EXISTS (
     SELECT 1 FROM scoped_installments due WHERE due.loan_id=l.id AND due.due_date BETWEEN @start AND @end
-  ) GROUP BY ${groupBy} ORDER BY days_late DESC,l.id DESC`).all({ start, end, date }));
+  ) GROUP BY ${groupBy} ORDER BY days_late DESC,l.id DESC`).all({ start, end, date, company_id: company_id ?? 0 }));
 }
 
 export async function listLoans(

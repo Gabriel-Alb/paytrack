@@ -1,6 +1,7 @@
 import { toast } from '@/composables/useToast'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { currentDate, getMonthlyReport } from '@/services/paytrack'
+import { useReportMetrics } from './useReportMetrics'
 
 export const reportStatuses = [
   { key: 'on-time', label: 'Em dia', color: '#166534' },
@@ -36,6 +37,7 @@ export function useMonthlyReport() {
     const count = new Date(Date.UTC(year, selectedMonth.value, 0)).getUTCDate()
     return { start: `${prefix}-01`, end: `${prefix}-${count}` }
   })
+  const reportMetrics = useReportMetrics(period)
   const days = computed(() => {
     const count = Number(period.value.end.slice(8))
     const agenda = new Map((data.value?.agenda ?? []).map((day) => [day.date, day]))
@@ -81,7 +83,9 @@ export function useMonthlyReport() {
     loading.value = true
     data.value = null
     try {
-      const result = await getMonthlyReport(period.value, controller.signal)
+      const result = await getMonthlyReport({
+        ...period.value, company_id: reportMetrics.selectedCompany.value ?? undefined,
+      }, controller.signal)
       if (generation === requestGeneration) data.value = result
     } catch (cause) {
       if (generation === requestGeneration && cause.name !== 'AbortError') {
@@ -97,9 +101,11 @@ export function useMonthlyReport() {
     selectedWeek.value = Math.max(0, weeks.value.findIndex((group) => group.some((day) => day.date === selectedDay.value)))
     reload()
   }, { immediate: true })
+  watch(reportMetrics.selectedCompany, reload)
   onBeforeUnmount(() => { generation++; controller?.abort() })
 
   return {
+    ...reportMetrics,
     selectedMonth, selectedWeek, selectedDay, selectedStatus, data, loading, reload,
     weeks, week, days, chartItems, distribution, filteredContracts, daySummary, calendarOffset,
   }

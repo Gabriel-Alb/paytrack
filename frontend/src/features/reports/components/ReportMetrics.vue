@@ -21,6 +21,26 @@
       </div>
     </article>
 
+    <article class="report-card flex h-16 flex-col !px-2 !py-1.5">
+      <label for="report-company" class="flex min-h-6 items-center text-[10px] font-medium leading-3 text-zinc-500">
+        Empresa
+      </label>
+
+      <div class="relative mt-1 w-full">
+        <select id="report-company" :value="company ?? ''" :disabled="companiesLoading"
+          class="h-[22px] w-full min-w-0 cursor-pointer appearance-none rounded-md border border-zinc-200 bg-white px-1 pr-4 !text-[10px] font-medium text-zinc-700 outline-none transition duration-200 hover:border-zinc-300 focus:border-zinc-300 focus:ring-2 focus:ring-zinc-200/60"
+          @change="$emit('update:company', $event.target.value ? Number($event.target.value) : null)">
+          <option value="">Todas as empresas</option>
+          <option v-for="item in companies" :key="item.id" :value="item.id">{{ item.name }}</option>
+        </select>
+
+        <svg viewBox="0 0 24 24" aria-hidden="true"
+          class="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-500">
+          <path :d="mdiChevronDown" fill="currentColor" />
+        </svg>
+      </div>
+    </article>
+
     <article v-for="metric in metrics" :key="metric.key"
       class="report-card flex h-16 flex-col !px-2 !py-1.5" :title="metric.description">
       <h2 class="flex min-h-6 items-center text-[10px] font-medium leading-3 text-zinc-500">
@@ -43,6 +63,9 @@ import { months } from '../composables/useMonthlyReport'
 
 defineProps({
   modelValue: Number,
+  company: { type: Number, default: null },
+  companies: { type: Array, default: () => [] },
+  companiesLoading: Boolean,
   summary: {
     type: Object,
     default: () => ({}),
@@ -50,7 +73,7 @@ defineProps({
   available: Boolean,
 })
 
-defineEmits(['update:modelValue'])
+defineEmits(['update:modelValue', 'update:company'])
 
 const metrics = [
   {
@@ -59,29 +82,24 @@ const metrics = [
     description: 'Capital liberado nos contratos do período, sem contratos cancelados.',
   },
   {
-    key: 'expectedInterest',
-    label: 'Juros previstos',
-    description: 'Juros das parcelas com vencimento no período, conforme o rateio do contrato, sem multas.',
+    key: 'interest',
+    label: 'Juros',
+    description: 'Juros contratuais dos empréstimos do mês e da empresa selecionados, sem multas.',
   },
   {
     key: 'receivedLateFees',
     label: 'Multas recebidas',
-    description: 'Multas efetivamente recebidas no período, excluindo pagamentos estornados.',
+    description: 'Multas efetivamente recebidas dos empréstimos filtrados, excluindo estornos.',
   },
   {
-    key: 'expectedProfit',
-    label: 'Lucro previsto',
-    description: 'Juros e multas devidos nas parcelas do período, conforme as regras do relatório.',
-  },
-  {
-    key: 'realizedProfit',
-    label: 'Lucro recebido',
-    description: 'Juros e multas efetivamente recebidos no período, sem capital e excluindo estornos.',
+    key: 'received',
+    label: 'Valor recebido',
+    description: 'Capital, juros e multas já recebidos dos empréstimos filtrados, incluindo pagamentos parciais e excluindo estornos.',
   },
   {
     key: 'pending',
     label: 'Falta receber',
-    description: 'Saldo ainda pendente das parcelas com vencimento no período, incluindo multas devidas.',
+    description: 'Capital e juros contratuais dos empréstimos filtrados menos os pagamentos do contrato, sem descontar multas recebidas.',
   },
 ]
 </script>

@@ -20,13 +20,16 @@ export async function receipts(start, end) {
     .get(start, end));
 }
 
-export async function receiptDays(start, end) {
+export async function receiptDays(start, end, company_id) {
   return (await database()
     .prepare(
       `SELECT payment_date AS date,SUM(amount+late_fee_amount) AS value
-    FROM scoped_payments WHERE voided_at IS NULL AND payment_date BETWEEN ? AND ? GROUP BY payment_date ORDER BY payment_date`,
+    FROM scoped_payments WHERE voided_at IS NULL AND payment_date BETWEEN @start AND @end
+      AND (@company_id=0 OR installment_id IN (SELECT i.id FROM scoped_installments i
+        JOIN scoped_loans l ON l.id=i.loan_id WHERE l.company_id=@company_id))
+    GROUP BY payment_date ORDER BY payment_date`,
     )
-    .all(start, end));
+    .all({ start, end, company_id: company_id ?? 0 }));
 }
 
 export async function portfolioStatus(date, attention) {
@@ -85,23 +88,49 @@ const reportRows = `${interestAllocation}, financial AS (
     i.fee AS "lateFee" FROM financial i JOIN scoped_clients c ON c.id=i.client_id
   )`;
 
-export async function monthlyReport(start, end, date) {
+// The top row uses one cohort: non-cancelled loans originated in the period.
+// Payments are cumulative for those contracts, including receipts in later months.
+// amount already contains principal + interest; late_fee_amount is separate.
+export async function reportMetrics({ start, end, company_id }) {
+  return database().prepare(`WITH filtered_loans AS (
+    SELECT id,principal_amount,interest_amount FROM scoped_loans
+    WHERE status<>'cancelled' AND loan_date BETWEEN @start AND @end
+      AND (@company_id=0 OR company_id=@company_id)
+  ), paid AS (
+    SELECT i.loan_id,SUM(p.amount) AS contract_received,SUM(p.late_fee_amount) AS fees
+    FROM scoped_payments p JOIN scoped_installments i ON i.id=p.installment_id
+    JOIN filtered_loans l ON l.id=i.loan_id
+    WHERE p.voided_at IS NULL GROUP BY i.loan_id
+  ) SELECT COALESCE(SUM(l.principal_amount),0) AS capital,
+    COALESCE(SUM(l.interest_amount),0) AS interest,
+    COALESCE(SUM(p.fees),0) AS "receivedLateFees",
+    COALESCE(SUM(COALESCE(p.contract_received,0)+COALESCE(p.fees,0)),0) AS received,
+    COALESCE(SUM(greatest(0,l.principal_amount+l.interest_amount-COALESCE(p.contract_received,0))),0) AS pending
+    FROM filtered_loans l LEFT JOIN paid p ON p.loan_id=l.id`)
+    .get({ start, end, company_id: company_id ?? 0 });
+}
+
+export async function monthlyReport(start, end, date, company_id) {
   const db = database();
-  const installments = (await db.prepare(`${reportRows} SELECT * FROM rows ORDER BY date,id`)
-    .all({ start, end, today: date }));
+  const params = { start, end, company_id: company_id ?? 0 };
+  const installments = (await db.prepare(`${reportRows} SELECT * FROM rows
+    WHERE (@company_id=0 OR "contractId" IN (SELECT id FROM scoped_loans WHERE company_id=@company_id)) ORDER BY date,id`)
+    .all({ ...params, today: date }));
   const contracts = (await db.prepare(`SELECT l.id,c.name AS client,l.principal_amount AS amount,l.loan_date AS date
     FROM scoped_loans l JOIN scoped_clients c ON c.id=l.client_id
-    WHERE l.status<>'cancelled' AND l.loan_date BETWEEN ? AND ? ORDER BY l.loan_date DESC,l.id DESC`)
-    .all(start, end));
+    WHERE l.status<>'cancelled' AND l.loan_date BETWEEN @start AND @end
+      AND (@company_id=0 OR l.company_id=@company_id) ORDER BY l.loan_date DESC,l.id DESC`)
+    .all(params));
   const cash = (await db.prepare(`${interestAllocation}, payment_allocation AS (
     SELECT p.*,i.interest_share,i.amount AS installment_amount,
       SUM(p.amount) OVER (PARTITION BY p.installment_id ORDER BY p.payment_date,p.id) AS cumulative_amount
     FROM scoped_payments p JOIN interest_allocation i ON i.id=p.installment_id WHERE p.voided_at IS NULL
+      AND (@company_id=0 OR i.loan_id IN (SELECT id FROM scoped_loans WHERE company_id=@company_id))
   ) SELECT COALESCE(SUM(amount+late_fee_amount),0) AS received,
     COALESCE(SUM(late_fee_amount),0) AS "receivedLateFees",
     COALESCE(SUM(money_share(cumulative_amount,interest_share,installment_amount)
       -money_share(cumulative_amount-amount,interest_share,installment_amount)+late_fee_amount),0) AS "realizedProfit"
-    FROM payment_allocation WHERE payment_date BETWEEN ? AND ?`).get(start, end));
+    FROM payment_allocation WHERE payment_date BETWEEN @start AND @end`).get(params));
   return { installments, contracts, cash };
 }
 

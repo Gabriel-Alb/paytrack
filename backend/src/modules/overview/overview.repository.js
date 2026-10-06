@@ -7,6 +7,7 @@ export const receiptDays = (...args) => repository('overview').receiptDays(...ar
 export const portfolioStatus = (...args) => repository('overview').portfolioStatus(...args);
 export const upcoming = (...args) => repository('overview').upcoming(...args);
 export const monthlyReport = (...args) => repository('overview').monthlyReport(...args);
+export const reportMetrics = (...args) => repository('overview').reportMetrics(...args);
 export const report = (...args) => repository('overview').report(...args);
 export const notifications = (...args) => repository('overview').notifications(...args);
 export const actionNotifications = (...args) => repository('overview').actionNotifications(...args);

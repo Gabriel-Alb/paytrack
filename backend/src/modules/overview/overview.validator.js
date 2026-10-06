@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { dateSchema, listSchema } from "../../shared/utils/validation.js";
+import { dateSchema, idSchema, listSchema } from "../../shared/utils/validation.js";
 
 export const reportSchema = listSchema
   .extend({
     start: dateSchema,
     end: dateSchema,
-    mode: z.enum(["day", "week", "month"]).default("day"),
+    mode: z.enum(["day", "week", "month", "metrics"]).default("day"),
+    company_id: idSchema.optional(),
     status: z.enum(["all", "paid", "partial", "unpaid"]).default("all"),
     sort: z
       .enum([
