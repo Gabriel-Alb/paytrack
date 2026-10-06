@@ -1,4 +1,5 @@
 import { database } from "../connection.js";
+import { noReceipt, feeRemaining } from './financial-sql.js';
 
 const groupBy = 'l.id, l.client_id, l.principal_amount, l.interest_percentage, l.interest_amount, l.total_amount, l.installment_count, l.late_fee_per_day, l.loan_date, l.first_due_date, l.status, l.notes, l.created_by, l.revision, l.created_at, l.updated_at, l.company_id, c.name, c.cpf, company.name';
 
@@ -6,7 +7,8 @@ const select = `SELECT l.*, c.name AS client_name, c.cpf AS client_cpf, company.
   MIN(i.amount) AS min_installment_amount, MAX(i.amount) AS max_installment_amount,
   COUNT(CASE WHEN i.status='paid' THEN 1 END) AS paid_installments,
   COALESCE(SUM(i.paid_amount),0) AS paid_amount,
-  COALESCE(SUM(CASE WHEN f.status<>'waived' THEN greatest(0,f.amount-f.paid_amount) ELSE 0 END),0) AS fee_remaining,
+  COALESCE(SUM(${feeRemaining}),0) AS fee_remaining,
+  COALESCE(MAX(CASE WHEN i.paid_amount<i.amount AND ${noReceipt} THEN greatest(0,CAST(day_number(@date)-day_number(i.due_date) AS INTEGER)) ELSE 0 END),0) AS collection_days_late,
   COALESCE(MAX(CASE WHEN i.paid_amount<i.amount THEN greatest(0,CAST(day_number(@date)-day_number(i.due_date) AS INTEGER)) ELSE 0 END),0) AS days_late
   FROM scoped_loans l JOIN scoped_clients c ON c.id=l.client_id
   JOIN companies company ON company.id=l.company_id
@@ -32,8 +34,8 @@ export async function listLoans(
 ) {
   const query = `WITH loan_rows AS (${select} WHERE (ascii_lower(c.name) LIKE ascii_lower(@search) ESCAPE '!' OR CAST(l.id AS TEXT)=@term OR ascii_lower(c.cpf) LIKE ascii_lower(@document) ESCAPE '!')
     AND (CAST(@client AS BIGINT) IS NULL OR l.client_id=@client) AND (CAST(@company AS BIGINT) IS NULL OR l.company_id=@company) GROUP BY ${groupBy}),
-    rows AS (SELECT *, CASE WHEN status IN ('paid','cancelled') THEN status WHEN days_late>@attention THEN 'overdue'
-      WHEN days_late>0 OR fee_remaining>0 THEN 'attention' ELSE 'on-time' END AS display_status FROM loan_rows)
+    rows AS (SELECT *, CASE WHEN status IN ('paid','cancelled') THEN status WHEN collection_days_late>@attention THEN 'overdue'
+      WHEN collection_days_late>0 THEN 'attention' ELSE 'on-time' END AS display_status FROM loan_rows)
     SELECT * FROM rows WHERE (CAST(@status AS TEXT) IS NULL OR display_status=@status OR (@status='active' AND status IN ('active','overdue')))`;
   const params = {
     search: `%${search.replaceAll('!', '!!')}%`,

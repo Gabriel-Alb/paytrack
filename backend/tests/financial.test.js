@@ -9,6 +9,7 @@ import { env } from '../src/config/env.js';
 import { seedDevelopment } from '../database/seed.js';
 import { createMaster } from '../src/modules/auth/auth.service.js';
 import { randomBytes } from 'node:crypto';
+import { refreshFinancialState } from '../src/modules/installments/installments.service.js';
 
 let api;
 const clientData = {
@@ -217,8 +218,9 @@ test('parcela paga mantém multa independente pendente, parcial e quitada', asyn
   assert.equal(i.status, 'paid');
   assert.equal(i.amount, 11000);
   assert.equal(i.late_fee_amount, 500);
-  assert.equal(l.status, 'overdue');
-  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'negativado');
+  assert.equal(l.status, 'active');
+  assert.equal(l.display_status, 'on-time');
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'ativo');
   let result = (
     await api
       .post(`/api/late-fees/${i.late_fee_id}/payments`)
@@ -600,6 +602,12 @@ async function receipts(l, entries = [], voidIds = [], status = 200) {
   }).expect(status)).body;
 }
 
+async function waive(l, ids = [l.installments[0].id], status = 200, extra = {}) {
+  return (await api.put(`/api/loans/${l.id}/payment-confirmation`).send({
+    revision: l.revision, receipts: [], waive_installment_ids: ids, ...extra,
+  }).expect(status)).body;
+}
+
 test('valor recebido integral quita a parcela e registra a divisão e o autor na auditoria', async () => {
   let l = await loan({ installment_count: 1 });
   l = await pay(l, 11000);
@@ -639,9 +647,9 @@ test('somente multa mantém R$ 110 da parcela e multa paga não volta a ser cobr
   }).expect(201)).body.loan;
   assert.equal(l.installments[0].paid_amount, 0);
   assert.equal(l.installments[0].late_fee_paid_amount, 2000);
-  assert.equal(l.installments[0].status, 'overdue');
+  assert.equal(l.installments[0].status, 'partial');
   assert.equal(l.installments[0].paid_at, null);
-  assert.equal(l.status, 'overdue');
+  assert.equal(l.status, 'active');
   for (let n = 0; n < 2; n++) {
     l = (await api.get(`/api/loans/${l.id}`).expect(200)).body;
     assert.equal(l.installments[0].late_fee_amount - l.installments[0].late_fee_paid_amount, 0);
@@ -809,8 +817,8 @@ test('valida centavos, excesso, cronologia, revisão e isolamento no novo fluxo'
 
 test('multa dispensada e pagamentos antigos preservam seus valores', async () => {
   let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -2), late_fee_per_day: 1000 });
-  await database().prepare("UPDATE late_fees SET status='waived' WHERE installment_id=?").run(l.installments[0].id);
   l = await receipts(l, [{ amount: 9000 }]);
+  l = await waive(l);
   assert.equal(l.payments[0].amount, 9000);
   assert.equal(l.payments[0].late_fee_amount, 0);
   const old = l.payments[0];
@@ -891,4 +899,200 @@ test('redução remove somente parcelas sem histórico e mantém quitação e sa
   assert.deepEqual(l.payments,history);
   assert.equal(l.installments.length,2);
   assert.equal((await api.get('/api/dashboard/summary')).body.portfolio,10000);
+});
+
+for (const [label, receipt, principalPaid] of [
+  ['parcela parcial', { amount: 1 }, false],
+  ['parcela integral', { amount: 11000 }, true],
+  ['multa parcial', { amount: 1, fee_only: true }, false],
+  ['multa integral', { amount: 1000, fee_only: true }, false],
+]) test(`recebimento de ${label} impede atraso automático indefinidamente sem apagar dias e multa`, async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -8) });
+  assert.equal(l.display_status, 'overdue');
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'negativado');
+  l = await receipts(l, [receipt]);
+  assert.equal(l.display_status, 'on-time');
+  assert.equal(l.status, 'active');
+  assert.equal(l.installments[0].has_receipt, 1);
+  assert.equal(l.installments[0].days_late, 8);
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'ativo');
+  for (const status of ['attention', 'overdue'])
+    assert.equal((await api.get('/api/loans').query({ status })).body.total, 0);
+  const dashboard = (await api.get('/api/dashboard/summary')).body;
+  assert.deepEqual(dashboard.portfolio_status, { total: 1, regular: 1, attention: 0, overdue: 0 });
+  const notices = (await api.get('/api/notifications')).body;
+  assert.equal(notices.filter(item => item.type === 'overdue').length, 0);
+  const monthly = (await api.get('/api/reports').query({ mode: 'month', start: addDays(today(), -10), end: today() })).body;
+  assert.equal(monthly.contractStatuses[0].status, 'on-time');
+  assert.equal(monthly.agenda[0].late, 0);
+  // Refresh with a distant date without rewriting or manufacturing a receipt.
+  await refreshFinancialState(l.id, addDays(today(), 3650));
+  const fee = await database().prepare('SELECT * FROM late_fees WHERE installment_id=?').get(l.installments[0].id);
+  assert.equal(fee.days_late, principalPaid ? 8 : 3658);
+  assert.equal(fee.amount, fee.days_late * 125);
+  assert.equal((await database().prepare('SELECT status FROM clients WHERE id=?').get(l.client_id)).status, 'ativo');
+  assert.equal((await database().prepare('SELECT status FROM loans WHERE id=?').get(l.id)).status, 'active');
+});
+
+test('abono individual preserva multa original, recebimentos, caixa e auditoria separada', async () => {
+  let l = await loan({ installment_count: 2, first_due_date: addDays(today(), -10), late_fee_per_day: 1000 });
+  l = await receipts(l, [{ amount: 3000, fee_only: true }]);
+  const originalPayments = l.payments;
+  const other = l.installments[1];
+  const stale = l;
+  l = await waive(l);
+  const i = l.installments[0];
+  assert.equal(i.late_fee_amount, 10000);
+  assert.equal(i.late_fee_paid_amount, 3000);
+  assert.equal(i.late_fee_waived_amount, 7000);
+  assert.equal(i.late_fee_remaining, 0);
+  assert.equal(i.paid_amount, 0);
+  assert.equal(i.late_fee_status, 'waived');
+  assert.deepEqual(l.payments, originalPayments);
+  for (const key of ['id', 'amount', 'paid_amount', 'due_date', 'status', 'late_fee_amount', 'late_fee_paid_amount', 'late_fee_waived_amount'])
+    assert.equal(l.installments[1][key], other[key]);
+  // The other unpaid installment still determines delinquency.
+  assert.equal(l.display_status, 'overdue');
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'negativado');
+  assert.equal(l.fee_waivers.length, 1);
+  assert.equal(l.fee_waivers[0].installment_id, i.id);
+  assert.equal(l.fee_waivers[0].waived_amount, 7000);
+  assert.equal(l.fee_waivers[0].actor_id, originalPayments[0].created_by);
+  assert.equal(l.fee_waivers[0].actor_name, 'Test Master');
+  assert.ok(l.fee_waivers[0].created_at > 0);
+  assert.equal((await waive(stale, [i.id], 409)).error.code, 'STALE_LOAN');
+  assert.equal((await waive(l, [i.id], 409)).error.code, 'NO_PENDING_FEE');
+  const report = (await api.get('/api/reports').query({ start: addDays(today(), -10), end: today() })).body;
+  assert.equal(report.summary.received, 3000);
+  assert.equal(report.summary.pending, 20000);
+  assert.equal(report.items.find(item => item.id === i.id).lateFeeWaived, 7000);
+  assert.equal((await api.get('/api/dashboard/summary')).body.received, 3000);
+  const monthly = (await api.get('/api/reports').query({ mode: 'month', start: addDays(today(), -10), end: today() })).body;
+  assert.equal(monthly.summary.receivedLateFees, 3000);
+  assert.equal(monthly.summary.realizedProfit, 3000);
+  assert.equal(monthly.summary.expectedProfit, 13000);
+  l = (await api.get(`/api/loans/${l.id}`)).body;
+  assert.equal(l.installments[0].late_fee_waived_amount, 7000);
+  await refreshFinancialState(l.id, addDays(today(), 3));
+  const grown = await database().prepare('SELECT * FROM late_fees WHERE installment_id=?').get(i.id);
+  assert.equal(grown.amount, 13000);
+  assert.equal(grown.waived_amount, 7000);
+  assert.equal(grown.paid_amount, 3000);
+  assert.equal(grown.amount - grown.waived_amount - grown.paid_amount, 3000);
+});
+
+for (const receipt of [{ amount: 100 }, { amount: 11000 }, { amount: 1, fee_only: true }])
+  test(`abono aceita recebimento de parcela ou multa: ${JSON.stringify(receipt)}`, async () => {
+    let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
+    l = await receipts(l, [receipt]);
+    const before = l.payments;
+    l = await waive(l);
+    assert.equal(l.installments[0].late_fee_remaining, 0);
+    assert.equal(l.installments[0].late_fee_waived_amount, 500 - (receipt.fee_only ? 1 : 0));
+    assert.deepEqual(l.payments, before);
+    assert.equal(l.status, receipt.amount === 11000 ? 'paid' : 'active');
+    assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, receipt.amount === 11000 ? 'quitado' : 'ativo');
+  });
+
+test('abono rejeita parcela sem recebimento, outra parcela, duplicação e recebimento estornado', async () => {
+  let l = await loan({ installment_count: 2, first_due_date: addDays(today(), -5) });
+  assert.equal((await waive(l, undefined, 409)).error.code, 'WAIVER_REQUIRES_RECEIPT');
+  l = await receipts(l, [{ amount: 100 }]);
+  assert.equal((await waive(l, [l.installments[1].id], 409)).error.code, 'WAIVER_REQUIRES_RECEIPT');
+  await waive(l, [l.installments[0].id, l.installments[0].id], 400);
+  const another = (await api.post('/api/loans').send({ company_id: 2, client_id: l.client_id,
+    principal_amount: 100, installment_count: 1, loan_date: today(), first_due_date: today() }).expect(201)).body;
+  await waive(l, [another.installments[0].id], 404);
+  const before = await snapshot();
+  await waive(l, undefined, 409, { void_payment_ids: [l.payments[0].id] });
+  assert.deepEqual(await snapshot(), before);
+  l = await receipts(l, [], [l.payments[0].id]);
+  assert.equal((await waive(l, undefined, 409)).error.code, 'WAIVER_REQUIRES_RECEIPT');
+});
+
+test('abono e auditoria fazem rollback integral se outra parcela ou auditoria falhar', async () => {
+  let l = await loan({ installment_count: 2, first_due_date: addDays(today(), -5) });
+  l = await receipts(l, [{ amount: 100 }]);
+  const before = await snapshot();
+  const audit = await database().prepare('SELECT * FROM auth_audit_logs').all();
+  await waive(l, l.installments.map(item => item.id), 409);
+  assert.deepEqual(await snapshot(), before);
+  assert.deepEqual(await database().prepare('SELECT * FROM auth_audit_logs').all(), audit);
+  await injectFailure({ name: 'fail_waiver_audit', event: 'INSERT', table: 'auth_audit_logs', condition: "NEW.event='late_fee_waived'" });
+  await waive(l, undefined, 409);
+  assert.deepEqual(await snapshot(), before);
+  assert.deepEqual(await database().prepare('SELECT * FROM auth_audit_logs').all(), audit);
+});
+
+test('recebimento não desfaz negativação manual e estorno explícito permite reclassificação', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -5) });
+  await api.patch(`/api/clients/${l.client_id}`).send({ status: 'negativado' }).expect(200);
+  l = await receipts(l, [{ amount: 100 }]);
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'negativado');
+  l = await receipts(l, [], [l.payments[0].id]);
+  assert.equal(l.display_status, 'overdue');
+  assert.equal(l.installments[0].has_receipt, 0);
+});
+
+test('abono é descontado das prévias e de todos os caminhos de recebimento sem dupla cobrança', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
+  l = await receipts(l, [{ amount: 100, fee_only: true }]);
+  l = await waive(l);
+  const i = l.installments[0];
+  const preview = (await api.post(`/api/installments/${i.id}/payment-preview`).send({ payment_date: today() }).expect(200)).body;
+  assert.equal(preview.late_fee_amount, 500);
+  assert.equal(preview.late_fee_remaining, 0);
+  await receipts(l, [{ amount: 1, fee_only: true }], [], 409);
+  await api.post(`/api/late-fees/${i.late_fee_id}/payments`).send({ amount: 1, revision: l.revision, payment_date: today() }).expect(409);
+  await confirm(l, [select(1, 101)], 409);
+  await api.patch(`/api/loans/${l.id}`).send({ revision: l.revision, late_fee_per_day: 1 }).expect(409);
+  l = await receipts(l, [{ amount: 11000 }]);
+  assert.equal(l.status, 'paid');
+  assert.equal(l.installments[0].late_fee_amount, 500);
+  assert.equal(l.installments[0].late_fee_paid_amount, 100);
+  assert.equal(l.installments[0].late_fee_waived_amount, 400);
+  await refreshFinancialState(l.id, addDays(today(), 365));
+  const frozen = await database().prepare('SELECT * FROM late_fees WHERE id=?').get(i.late_fee_id);
+  assert.equal(frozen.amount, 500);
+  assert.equal(frozen.days_late, 4);
+});
+
+test('novas multas após abono aceitam novo abono e recebimento sem voltar à negativação', async t => {
+  const { getLoan } = await import('../src/modules/loans/loans.service.js');
+  const { confirmPayments } = await import('../src/modules/payments/payments.service.js');
+  const { payFee } = await import('../src/modules/late-fees/late-fees.service.js');
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
+  l = await receipts(l, [{ amount: 125, fee_only: true }]);
+  l = await waive(l);
+  const actor = await database().prepare('SELECT * FROM users WHERE id=?').get(l.payments[0].created_by);
+  const nextDay = Date.now() + 86400000;
+  t.mock.timers.enable({ apis: ['Date'], now: nextDay });
+  l = await getLoan(l.id);
+  assert.equal(l.installments[0].late_fee_remaining, 125);
+  assert.equal(l.display_status, 'on-time');
+  l = await confirmPayments(l.id, { revision: l.revision, receipts: [], waive_installment_ids: [l.installments[0].id] }, actor);
+  assert.equal(l.installments[0].late_fee_waived_amount, 500);
+  assert.equal(l.fee_waivers.length, 2);
+  assert.equal(l.fee_waivers[1].waived_amount, 125);
+  assert.equal(l.payments.length, 1);
+  t.mock.timers.setTime(nextDay + 86400000);
+  l = await getLoan(l.id);
+  l = (await payFee(l.installments[0].late_fee_id, { revision: l.revision, amount: 125, payment_date: today() }, actor)).loan;
+  assert.equal(l.installments[0].late_fee_amount, 750);
+  assert.equal(l.installments[0].late_fee_paid_amount, 250);
+  assert.equal(l.installments[0].late_fee_waived_amount, 500);
+  assert.equal(l.installments[0].late_fee_remaining, 0);
+  assert.equal(l.display_status, 'on-time');
+});
+
+test('quitação retroativa não reduz multa já abonada nem modifica o histórico', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
+  const yesterday = addDays(today(), -1);
+  l = await receipts(l, [{ amount: 125, fee_only: true, payment_date: yesterday }]);
+  l = await waive(l);
+  const before = await snapshot();
+  const error = await receipts(l, [{ amount: 11000, payment_date: yesterday }], [], 409);
+  assert.equal(error.error.code, 'WAIVER_DATE_CONFLICT');
+  await confirm(l, [select(1, 125, yesterday)], 409);
+  assert.deepEqual(await snapshot(), before);
 });

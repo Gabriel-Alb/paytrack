@@ -82,7 +82,7 @@ async function monthlyReport({ start, end, company_id }) {
     summary.pending += row.pending;
     summary.expectedInterest += row.expectedInterest;
     summary.expectedProfit += row.expectedProfit;
-    const status = visualStatus(row.installmentDaysLate, Boolean(row.feePending));
+    const status = visualStatus(row.collectionDaysLate);
     const day = agenda.get(row.date) ?? {
       date: row.date, count: 0, expected: 0, received: 0, paid: 0, pending: 0, late: 0,
       status: 'on-time',
@@ -105,7 +105,7 @@ async function monthlyReport({ start, end, company_id }) {
     const due = dueByContract.get(loan.id);
     return {
       id: loan.id, client: loan.client_name,
-      status: visualStatus(loan.days_late, loan.fee_remaining > 0), daysLate: loan.days_late,
+      status: visualStatus(loan.collection_days_late), daysLate: loan.days_late,
       date: due.representative.date, installmentNumber: due.representative.installmentNumber,
       installmentCount: loan.installment_count, expected: due.expected, pending: due.pending,
     };

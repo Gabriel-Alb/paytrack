@@ -12,8 +12,24 @@ import {
   insertPayment,
   lastPaymentDate,
 } from "../payments/payments.repository.js";
-import { findFee } from "./late-fees.repository.js";
+import { findFee, addWaiver } from "./late-fees.repository.js";
+import { recordAction } from '../auth/auth.repository.js';
 import { daysLate } from "../../shared/utils/dates.js";
+
+// Called inside the existing payment confirmation transaction and revision check.
+export async function waiveInstallmentFee(loan, installmentId, actor) {
+  const installment = requireRecord(loan.installments.find(item => item.id === installmentId), 'Parcela');
+  const hasReceipt = loan.payments.some(payment => payment.installment_id === installmentId && !payment.voided_at);
+  if (!hasReceipt) conflict('WAIVER_REQUIRES_RECEIPT', 'Registre um recebimento nesta parcela antes de abonar a multa.');
+  const amount = installment.late_fee_remaining;
+  if (!amount) conflict('NO_PENDING_FEE', 'Esta parcela não possui multa pendente para abonar.');
+  requireRecord(actor, 'Responsável');
+  await addWaiver(installment.late_fee_id, amount);
+  await recordAction('late_fee_waived', actor, 'loan', loan.id, {
+    loanId: loan.id, installment_id: installmentId, installment_number: installment.installment_number,
+    waived_amount: amount, customer: loan.client_name,
+  });
+}
 
 export async function getFee(id) {
   (await refreshFinancialState());
@@ -42,8 +58,7 @@ export async function payFee(id, data, actor) {
           "Pagamento da multa não pode anteceder os recebimentos registrados.",
         );
       if (
-        fee.status === "waived" ||
-        data.amount > Math.min(fee.amount, availableAtDate) - fee.paid_amount
+        data.amount > Math.max(0, Math.min(fee.amount, availableAtDate) - fee.paid_amount - fee.waived_amount)
       ) {
         conflict(
           "FEE_PAYMENT_EXCEEDS_BALANCE",

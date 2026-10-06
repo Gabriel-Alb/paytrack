@@ -1,4 +1,5 @@
 import { database } from "../connection.js";
+import { noReceipt } from './financial-sql.js';
 
 export async function portfolioAt(date) {
   return (await database()
@@ -36,12 +37,11 @@ export async function portfolioStatus(date, attention) {
   return (await database()
     .prepare(
       `WITH balances AS (SELECT l.id,
-    MAX(CASE WHEN i.paid_amount<i.amount THEN greatest(0,day_number(@date)-day_number(i.due_date)) ELSE 0 END) AS days,
-    SUM(CASE WHEN f.status<>'waived' THEN greatest(0,f.amount-f.paid_amount) ELSE 0 END) AS fees
+    MAX(CASE WHEN i.paid_amount<i.amount AND ${noReceipt} THEN greatest(0,day_number(@date)-day_number(i.due_date)) ELSE 0 END) AS days
     FROM scoped_loans l JOIN scoped_installments i ON i.loan_id=l.id LEFT JOIN scoped_late_fees f ON f.installment_id=i.id
     WHERE l.status IN ('active','overdue') GROUP BY l.id, l.client_id, l.principal_amount, l.interest_percentage, l.interest_amount, l.total_amount, l.installment_count, l.late_fee_per_day, l.loan_date, l.first_due_date, l.status, l.notes, l.created_by, l.revision, l.created_at, l.updated_at, l.company_id)
-    SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN days=0 AND COALESCE(fees,0)=0 THEN 1 ELSE 0 END),0) AS regular,
-      COALESCE(SUM(CASE WHEN days<=@attention AND (days>0 OR fees>0) THEN 1 ELSE 0 END),0) AS attention,
+    SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN days=0 THEN 1 ELSE 0 END),0) AS regular,
+      COALESCE(SUM(CASE WHEN days<=@attention AND days>0 THEN 1 ELSE 0 END),0) AS attention,
       COALESCE(SUM(CASE WHEN days>@attention THEN 1 ELSE 0 END),0) AS overdue FROM balances`,
     )
     .get({ date, attention }));
@@ -69,7 +69,9 @@ const interestAllocation = `WITH allocation AS (
 
 const reportRows = `${interestAllocation}, financial AS (
   SELECT i.*,
-    CASE WHEN f.status='waived' THEN 0 ELSE COALESCE(f.amount,0) END AS fee,
+    greatest(0,COALESCE(f.amount,0)-COALESCE(f.waived_amount,0)) AS fee,
+    COALESCE(f.amount,0) AS fee_accrued, COALESCE(f.waived_amount,0) AS fee_waived,
+    CASE WHEN ${noReceipt} THEN 0 ELSE 1 END AS has_receipt,
     COALESCE(f.paid_amount,0) AS fee_paid,
     (SELECT MAX(payment_date) FROM scoped_payments p WHERE p.installment_id=i.id AND p.voided_at IS NULL) AS payment_date
   FROM interest_allocation i LEFT JOIN scoped_late_fees f ON f.installment_id=i.id WHERE i.due_date BETWEEN @start AND @end
@@ -81,11 +83,13 @@ const reportRows = `${interestAllocation}, financial AS (
     money_share(i.paid_amount,i.interest_share,i.amount)+i.fee_paid AS "realizedProfit",
     CASE WHEN i.paid_amount>=i.amount AND i.fee_paid>=i.fee THEN 'paid'
       WHEN i.paid_amount+i.fee_paid>0 THEN 'partial' ELSE 'unpaid' END AS status,
-    CASE WHEN i.paid_amount<i.amount OR i.fee_paid<i.fee THEN greatest(0,CAST(day_number(@today)-day_number(i.due_date) AS INTEGER)) ELSE 0 END AS "daysLate",
+    greatest(0,CAST(day_number(COALESCE(i.paid_at,@today))-day_number(i.due_date) AS INTEGER)) AS "daysLate",
+    CASE WHEN i.paid_amount<i.amount AND i.has_receipt=0 THEN greatest(0,CAST(day_number(@today)-day_number(i.due_date) AS INTEGER)) ELSE 0 END AS "collectionDaysLate",
     i.installment_number AS "installmentNumber",
     CASE WHEN i.paid_amount<i.amount THEN greatest(0,CAST(day_number(@today)-day_number(i.due_date) AS INTEGER)) ELSE 0 END AS "installmentDaysLate",
     CASE WHEN i.fee>i.fee_paid THEN 1 ELSE 0 END AS "feePending",
-    i.fee AS "lateFee" FROM financial i JOIN scoped_clients c ON c.id=i.client_id
+    i.fee_accrued AS "lateFee",i.fee_paid AS "lateFeePaid",i.fee_waived AS "lateFeeWaived",
+    greatest(0,i.fee-i.fee_paid) AS "lateFeeRemaining" FROM financial i JOIN scoped_clients c ON c.id=i.client_id
   )`;
 
 // The top row uses one cohort: non-cancelled loans originated in the period.
@@ -196,7 +200,7 @@ export async function notifications(date, includeActivity = false) {
     SELECT 'overdue-'||i.id,'overdue',c.name,i.amount-i.paid_amount,i.installment_number||'/'||l.installment_count,
       i.due_date||'T12:00:00Z',CAST(day_number(@date)-day_number(i.due_date) AS INTEGER),NULL
     FROM scoped_installments i JOIN scoped_loans l ON l.id=i.loan_id JOIN scoped_clients c ON c.id=l.client_id
-    WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date<@date
+    WHERE l.status<>'cancelled' AND i.paid_amount<i.amount AND i.due_date<@date AND ${noReceipt}
   ) AS notices ORDER BY datetime DESC LIMIT 50`,
     )
     .all({ date,includeActivity:Number(includeActivity) }));
@@ -204,7 +208,7 @@ export async function notifications(date, includeActivity = false) {
 
 export async function actionNotifications(includeActivity = true) {
   return (await database().prepare(`SELECT id,event,actor_id,actor_name,entity_type,entity_id,details,created_at
-    FROM scoped_auth_audit_logs WHERE entity_type='loan' OR (@includeActivity=1 AND entity_type IN ('client','payment'))
+    FROM scoped_auth_audit_logs WHERE (entity_type='loan' AND event<>'late_fee_waived') OR (@includeActivity=1 AND entity_type IN ('client','payment'))
     ORDER BY id DESC LIMIT 100`).all({ includeActivity: Number(includeActivity) }))
     .map((row) => ({...JSON.parse(row.details),id:`action-${row.id}`,event:row.event,
       type:{client:'registration',loan:'loan',payment:'payment'}[row.entity_type],

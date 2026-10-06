@@ -51,6 +51,8 @@ export const confirmationSchema = z.union([
       installment_number: z.number().int().min(1).max(120),
     })).max(120),
     void_payment_ids: z.array(z.number().int().positive().max(Number.MAX_SAFE_INTEGER)).max(1000).default([]),
+    waive_installment_ids: z.array(z.number().int().positive().max(Number.MAX_SAFE_INTEGER)).max(120).default([]),
   }).strict().refine(({ void_payment_ids }) => new Set(void_payment_ids).size === void_payment_ids.length,
-    'Pagamento repetido.'),
+    'Pagamento repetido.').refine(({ waive_installment_ids }) => new Set(waive_installment_ids).size === waive_installment_ids.length,
+    'Parcela repetida.'),
 ]);

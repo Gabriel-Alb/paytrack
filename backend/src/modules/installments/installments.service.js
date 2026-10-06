@@ -35,7 +35,7 @@ export async function refreshFinancialState(loanId = null, date = today()) {
       const status =
         loan.remaining === 0 && loan.fee_remaining === 0
           ? "paid"
-          : loan.days_late > 0 || loan.fee_remaining > 0
+          : loan.collection_days_late > 0
             ? "overdue"
             : "active";
       (await repository.saveLoanStatus(loan.id, status));
