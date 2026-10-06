@@ -31,6 +31,83 @@ async function create(api,company_id,name='Cliente isolado') {
 }
 const snapshot=async ()=>(await Promise.all(['clients','loans','installments','payments','late_fees'].map(async table=>(await database().prepare(`SELECT * FROM ${table}`).all()))));
 
+test('indicadores consolidam somente empresas acessíveis e combinam empresa com período', async () => {
+  const first = await create(a.api, 1);
+  const second = await create(b.api, 2);
+  await a.api.post(`/api/installments/${first.loan.installments[0].id}/payments`)
+    .send({ revision: first.loan.revision, amount: 1000, payment_date: today() }).expect(201);
+  await b.api.post(`/api/late-fees/${second.loan.installments[0].late_fee_id}/payments`)
+    .send({ revision: second.loan.revision, amount: 100, payment_date: today() }).expect(201);
+  const query = { mode: 'metrics', start: addDays(today(), -10), end: today() };
+  const metrics = async (api, extra = {}) => (await api.get('/api/reports').query({ ...query, ...extra }).expect(200)).body;
+  const one = { capital: 10000, interest: 1000, receivedLateFees: 0, received: 1000, pending: 10000 };
+  const two = { capital: 10000, interest: 1000, receivedLateFees: 100, received: 100, pending: 11000 };
+  const empty = { capital: 0, interest: 0, receivedLateFees: 0, received: 0, pending: 0 };
+  assert.deepEqual(await metrics(a.api), one);
+  assert.deepEqual(await metrics(b.api), two);
+  for (const api of [both.api, admin.api]) {
+    const consolidated = await metrics(api);
+    for (const key of Object.keys(one)) assert.equal(consolidated[key], one[key] + two[key]);
+    assert.deepEqual(await metrics(api, { company_id: 1 }), one);
+    assert.deepEqual(await metrics(api, { company_id: 2 }), two);
+    assert.deepEqual(await metrics(api, { company_id: 2, start: today() }), empty);
+  }
+  assert.deepEqual(await metrics(a.api, { company_id: 2 }), empty);
+  assert.deepEqual(await metrics(b.api, { company_id: 1 }), empty);
+  assert.deepEqual(await metrics(admin.api, { company_id: 999 }), empty);
+  const noAccess = await account('user');
+  assert.deepEqual(await metrics(noAccess.api), empty);
+  assert.deepEqual((await noAccess.api.get('/api/companies').expect(200)).body, []);
+  for (const company_id of ['abc', 0, -1, 1.5]) {
+    await admin.api.get('/api/reports').query({ ...query, company_id }).expect(400);
+  }
+  // Revocation takes effect on the next request, even with an old selected company.
+  await replaceUserCompanies(both.id, [1]);
+  assert.deepEqual(await metrics(both.api), one);
+  assert.deepEqual(await metrics(both.api, { company_id: 2 }), empty);
+  assert.deepEqual((await both.api.get('/api/companies').expect(200)).body.map(row => row.id), [1]);
+});
+
+test('empresa filtra todos os blocos mensais sem mudar critérios de datas nem permissões', async () => {
+  const first = await create(a.api, 1, 'Relatório A');
+  const second = await create(b.api, 2, 'Relatório B');
+  for (const [api, loan, amount] of [[a.api, first.loan, 100], [b.api, second.loan, 200]]) {
+    await api.post(`/api/installments/${loan.installments[0].id}/payments`)
+      .send({ revision: loan.revision, amount, payment_date: today() }).expect(201);
+  }
+  const report = async (api, extra = {}) => (await api.get('/api/reports').query({
+    mode: 'month', start: addDays(today(), -10), end: today(), ...extra,
+  }).expect(200)).body;
+  const one = await report(a.api), two = await report(b.api);
+  for (const api of [admin.api, both.api]) {
+    assert.deepEqual(await report(api, { company_id: 1 }), one);
+    assert.deepEqual(await report(api, { company_id: 2 }), two);
+    const all = await report(api);
+    assert.equal(all.contracts.length, 2);
+    assert.equal(all.contractStatuses.length, 2);
+    assert.deepEqual(all.receiptDays, [{ date: today(), value: 300 }]);
+    for (const key of Object.keys(one.summary)) assert.equal(all.summary[key], one.summary[key] + two.summary[key]);
+    for (const day of all.agenda) {
+      for (const key of ['count', 'expected', 'received', 'paid', 'pending', 'late']) {
+        assert.equal(day[key], one.agenda.find(row => row.date === day.date)[key] + two.agenda.find(row => row.date === day.date)[key]);
+      }
+    }
+  }
+  // Receipts retain their payment date; contracts retain loan date; agenda/statuses retain due date.
+  const cashOnly = await report(admin.api, { company_id: 2, start: today() });
+  assert.deepEqual(cashOnly.receiptDays, [{ date: today(), value: 200 }]);
+  for (const key of ['contracts', 'contractStatuses', 'agenda']) assert.deepEqual(cashOnly[key], []);
+  for (const [api, extra] of [[a.api, { company_id: 2 }], [b.api, { company_id: 1 }],
+    [admin.api, { company_id: 999 }], [admin.api, { company_id: 2, start: addDays(today(), 1), end: addDays(today(), 2) }]]) {
+    const empty = await report(api, extra);
+    for (const key of ['contracts', 'contractStatuses', 'agenda', 'receiptDays']) assert.deepEqual(empty[key], []);
+    assert.ok(Object.values(empty.summary).every(value => value === 0));
+  }
+  await replaceUserCompanies(both.id, [1]);
+  assert.deepEqual(await report(both.api), one);
+  assert.deepEqual((await report(both.api, { company_id: 2 })).receiptDays, []);
+});
+
 test('cliente multiempresa, criação por empresa e listas ativas, quitadas e negativadas persistem isoladamente', async () => {
   const client = (await admin.api.post('/api/clients').send(clientBody).expect(201)).body;
   assert.equal(client.company_id, undefined);

@@ -43,6 +43,7 @@ export async function dashboard() {
 }
 
 export async function report(query) {
+  if (query.mode === "metrics") return repository.reportMetrics(query);
   (await refreshFinancialState());
   if (query.mode === "month") return (await monthlyReport(query));
   const result = (await repository.report(pagination(query), today()));
@@ -69,9 +70,9 @@ export async function report(query) {
   return { ...result, chart, page: query.page, limit: query.limit };
 }
 
-async function monthlyReport({ start, end }) {
+async function monthlyReport({ start, end, company_id }) {
   const date = today();
-  const { installments, contracts, cash } = (await repository.monthlyReport(start, end, date));
+  const { installments, contracts, cash } = (await repository.monthlyReport(start, end, date, company_id));
   const summary = { capital: 0, ...cash, pending: 0, expectedInterest: 0, expectedProfit: 0 };
   for (const contract of contracts) summary.capital += contract.amount;
   const agenda = new Map();
@@ -100,7 +101,7 @@ async function monthlyReport({ start, end }) {
     if (row.pending && !due.representative.pending) due.representative = row;
     dueByContract.set(row.contractId, due);
   }
-  const contractStatuses = (await loansDueInPeriod(start, end, date)).map((loan) => {
+  const contractStatuses = (await loansDueInPeriod(start, end, date, company_id)).map((loan) => {
     const due = dueByContract.get(loan.id);
     return {
       id: loan.id, client: loan.client_name,
@@ -114,7 +115,7 @@ async function monthlyReport({ start, end }) {
     agenda: [...agenda.values()].map((day) => ({
       ...day, status: day.status === 'on-time' && day.pending > 0 && day.date > date ? 'pending' : day.status,
     })),
-    receiptDays: (await repository.receiptDays(start, end)),
+    receiptDays: (await repository.receiptDays(start, end, company_id)),
   };
 }
 

@@ -412,6 +412,45 @@ test('juros previstos mensais reutilizam o rateio exato das parcelas do período
   assert.equal(all.receivedLateFees, 0);
 });
 
+test('indicadores por mês de contratação incluem parciais de outros meses e separam multas do saldo contratual', async () => {
+  const origin = addDays(today(), -45);
+  const period = { start: origin.slice(0, 7) + '-01' };
+  period.end = addDays(addDays(period.start, 32).slice(0, 7) + '-01', -1);
+  let l = await loan({ loan_date: origin, installment_count: 1, first_due_date: addDays(today(), -3) });
+  const metrics = async (query = {}) => (await api.get('/api/reports')
+    .query({ mode: 'metrics', ...period, ...query }).expect(200)).body;
+  const empty = { capital: 0, interest: 0, receivedLateFees: 0, received: 0, pending: 0 };
+  assert.deepEqual(await metrics(), { capital: 10000, interest: 1000, receivedLateFees: 0, received: 0, pending: 11000 });
+  l = await pay(l, 3000, addDays(today(), -2));
+  l = (await api.post(`/api/late-fees/${l.installments[0].late_fee_id}/payments`)
+    .send({ amount: 75, payment_date: today(), revision: l.revision }).expect(201)).body.loan;
+  assert.deepEqual(await metrics(), { capital: 10000, interest: 1000, receivedLateFees: 75, received: 3075, pending: 8000 });
+  // A receipt this month does not bring a loan originated in another month into the cohort.
+  assert.deepEqual(await metrics({ start: today().slice(0, 7) + '-01', end: today() }), empty);
+  assert.deepEqual(await metrics({ company_id: 2 }), empty);
+  assert.deepEqual(await metrics({ start: origin, end: origin }), await metrics());
+  // Neither multiple receipts nor multiple installments may duplicate the loan's capital.
+  l = await pay(l, 8000);
+  assert.deepEqual(await metrics(), { capital: 10000, interest: 1000, receivedLateFees: 75, received: 11075, pending: 0 });
+  await confirm(l, []);
+  assert.deepEqual(await metrics(), { capital: 10000, interest: 1000, receivedLateFees: 0, received: 0, pending: 11000 });
+  const cancelled = (await api.post('/api/loans').send({ company_id: 1, client_id: l.client_id,
+    principal_amount: 20000, interest_percentage: '20', installment_count: 1,
+    loan_date: origin, first_due_date: today() }).expect(201)).body;
+  await api.patch(`/api/loans/${cancelled.id}`).send({ revision: cancelled.revision, status: 'cancelled' }).expect(200);
+  assert.deepEqual(await metrics(), { capital: 10000, interest: 1000, receivedLateFees: 0, received: 0, pending: 11000 });
+});
+
+test('indicadores usam juros financeiros integrais mesmo com parcelas futuras e juros zero', async () => {
+  const l = await loan({ loan_date: today(), first_due_date: addDays(today(), 30), installments: [3333, 3333, 4334] });
+  const metrics = async () => (await api.get('/api/reports')
+    .query({ mode: 'metrics', start: today(), end: today() }).expect(200)).body;
+  assert.deepEqual(await metrics(), { capital: 10000, interest: 1000, receivedLateFees: 0, received: 0, pending: 11000 });
+  await api.post('/api/loans').send({ company_id: 1, client_id: l.client_id, principal_amount: 12345,
+    interest_percentage: '0', installment_count: 1, loan_date: today(), first_due_date: today() }).expect(201);
+  assert.deepEqual(await metrics(), { capital: 22345, interest: 1000, receivedLateFees: 0, received: 0, pending: 23345 });
+});
+
 test('prévia congela multa na quitação e multa retroativa não excede saldo da data', async () => {
   let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
   const feeId = l.installments[0].late_fee_id;
