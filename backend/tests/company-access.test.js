@@ -22,16 +22,16 @@ async function account(role, companies=[]) {
 }
 beforeEach(async () => {(await openDatabase(':memory:')); clientIndex=0; admin=(await account('admin')); a=(await account('user',[1])); b=(await account('user',[2])); both=(await account('user',[1,2]));});
 afterEach(closeDatabase);
-const clientBody={name:'Cliente isolado',cpf:'52998224725'};
+const clientBody={name:'Cliente isolado',cpf:'52998224725',companyIds:[1,2]};
 async function create(api,company_id,name='Cliente isolado') {
-  const client=(await api.post('/api/clients').send({...clientBody,name,cpf:['52998224725','11144477735','12345678909'][clientIndex++]}).expect(201)).body;
+  const client=(await api.post('/api/clients').send({...clientBody,companyIds:[company_id ?? (api===b.api ? 2 : 1)],name,cpf:['52998224725','11144477735','12345678909'][clientIndex++]}).expect(201)).body;
   const loan=(await api.post('/api/loans').send({company_id,client_id:client.id,principal_amount:10000,interest_percentage:'10',installment_count:2,
     loan_date:addDays(today(),-10),first_due_date:addDays(today(),-2),late_fee_per_day:100}).expect(201)).body;
   return {client,loan};
 }
 const snapshot=async ()=>(await Promise.all(['clients','loans','installments','payments','late_fees'].map(async table=>(await database().prepare(`SELECT * FROM ${table}`).all()))));
 
-test('cliente global, criação por empresa e listas ativas, quitadas e negativadas persistem isoladamente', async () => {
+test('cliente multiempresa, criação por empresa e listas ativas, quitadas e negativadas persistem isoladamente', async () => {
   const client = (await admin.api.post('/api/clients').send(clientBody).expect(201)).body;
   assert.equal(client.company_id, undefined);
   const body = { client_id:client.id, principal_amount:10000, installment_count:1, loan_date:today(), first_due_date:today() };
@@ -64,10 +64,12 @@ test('cliente global, criação por empresa e listas ativas, quitadas e negativa
   await withCompanyAccess({role:'user',companyIds:[1]},async () => {
     await assert.rejects(database().prepare('UPDATE loans SET company_id=1 WHERE id=?').run(second.id));
   });
-  await assert.rejects(database().prepare('UPDATE loans SET company_id=2 WHERE id=?').run(first.id));
+  await withCompanyAccess({role:'user',companyIds:[1,2]}, async () => {
+    await assert.rejects(database().prepare('UPDATE loans SET company_id=2 WHERE id=?').run(first.id));
+  });
 });
 
-test('empresas dinâmicas, múltiplos vínculos, filtros e clientes globais e documentos únicos',async()=>{
+test('empresas dinâmicas, múltiplos vínculos, filtros e clientes vinculados e documentos únicos',async()=>{
   const first=await create(a.api,undefined,'Empresa A'),second=await create(b.api,undefined,'Empresa B');
   assert.equal(first.client.company_id,undefined);assert.equal(second.loan.company_id,2);
   assert.equal(first.loan.company_name,'Dinheiro Express');
@@ -80,7 +82,7 @@ test('empresas dinâmicas, múltiplos vínculos, filtros e clientes globais e do
     assert.equal((await admin.api.get(`/api/${path}?company_id=2`).expect(200)).body.items[0].company_id,2);
     assert.equal((await a.api.get(`/api/${path}?company_id=2`).expect(200)).body.total,0);
   }
-  await a.api.post('/api/clients').send(clientBody).expect(409);
+  await a.api.post('/api/clients').send({...clientBody,companyIds:[1]}).expect(409);
   await admin.api.post('/api/clients').send(clientBody).expect(409);
   await both.api.post('/api/clients').send(clientBody).expect(409);
   await a.api.post('/api/companies').send({name:'Não permitido'}).expect(403);
@@ -197,7 +199,7 @@ test('papel MANAGER não concede acesso financeiro a empresas sem vínculo',asyn
   await admin.api.patch(`/api/companies/1/users/${a.id}`).send({role:'MANAGER'}).expect(200);
   const {client,loan}=await create(b.api,undefined,'Restrito B');
   for(const path of [`loans/${loan.id}`,`loans/${loan.id}/installments`,`late-fees/${loan.installments[0].late_fee_id}`]) await a.api.get(`/api/${path}`).expect(404);
-  assert.equal((await a.api.get(`/api/clients/${client.id}`).expect(200)).body.loans.length,0);
+  await a.api.get(`/api/clients/${client.id}`).expect(404);
   assert.equal((await a.api.get('/api/loans?company_id=2').expect(200)).body.total,0);
   for(const path of ['/dashboard/summary',`/reports?start=${addDays(today(),-10)}&end=${today()}`,'/notifications'])
     assert.ok(!JSON.stringify((await a.api.get(`/api${path}`).expect(200)).body).includes('Restrito B'));
@@ -208,7 +210,7 @@ test('papel MANAGER não concede acesso financeiro a empresas sem vínculo',asyn
 
 test('editar empréstimo reutiliza acesso para administrador, usuário e múltiplas empresas', async()=>{
   let {loan}=await create(b.api);
-  const other=(await a.api.post('/api/clients').send({...clientBody,cpf:'11144477735',name:'Cliente global'}).expect(201)).body;
+  const other=(await admin.api.post('/api/clients').send({...clientBody,cpf:'11144477735',name:'Cliente compartilhado'}).expect(201)).body;
   const withoutAccess=await account('user');
   for(const actor of [a,withoutAccess]) {
     const before=await snapshot();
@@ -240,6 +242,7 @@ test('administrador transfere contrato e histórico; escopo e auditoria acompanh
     .send({revision:loan.revision,amount:100,payment_date:today()}).expect(201)).body.loan;
   const history = loan.payments;
   const ids = loan.installments.map(i=>i.id);
+  await admin.api.patch('/api/clients/'+client.id).send({companyIds:[1,2]}).expect(200);
   const saved = (await admin.api.patch('/api/loans/'+loan.id)
     .send({revision:loan.revision,company_id:2,principal_amount:20000}).expect(200)).body;
   assert.equal(saved.company_id,2);
@@ -249,7 +252,7 @@ test('administrador transfere contrato e histórico; escopo e auditoria acompanh
   assert.deepEqual(saved.installments.map(i=>i.id),ids);
   await a.api.get('/api/loans/'+loan.id).expect(404);
   await b.api.get('/api/loans/'+loan.id).expect(200);
-  assert.equal((await admin.api.get('/api/clients?company_id=1')).body.total,0);
+  assert.equal((await admin.api.get('/api/clients?company_id=1')).body.total,1);
   assert.equal((await admin.api.get('/api/clients?company_id=2')).body.items[0].id,client.id);
   const audit = await database().prepare("SELECT * FROM auth_audit_logs WHERE event='loan_updated' ORDER BY id DESC LIMIT 1").get();
   assert.equal(audit.actor_id,admin.id);
@@ -260,7 +263,8 @@ test('administrador transfere contrato e histórico; escopo e auditoria acompanh
 });
 
 test('falha na auditoria reverte transferência e alterações financeiras juntas', async () => {
-  const {loan} = await create(a.api,1);
+  const {loan,client} = await create(a.api,1);
+  await admin.api.patch('/api/clients/'+client.id).send({companyIds:[1,2]}).expect(200);
   await injectFailure({name:'fail_transfer_audit',event:'INSERT',table:'auth_audit_logs',condition:"NEW.event='loan_updated'"});
   const before = await snapshot();
   await admin.api.patch('/api/loans/'+loan.id).send({revision:loan.revision,company_id:2,principal_amount:20000}).expect(409);

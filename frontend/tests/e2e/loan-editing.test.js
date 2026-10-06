@@ -27,8 +27,8 @@ test('edição de empréstimo: preenchimento, cálculos, cliente, erro, pagament
   await openDatabase(':memory:');
   await createMaster({name:'Admin QA',email:'loans@qa.test',cpf:'12345678909',password:'QaSenha123'});
   const actor = await database().prepare('SELECT * FROM users LIMIT 1').get();
-  const client = await createClient({name:'Cliente Original',cpf:'52998224725'},actor);
-  const other = await createClient({name:'Cliente Novo',cpf:'11144477735'},actor);
+  const client = await createClient({companyIds:[1],name:'Cliente Original',cpf:'52998224725'},actor);
+  const other = await createClient({companyIds:[2],name:'Cliente Novo',cpf:'11144477735'},actor);
   let loan = await createLoan({company_id:1,client_id:client.id,principal_amount:10000,interest_percentage:'10',installment_count:3,
     installments:[5000,3000,3000],late_fee_per_day:100,loan_date:today(),first_due_date:today()},actor);
   const otherLoan = await createLoan({company_id:2,client_id:other.id,principal_amount:10000,interest_percentage:'0',installment_count:1,
@@ -143,7 +143,7 @@ test('edição de empréstimo: preenchimento, cálculos, cliente, erro, pagament
   // The shared form still creates a fresh contract after editing.
   await page.getByRole('button',{name:'Novo empréstimo',exact:true}).click();
   modal = page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Novo empréstimo',exact:true})});
-  await modal.getByLabel('Empresa',{exact:true}).selectOption('1');
+  await modal.getByLabel('Empresa',{exact:true}).selectOption('2');
   assert.equal(await modal.getByLabel('Valor emprestado').inputValue(),'');
   await modal.getByPlaceholder('Digite o nome do cliente').fill('Cliente Novo');
   await modal.getByRole('button',{name:/Cliente Novo/}).click();

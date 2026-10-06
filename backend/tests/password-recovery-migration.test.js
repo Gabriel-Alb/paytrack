@@ -30,7 +30,7 @@ test('SQLite v8 preserva contas v7, migra idempotentemente e reverte DDL com fal
     assert.ok(!db.pragma('table_info(users)').some(row => row.name==='must_change_password'));
     db.exec('DROP TABLE password_reset_requests');
     db.close(); db = openSqlite(path);
-    assert.equal(db.pragma('user_version',{simple:true}), 10);
+    assert.equal(db.pragma('user_version',{simple:true}), 11);
     const user = db.prepare('SELECT * FROM users WHERE id=7').get();
     assert.equal(user.password_hash,'hash-preservado');
     assert.equal(user.must_change_password,0); assert.equal(user.temporary_password_expires_at,null);

@@ -86,7 +86,7 @@ test('v6 preserva histórico, converte master, associa legado e não recria vín
     assert.equal((await db.prepare('SELECT COUNT(*) n FROM companies').get()).n,2);
     assert.deepEqual((await db.pragma('foreign_key_check')),[]);
     assert.equal((await db.pragma('foreign_keys',{simple:true})),1);
-    assert.equal((await db.pragma('user_version',{simple:true})), 10);
+    assert.equal((await db.pragma('user_version',{simple:true})), 11);
   } finally {(await closeDatabase());rmSync(directory,{recursive:true,force:true});}
 });
 
@@ -138,6 +138,7 @@ test('cliente global e contratos de duas empresas mantêm dados e isolamento ap�
   try {
     let db = await openDatabase(path);
     await db.prepare("INSERT INTO clients(name,cpf) VALUES('Global','52998224725')").run();
+    await db.exec('INSERT INTO client_companies(client_id,company_id) VALUES(1,1),(1,2)');
     for (const company of [1,2]) await db.prepare(`INSERT INTO loans(company_id,client_id,principal_amount,total_amount,installment_count,loan_date,first_due_date)
       VALUES(?,1,1000,1000,1,'2026-01-01','2026-01-02')`).run(company);
     const before = await db.prepare('SELECT * FROM loans ORDER BY id').all();
