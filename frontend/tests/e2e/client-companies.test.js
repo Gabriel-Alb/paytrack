@@ -1,0 +1,121 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const url = 'http://127.0.0.1:5186';
+
+test('clientes: cadastro por empresa, isolamento, edição administrativa e busca de empréstimos no navegador', {timeout:180000}, async t => {
+  await import('../../../backend/tests/setup-env.js');
+  process.env.FRONTEND_ORIGIN = url;
+  const { app } = await import('../../../backend/src/app.js');
+  const { openDatabase, closeDatabase, database } = await import('../../../backend/src/config/database.js');
+  const { hashPassword } = await import('../../../backend/src/modules/auth/auth.service.js');
+  const { insertUser } = await import('../../../backend/src/modules/auth/auth.repository.js');
+  const { replaceUserCompanies } = await import('../../../backend/src/modules/companies/companies.repository.js');
+  const { createClient } = await import('../../../backend/src/modules/clients/clients.service.js');
+  let api, vite, browser;
+  t.after(async () => {
+    await browser?.close(); await vite?.close();
+    if (api) { api.closeAllConnections(); await new Promise(resolve=>api.close(resolve)); }
+    await closeDatabase();
+  });
+  await openDatabase(':memory:');
+  const passwordHash = await hashPassword('QaSenha123');
+  for (const [email,role,companies] of [['admin@qa.test','admin',[]],['a@qa.test','user',[1]],['both@qa.test','user',[1,2]]]) {
+    const id = await insertUser({name:'Pessoa QA',email,cpf:null,passwordHash},role,'active');
+    await replaceUserCompanies(id,companies);
+  }
+  await createClient({name:'Cliente Restrito B',cpf:'11144477735',companyIds:[2]});
+  await database().prepare("INSERT INTO clients(name,cpf) VALUES('Legado sem empresa','12345678909')").run();
+  api = app.listen(33029,'127.0.0.1');
+  await new Promise(resolve=>api.once('listening',resolve));
+  const { createServer } = await import('vite');
+  vite = await createServer({mode:'test',root:fileURLToPath(new URL('../..',import.meta.url)),server:{host:'127.0.0.1',port:5186,strictPort:true,proxy:{'/api':'http://127.0.0.1:33029'}}});
+  await vite.listen();
+  browser = await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {})});
+  const artifacts = process.env.E2E_ARTIFACT_DIR || mkdtempSync(join(tmpdir(),'paytrack-client-companies-'));
+  t.diagnostic('Capturas: '+artifacts);
+  const errors = [];
+  async function pageFor(email) {
+    const context = await browser.newContext({viewport:{width:1440,height:1000}});
+    const page = await context.newPage();
+    page.on('pageerror',error=>errors.push(error.message));
+    page.on('console',message=>{if (['error','warning'].includes(message.type()) && !/status of (401|404)/.test(message.text())) errors.push(message.text());});
+    await page.goto(url+'/login');
+    await page.getByLabel('E-mail',{exact:true}).fill(email);
+    await page.locator('#password').fill('QaSenha123');
+    await page.getByRole('button',{name:'Entrar',exact:true}).click();
+    await page.waitForURL(url+'/');
+    await page.goto(url+'/clients');
+    await page.getByRole('button',{name:'Novo cliente',exact:true}).waitFor();
+    assert.equal(page.url(),url+'/clients');
+    assert.match(await page.title(),/PayTrack/i);
+    assert.equal(await page.locator('vite-error-overlay').count(),0);
+    return page;
+  }
+  const a = await pageFor('a@qa.test');
+  assert.equal(await a.getByText('Cliente Restrito B',{exact:true}).count(),0);
+  assert.equal(await a.getByText('Legado sem empresa',{exact:true}).count(),0);
+  await a.getByRole('button',{name:'Novo cliente',exact:true}).click();
+  let modal = a.getByRole('dialog');
+  await modal.getByLabel('Dinheiro Express',{exact:true}).waitFor();
+  assert.equal(await modal.getByLabel('Dinheiro Express',{exact:true}).isChecked(),true);
+  assert.equal(await modal.getByLabel('Platinum Finance',{exact:true}).count(),0);
+  await modal.getByLabel('Nome completo').fill('Cliente Novo A');
+  await modal.getByLabel('CPF',{exact:true}).fill('52998224725');
+  await modal.getByLabel('Telefone').fill('11999990000');
+  await a.screenshot({path:join(artifacts,'client-create-desktop.png'),animations:'disabled'});
+  await modal.getByRole('button',{name:'Cadastrar cliente',exact:true}).click();
+  await modal.waitFor({state:'hidden'});
+  await a.getByRole('button',{name:'Editar Cliente Novo A',exact:true}).click();
+  modal = a.getByRole('dialog');
+  await modal.getByText('O administrador gerencia os vínculos de empresa.').waitFor();
+  assert.equal(await modal.locator('input[type=checkbox]').count(),0);
+  await modal.getByRole('button',{name:'Cancelar',exact:true}).click();
+
+  const both = await pageFor('both@qa.test');
+  await both.getByRole('button',{name:'Novo cliente',exact:true}).click();
+  modal = both.getByRole('dialog');
+  await modal.getByLabel('Platinum Finance',{exact:true}).waitFor();
+  assert.equal(await modal.getByRole('button',{name:'Cadastrar cliente',exact:true}).isDisabled(),true);
+  await modal.getByLabel('Platinum Finance',{exact:true}).check();
+  await modal.getByLabel('Nome completo').fill('Cliente Escolhido B');
+  await modal.getByLabel('CPF',{exact:true}).fill('98765432100');
+  await modal.getByLabel('Telefone').fill('11999990000');
+  await modal.getByRole('button',{name:'Cadastrar cliente',exact:true}).click();
+  await modal.waitFor({state:'hidden'});
+
+  const admin = await pageFor('admin@qa.test');
+  await admin.getByRole('button',{name:'Editar Legado sem empresa',exact:true}).click();
+  modal = admin.getByRole('dialog');
+  await modal.getByText('Cliente antigo sem vínculo. Selecione a empresa responsável.').waitFor();
+  await modal.getByLabel('Dinheiro Express',{exact:true}).check();
+  await modal.getByLabel('Platinum Finance',{exact:true}).check();
+  await modal.getByLabel('Telefone').fill('11999990000');
+  await admin.setViewportSize({width:390,height:844});
+  assert.ok(await admin.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await admin.screenshot({path:join(artifacts,'client-links-mobile.png'),animations:'disabled'});
+  await modal.getByRole('button',{name:'Salvar alterações',exact:true}).click();
+  await modal.waitFor({state:'hidden'});
+  await a.reload();
+  await a.getByRole('button',{name:'Editar Legado sem empresa',exact:true}).waitFor();
+  assert.equal(await a.getByText('Cliente Escolhido B',{exact:true}).count(),0);
+
+  await both.goto(url+'/loans');
+  await both.getByRole('button',{name:'Novo empréstimo',exact:true}).click();
+  modal = both.getByRole('dialog');
+  await modal.getByLabel('Empresa',{exact:true}).selectOption('2');
+  await modal.getByPlaceholder('Digite o nome do cliente').fill('Cliente');
+  await modal.getByRole('button',{name:/Cliente Restrito B/}).waitFor();
+  assert.equal(await modal.getByRole('button',{name:/Cliente Novo A/}).count(),0);
+  await modal.getByLabel('Empresa',{exact:true}).selectOption('1');
+  await modal.getByPlaceholder('Digite o nome do cliente').fill('Cliente');
+  await modal.getByRole('button',{name:/Cliente Novo A/}).waitFor();
+  assert.equal(await modal.getByRole('button',{name:/Cliente Restrito B/}).count(),0);
+  assert.deepEqual(errors,[]);
+});

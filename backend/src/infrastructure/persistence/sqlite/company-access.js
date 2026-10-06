@@ -3,7 +3,9 @@ import { canAccessCompany, companyAccessContext } from '../../../application/com
 export function installCompanyAccess(db) {
   db.function('can_access_company', canAccessCompany);
   db.function('is_company_admin', () => Number(companyAccessContext()?.role === 'admin'));
-  db.exec(`CREATE TEMP VIEW scoped_clients AS SELECT * FROM main.clients;
+  db.function('can_access_all_clients', () => Number(!companyAccessContext() || companyAccessContext().role === 'admin'));
+  db.exec(`CREATE TEMP VIEW scoped_clients AS SELECT c.* FROM main.clients c
+    WHERE can_access_all_clients() OR EXISTS(SELECT 1 FROM main.client_companies cc WHERE cc.client_id=c.id AND can_access_company(cc.company_id));
     CREATE TEMP VIEW scoped_loans AS SELECT * FROM main.loans WHERE can_access_company(company_id);
     CREATE TEMP VIEW scoped_installments AS SELECT i.* FROM main.installments i JOIN scoped_loans l ON l.id=i.loan_id;
     CREATE TEMP VIEW scoped_payments AS SELECT p.* FROM main.payments p JOIN scoped_installments i ON i.id=p.installment_id;
@@ -13,6 +15,11 @@ export function installCompanyAccess(db) {
       (a.entity_type='loan' AND a.entity_id IN (SELECT id FROM scoped_loans)) OR
       (a.entity_type='payment' AND a.entity_id IN (SELECT id FROM scoped_payments));`);
   // Defense in depth for all writes, including reconciliation and future services.
+  for (const operation of ['UPDATE', 'DELETE']) {
+    db.exec(`CREATE TEMP TRIGGER guard_clients_${operation} BEFORE ${operation} ON main.clients
+      WHEN NOT EXISTS(SELECT 1 FROM scoped_clients WHERE id=OLD.id)
+      BEGIN SELECT RAISE(ABORT,'Company access denied'); END;`);
+  }
   const owners = {
     loans: row => `can_access_company(${row}.company_id)`,
     installments: row => `EXISTS(SELECT 1 FROM scoped_loans WHERE id=${row}.loan_id)`,

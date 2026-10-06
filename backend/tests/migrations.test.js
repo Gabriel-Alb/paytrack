@@ -40,7 +40,7 @@ test('migração preserva pagamentos, multas e referências; reabertura é idemp
     assert.equal((await db.prepare('SELECT amount FROM installments').get()).amount, 1000);
     assert.equal((await db.prepare('SELECT paid_amount FROM late_fees').get()).paid_amount, 100);
     assert.equal((await db.prepare('SELECT status FROM loans').get()).status, 'overdue');
-    assert.equal((await db.pragma('user_version', { simple: true })), 10);
+    assert.equal((await db.pragma('user_version', { simple: true })), 11);
     assert.deepEqual((await db.pragma('foreign_key_check')), []);
     const payments = (await db.prepare('SELECT * FROM payments').all());
     (await closeDatabase());
@@ -95,7 +95,7 @@ test('migração de edição remove apenas trava do cliente e preserva pagamento
     legacy.exec("CREATE TRIGGER loans_client_immutable BEFORE UPDATE OF client_id ON loans WHEN NEW.client_id<>OLD.client_id BEGIN SELECT RAISE(ABORT,'Loan client is immutable'); END; PRAGMA user_version=8;");
     legacy.close();
     db=await openDatabase(path);
-    assert.equal(await db.pragma('user_version',{simple:true}), 10);
+    assert.equal(await db.pragma('user_version',{simple:true}), 11);
     await db.prepare('UPDATE loans SET client_id=2 WHERE id=1').run();
     await assert.rejects(db.prepare('UPDATE loans SET company_id=2 WHERE id=1').run());
     assert.deepEqual(await db.prepare('SELECT * FROM payments').all(),before);

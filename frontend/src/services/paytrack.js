@@ -29,6 +29,7 @@ export function loanView(loan) {
     status:loan.display_status,daysLate:loan.days_late,
     installmentRows:installments,
     installments:installments?.map((item) => item.value),
+    paymentHistory:loan.payments,
     payments:installments?.filter((item) => item.status==='paid').map((item) => ({
       installmentNumber:item.number,paidAt:item.paid_at,lateDays:item.days_late,
       lateFeeAmount:fromCents(item.late_fee_amount),lateFeeReceivedAmount:fromCents(item.late_fee_paid_amount),
@@ -61,9 +62,10 @@ export const loansApi = {
   async update(id,revision,form) {
     return loanView(await request(`/loans/${id}`,{ method:'PATCH',body:{ ...loanPayload(form),revision } }))
   },
-  async confirm(id,revision,payments) {
-    return loanView(await request(`/loans/${id}/payment-confirmation`,{ method:'PUT',body:{ revision,payments:payments.map((item) => ({
-      installment_number:item.installmentNumber,payment_date:item.paidAt,late_fee_received_amount:toCents(item.lateFeeReceivedAmount),
+  async confirm(id,revision,payments,voidPaymentIds=[]) {
+    return loanView(await request(`/loans/${id}/payment-confirmation`,{ method:'PUT',body:{ revision,void_payment_ids:voidPaymentIds,receipts:payments.map((item) => ({
+      installment_number:item.installmentNumber,payment_date:item.paidAt,amount:toCents(item.receivedAmount),fee_only:item.feeOnly,
+      late_fee_received_amount:item.lateFeeReceivedCents ?? 0,
     })) } }))
   },
 }

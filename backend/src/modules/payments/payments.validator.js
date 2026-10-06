@@ -9,6 +9,7 @@ import {
 export const paymentSchema = z
   .object({
     amount: positiveCents,
+    fee_only: z.boolean().default(false),
     payment_date: dateSchema,
     payment_method: z.string().trim().max(50).optional(),
     notes,
@@ -18,7 +19,7 @@ export const paymentSchema = z
 export const paymentPreviewSchema = z
   .object({ payment_date: dateSchema })
   .strict();
-export const confirmationSchema = z
+const legacyConfirmationSchema = z
   .object({
     revision: z.number().int().min(0),
     payments: z
@@ -40,3 +41,15 @@ export const confirmationSchema = z
       payments.length,
     "Parcela repetida.",
   );
+
+export const confirmationSchema = z.union([
+  legacyConfirmationSchema,
+  z.object({
+    revision: z.number().int().min(0),
+    receipts: z.array(paymentSchema.omit({ revision: true }).extend({
+      installment_number: z.number().int().min(1).max(120),
+    })).max(120),
+    void_payment_ids: z.array(z.number().int().positive().max(Number.MAX_SAFE_INTEGER)).max(1000).default([]),
+  }).strict().refine(({ void_payment_ids }) => new Set(void_payment_ids).size === void_payment_ids.length,
+    'Pagamento repetido.'),
+]);

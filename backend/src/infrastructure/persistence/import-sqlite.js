@@ -9,9 +9,9 @@ export async function importSqlite(sourcePath, target) {
   try {
     source.exec('BEGIN');
     const version = source.pragma('user_version', { simple:true });
-    if (![6,7,8,9,10].includes(version) || source.pragma('foreign_key_check').length ||
+    if (![6,7,8,9,10,11].includes(version) || source.pragma('foreign_key_check').length ||
       source.pragma('integrity_check')[0].integrity_check !== 'ok')
-      throw new Error('A origem precisa estar no schema SQLite v6 a v10, com referências válidas.');
+      throw new Error('A origem precisa estar no schema SQLite v6 a v11, com referências válidas.');
     return await target.transaction(async () => {
       await target.exec(`LOCK TABLE ${tables.join(',')} IN ACCESS EXCLUSIVE MODE`);
       for (const table of tables.filter(table => table !== 'companies')) {
@@ -26,6 +26,7 @@ export async function importSqlite(sourcePath, target) {
       for (const key of ['cpf','rg','cnh']) await target.exec(`ALTER TABLE clients DISABLE TRIGGER clients_${key}_unique`);
       const counts = {};
       for (const table of tables) {
+        if (table==='client_companies' && version<11) { counts[table]=0; continue; }
         if (table==='password_reset_requests' && version<8) { counts[table]=0; continue; }
         if (table==='user_access_companies' && source.pragma('user_version', {simple:true})===6) { counts[table]=0; continue; }
         const rows = source.prepare(`SELECT * FROM ${table}`).safeIntegers(true).all().map(row =>
@@ -46,7 +47,11 @@ export async function importSqlite(sourcePath, target) {
       }
       for (const user of source.prepare('SELECT id,approved_by FROM users WHERE approved_by IS NOT NULL').all())
         await target.prepare('UPDATE users SET approved_by=? WHERE id=?').run(user.approved_by,user.id);
-      for (const table of tables.filter(table => !['user_companies','user_access_companies','auth_rate_limits'].includes(table))) {
+      if (version < 11) {
+        await target.exec('INSERT INTO client_companies(client_id,company_id) SELECT DISTINCT client_id,company_id FROM loans ON CONFLICT(client_id,company_id) DO NOTHING');
+        counts.client_companies = (await target.prepare('SELECT COUNT(*) AS n FROM client_companies').get()).n;
+      }
+      for (const table of tables.filter(table => !['client_companies','user_companies','user_access_companies','auth_rate_limits'].includes(table))) {
         const { maximum } = await target.prepare(`SELECT COALESCE(MAX(id),0) AS maximum FROM ${table}`).get();
         const sequence = source.prepare('SELECT seq FROM sqlite_sequence WHERE name=?').get(table)?.seq ?? 0;
         const value = Math.max(maximum,sequence);

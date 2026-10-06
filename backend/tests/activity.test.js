@@ -11,7 +11,7 @@ import {hashPassword} from '../src/modules/auth/auth.service.js';
 import {insertUser} from '../src/modules/auth/auth.repository.js';
 
 let regular,admin,regularId,adminId;
-const clientData={name:'Maria José',cpf:'52998224725'};
+const clientData={companyIds:[1],name:'Maria José',cpf:'52998224725'};
 const events=async ()=>(await database().prepare('SELECT * FROM auth_audit_logs WHERE entity_type IS NOT NULL ORDER BY id').all());
 const snapshot=async ()=>(await Promise.all(['clients','loans','installments','payments','late_fees','auth_audit_logs'].map(async table=>(await database().prepare(`SELECT * FROM ${table}`).all()))));
 beforeEach(async()=>{
@@ -121,7 +121,7 @@ test('falha da auditoria reverte lançamentos, correções e cadastros sem notif
   let before=(await snapshot());
   await regular.post(`/api/installments/${loan.installments[0].id}/payments`).send({amount:100,payment_date:today(),revision:loan.revision}).expect(409);
   assert.deepEqual((await snapshot()),before);
-  await regular.post('/api/clients').send({name:'Outro cliente',cpf:'98765432100'}).expect(409);
+  await regular.post('/api/clients').send({companyIds:[1],name:'Outro cliente',cpf:'98765432100'}).expect(409);
   assert.deepEqual((await snapshot()),before);
   (await removeFailure('fail_activity'));
   loan=(await regular.put(`/api/loans/${loan.id}/payment-confirmation`).send({revision:loan.revision,payments:[selection(addDays(today(),-1))]}).expect(200)).body;

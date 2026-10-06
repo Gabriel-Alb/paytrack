@@ -8,6 +8,9 @@ const registeredBy = `COALESCE((SELECT a.actor_name FROM scoped_auth_audit_logs 
 async function auditPayment(event, actor, id) {
   if (!actor) return;
   const details = (await database().prepare(`SELECT c.name AS customer,p.amount+p.late_fee_amount AS amount,
+    p.amount AS installment_amount,p.late_fee_amount,
+    i.amount-COALESCE((SELECT SUM(active.amount) FROM scoped_payments active
+      WHERE active.installment_id=i.id AND active.voided_at IS NULL),0) AS remaining_amount,
     p.payment_date,i.installment_number||'/'||l.installment_count AS installment,l.id AS "loanId"
     FROM scoped_payments p JOIN scoped_installments i ON i.id=p.installment_id
     JOIN scoped_loans l ON l.id=i.loan_id JOIN scoped_clients c ON c.id=l.client_id WHERE p.id=?`).get(id));
@@ -60,6 +63,11 @@ export async function voidInstallmentPayments(id, actor) {
     )
     .all(id));
   for (const payment of voided) (await auditPayment('payment_voided',actor,payment.id));
+}
+
+export async function voidPayment(id, actor) {
+  await database().prepare('UPDATE payments SET voided_at=utc_now() WHERE id=? AND voided_at IS NULL').run(id);
+  await auditPayment('payment_voided', actor, id);
 }
 
 export async function lastPaymentDate(id) {

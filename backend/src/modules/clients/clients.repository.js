@@ -7,3 +7,5 @@ export const listClients = (...args) => repository('clients').listClients(...arg
 export const insertClient = (...args) => repository('clients').insertClient(...args);
 export const updateClient = (...args) => repository('clients').updateClient(...args);
 export const clientHistory = (...args) => repository('clients').clientHistory(...args);
+export const clientHasCompany = (...args) => repository('clients').clientHasCompany(...args);
+export const replaceClientCompanies = (...args) => repository('clients').replaceClientCompanies(...args);

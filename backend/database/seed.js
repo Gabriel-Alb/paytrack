@@ -26,6 +26,7 @@ export async function seedDevelopment() {
         if ((await database().prepare('SELECT id FROM clients WHERE cpf=?').get(example.cpf))) continue;
         const client = (await createClient(
           clientSchema.parse({
+            companyIds: [1],
             name: example.name,
             cpf: example.cpf,
             rg: `SEED${index + 1}`,
