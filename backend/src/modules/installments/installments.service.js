@@ -33,7 +33,7 @@ export async function refreshFinancialState(loanId = null, date = today()) {
     const balances = (await repository.loanBalances(loanId, date));
     for (const loan of balances) {
       const status =
-        loan.remaining === 0 && loan.fee_remaining === 0
+        loan.installment_count > 0 && loan.paid_installments === loan.installment_count
           ? "paid"
           : loan.collection_days_late > 0
             ? "overdue"

@@ -67,8 +67,8 @@ export async function reconcileInstallments(date, loanId) {
   (await database()
     .prepare(
       `UPDATE installments SET status=CASE
-      WHEN paid_amount>=amount THEN 'paid' WHEN paid_amount>0 THEN 'partial'
-      WHEN EXISTS(SELECT 1 FROM scoped_payments p WHERE p.installment_id=installments.id AND p.voided_at IS NULL AND p.late_fee_amount>0) THEN 'partial'
+      WHEN paid_amount>0 THEN 'paid'
+      WHEN EXISTS(SELECT 1 FROM scoped_payments p WHERE p.installment_id=installments.id AND p.voided_at IS NULL AND p.late_fee_amount>0) THEN 'paid'
       WHEN due_date<@date THEN 'overdue' ELSE 'pending' END,
     paid_at=CASE WHEN paid_amount>=amount THEN paid_at ELSE NULL END,
     updated_at=utc_now()
@@ -121,6 +121,8 @@ export async function loanBalances(loanId, date) {
   return (await database()
     .prepare(
       `SELECT l.id, l.client_id, l.status,
+    COUNT(i.id) AS installment_count,
+    COUNT(CASE WHEN i.status='paid' THEN 1 END) AS paid_installments,
     COALESCE(SUM(i.amount-i.paid_amount),0) AS remaining,
     COALESCE(SUM(${feeRemaining}),0) AS fee_remaining,
     COALESCE(MAX(CASE WHEN i.paid_amount<i.amount AND ${noReceipt} THEN greatest(0,CAST(day_number(@date)-day_number(i.due_date) AS INTEGER)) ELSE 0 END),0) AS collection_days_late,

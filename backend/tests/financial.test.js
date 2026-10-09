@@ -198,8 +198,8 @@ test('rejeita soma incorreta e personalização inválida sem criar contrato', a
 test('pagamento parcial, complementação e quitação atualizam todos os status', async () => {
   let l = await loan({ installment_count: 1 });
   l = await pay(l, 3000);
-  assert.equal(l.installments[0].status, 'partial');
-  assert.equal(l.status, 'active');
+  assert.equal(l.installments[0].status, 'paid');
+  assert.equal(l.status, 'paid');
   l = await pay(l, 8000);
   assert.equal(l.installments[0].status, 'paid');
   assert.equal(l.status, 'paid');
@@ -218,9 +218,9 @@ test('parcela paga mantém multa independente pendente, parcial e quitada', asyn
   assert.equal(i.status, 'paid');
   assert.equal(i.amount, 11000);
   assert.equal(i.late_fee_amount, 500);
-  assert.equal(l.status, 'active');
-  assert.equal(l.display_status, 'on-time');
-  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'ativo');
+  assert.equal(l.status, 'paid');
+  assert.equal(l.display_status, 'paid');
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'quitado');
   let result = (
     await api
       .post(`/api/late-fees/${i.late_fee_id}/payments`)
@@ -361,7 +361,7 @@ test('dashboard, relatório, pesquisa, paginação e notificações usam recebim
   assert.equal(report.chart[0].value, 3000);
   assert.equal(report.summary.partial, 1);
   assert.equal((await api.get('/api/notifications').expect(200)).body[0].amount, 3000);
-  assert.equal((await api.get('/api/loans').query({ status: 'on-time', limit: 1 })).body.total, 1);
+  assert.equal((await api.get('/api/loans').query({ status: 'on-time', limit: 1 })).body.total, 0);
   await api
     .get('/api/reports')
     .query({ start: today(), end: addDays(today(), -1) })
@@ -500,7 +500,7 @@ test('seed é atômico, idempotente e inclui todos os cenários', async () => {
   assert.equal((await seedDevelopment()), 0);
   assert.deepEqual((await snapshot()), before);
   assert.ok(before[1].some((l) => l.status === 'paid'));
-  assert.ok(before[2].some((i) => i.status === 'partial'));
+  assert.ok(before[2].some((i) => i.status === 'paid' && i.paid_amount > 0 && i.paid_amount < i.amount));
   assert.ok(before[4].some((f) => f.amount > f.paid_amount));
 });
 
@@ -629,10 +629,10 @@ test('R$ 90 recebidos de R$ 110 deixam R$ 20 em aberto e relatório parcial', as
   l = await receipts(l, [{ amount: 9000 }]);
   const i = l.installments[0];
   assert.equal(i.amount - i.paid_amount, 2000);
-  assert.equal(i.status, 'partial');
+  assert.equal(i.status, 'paid');
   assert.equal(i.paid_at, null);
-  assert.equal(l.status, 'active');
-  assert.equal(l.paid_installments, 0);
+  assert.equal(l.status, 'paid');
+  assert.equal(l.paid_installments, 1);
   const report = (await api.get('/api/reports').query({ start: today(), end: today() }).expect(200)).body;
   assert.equal(report.summary.received, 9000);
   assert.equal(report.summary.pending, 2000);
@@ -647,9 +647,9 @@ test('somente multa mantém R$ 110 da parcela e multa paga não volta a ser cobr
   }).expect(201)).body.loan;
   assert.equal(l.installments[0].paid_amount, 0);
   assert.equal(l.installments[0].late_fee_paid_amount, 2000);
-  assert.equal(l.installments[0].status, 'partial');
+  assert.equal(l.installments[0].status, 'paid');
   assert.equal(l.installments[0].paid_at, null);
-  assert.equal(l.status, 'active');
+  assert.equal(l.status, 'paid');
   for (let n = 0; n < 2; n++) {
     l = (await api.get(`/api/loans/${l.id}`).expect(200)).body;
     assert.equal(l.installments[0].late_fee_amount - l.installments[0].late_fee_paid_amount, 0);
@@ -670,7 +670,7 @@ test('R$ 50 abatem apenas a parcela mesmo com multa pendente; caixa e lucro usam
   assert.equal(l.payments[0].amount, 5000);
   assert.equal(l.payments[0].late_fee_amount, 0);
   assert.equal(l.installments[0].amount - l.installments[0].paid_amount, 6000);
-  assert.equal(l.installments[0].status, 'partial');
+  assert.equal(l.installments[0].status, 'paid');
   const report = (await api.get('/api/reports').query({ mode: 'month', start: addDays(today(), -10), end: today() }).expect(200)).body;
   assert.equal(report.summary.received, 5000);
   assert.equal(report.summary.receivedLateFees, 0);
@@ -707,7 +707,7 @@ test('multa de R$ 80 recebe R$ 30 e R$ 20; quitação cobra apenas os R$ 30 rest
   assert.equal(l.installments[0].paid_amount, 0);
   assert.equal(l.installments[0].late_fee_paid_amount, 5000);
   assert.equal(l.installments[0].late_fee_amount - l.installments[0].late_fee_paid_amount, 3000);
-  assert.notEqual(l.installments[0].status, 'paid');
+  assert.equal(l.installments[0].status, 'paid');
   assert.equal(l.payments.reduce((sum, p) => sum + p.amount + p.late_fee_amount, 0), 5000);
   await receipts(l, [{ amount: 3001, fee_only: true }], [], 409);
   await receipts(l, [{ amount: 6000, late_fee_received_amount: 8000 }], [], 409);
@@ -720,13 +720,13 @@ test('multa de R$ 80 recebe R$ 30 e R$ 20; quitação cobra apenas os R$ 30 rest
   assert.equal(preview.late_fee_remaining, 0);
 });
 
-test('múltiplos parciais só quitam ao receber o último centavo', async () => {
+test('múltiplos parciais mantêm classificação paga e só liquidam o saldo no último centavo', async () => {
   let l = await loan({ installment_count: 1 });
   for (const amount of [3000, 4000, 3999]) {
     l = await receipts(l, [{ amount }]);
-    assert.equal(l.installments[0].status, 'partial');
+    assert.equal(l.installments[0].status, 'paid');
     assert.equal(l.installments[0].paid_at, null);
-    assert.equal(l.paid_installments, 0);
+    assert.equal(l.paid_installments, 1);
   }
   l = await receipts(l, [{ amount: 1 }]);
   assert.equal(l.installments[0].paid_amount, 11000);
@@ -761,7 +761,7 @@ for (const feeOnly of [false, true]) {
     assert.equal(l.installments[0].paid_amount, 1000);
     assert.equal(l.installments[0].late_fee_paid_amount, 0);
     assert.equal(l.installments[0].late_fee_amount, 2000);
-    assert.equal(l.installments[0].status, 'partial');
+    assert.equal(l.installments[0].status, 'paid');
     const audit = await database().prepare("SELECT * FROM auth_audit_logs WHERE event='payment_voided'").get();
     assert.equal(audit.actor_id, first.created_by);
     const details = JSON.parse(audit.details);
@@ -777,15 +777,15 @@ for (const feeOnly of [false, true]) {
   });
 }
 
-test('estorno da última complementação reabre uma parcela quitada', async () => {
+test('estorno da última complementação reabre o saldo sem remover classificação paga', async () => {
   let l = await loan({ installment_count: 1 });
   l = await receipts(l, [{ amount: 9000 }, { amount: 2000 }]);
   assert.equal(l.status, 'paid');
   l = await receipts(l, [], [l.payments.at(-1).id]);
-  assert.equal(l.installments[0].status, 'partial');
+  assert.equal(l.installments[0].status, 'paid');
   assert.equal(l.installments[0].paid_amount, 9000);
   assert.equal(l.installments[0].paid_at, null);
-  assert.equal(l.status, 'active');
+  assert.equal(l.status, 'paid');
 });
 
 test('valida centavos, excesso, cronologia, revisão e isolamento no novo fluxo', async () => {
@@ -911,15 +911,15 @@ for (const [label, receipt, principalPaid] of [
   assert.equal(l.display_status, 'overdue');
   assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'negativado');
   l = await receipts(l, [receipt]);
-  assert.equal(l.display_status, 'on-time');
-  assert.equal(l.status, 'active');
+  assert.equal(l.display_status, 'paid');
+  assert.equal(l.status, 'paid');
   assert.equal(l.installments[0].has_receipt, 1);
   assert.equal(l.installments[0].days_late, 8);
-  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'ativo');
+  assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'quitado');
   for (const status of ['attention', 'overdue'])
     assert.equal((await api.get('/api/loans').query({ status })).body.total, 0);
   const dashboard = (await api.get('/api/dashboard/summary')).body;
-  assert.deepEqual(dashboard.portfolio_status, { total: 1, regular: 1, attention: 0, overdue: 0 });
+  assert.deepEqual(dashboard.portfolio_status, { total: 0, regular: 0, attention: 0, overdue: 0 });
   const notices = (await api.get('/api/notifications')).body;
   assert.equal(notices.filter(item => item.type === 'overdue').length, 0);
   const monthly = (await api.get('/api/reports').query({ mode: 'month', start: addDays(today(), -10), end: today() })).body;
@@ -930,8 +930,8 @@ for (const [label, receipt, principalPaid] of [
   const fee = await database().prepare('SELECT * FROM late_fees WHERE installment_id=?').get(l.installments[0].id);
   assert.equal(fee.days_late, principalPaid ? 8 : 3658);
   assert.equal(fee.amount, fee.days_late * 125);
-  assert.equal((await database().prepare('SELECT status FROM clients WHERE id=?').get(l.client_id)).status, 'ativo');
-  assert.equal((await database().prepare('SELECT status FROM loans WHERE id=?').get(l.id)).status, 'active');
+  assert.equal((await database().prepare('SELECT status FROM clients WHERE id=?').get(l.client_id)).status, 'quitado');
+  assert.equal((await database().prepare('SELECT status FROM loans WHERE id=?').get(l.id)).status, 'paid');
 });
 
 test('abono individual preserva multa original, recebimentos, caixa e auditoria separada', async () => {
@@ -990,8 +990,8 @@ for (const receipt of [{ amount: 100 }, { amount: 11000 }, { amount: 1, fee_only
     assert.equal(l.installments[0].late_fee_remaining, 0);
     assert.equal(l.installments[0].late_fee_waived_amount, 500 - (receipt.fee_only ? 1 : 0));
     assert.deepEqual(l.payments, before);
-    assert.equal(l.status, receipt.amount === 11000 ? 'paid' : 'active');
-    assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, receipt.amount === 11000 ? 'quitado' : 'ativo');
+    assert.equal(l.status, 'paid');
+    assert.equal((await api.get(`/api/clients/${l.client_id}`)).body.status, 'quitado');
   });
 
 test('abono rejeita parcela sem recebimento, outra parcela, duplicação e recebimento estornado', async () => {
@@ -1069,7 +1069,7 @@ test('novas multas após abono aceitam novo abono e recebimento sem voltar à ne
   t.mock.timers.enable({ apis: ['Date'], now: nextDay });
   l = await getLoan(l.id);
   assert.equal(l.installments[0].late_fee_remaining, 125);
-  assert.equal(l.display_status, 'on-time');
+  assert.equal(l.display_status, 'paid');
   l = await confirmPayments(l.id, { revision: l.revision, receipts: [], waive_installment_ids: [l.installments[0].id] }, actor);
   assert.equal(l.installments[0].late_fee_waived_amount, 500);
   assert.equal(l.fee_waivers.length, 2);
@@ -1082,7 +1082,7 @@ test('novas multas após abono aceitam novo abono e recebimento sem voltar à ne
   assert.equal(l.installments[0].late_fee_paid_amount, 250);
   assert.equal(l.installments[0].late_fee_waived_amount, 500);
   assert.equal(l.installments[0].late_fee_remaining, 0);
-  assert.equal(l.display_status, 'on-time');
+  assert.equal(l.display_status, 'paid');
 });
 
 test('quitação retroativa não reduz multa já abonada nem modifica o histórico', async () => {
@@ -1095,4 +1095,100 @@ test('quitação retroativa não reduz multa já abonada nem modifica o históri
   assert.equal(error.error.code, 'WAIVER_DATE_CONFLICT');
   await confirm(l, [select(1, 125, yesterday)], 409);
   assert.deepEqual(await snapshot(), before);
+});
+
+for (const feeOnly of [false, true]) {
+  test(`cinco parcelas de R$ 500 com R$ 20 cada ficam em Quitados: somente multa=${feeOnly}`, async () => {
+    let l = await loan({ principal_amount: 250000, interest_percentage: '0', installment_count: 5,
+      loan_date: addDays(today(), -20), first_due_date: addDays(today(), -10), late_fee_per_day: 1000 });
+    for (let number = 1; number <= 5; number++) {
+      l = await receipts(l, [{ installment_number: number, amount: 2000, fee_only: feeOnly }]);
+      assert.equal(l.paid_installments, number);
+      assert.equal(l.installments[number - 1].status, 'paid');
+      assert.equal(l.installments[number - 1].paid_at, null);
+      assert.equal(l.status, number === 5 ? 'paid' : 'overdue');
+    }
+    const history = l.payments;
+    assert.equal(l.principal_amount, 250000);
+    assert.equal(l.total_amount, 250000);
+    assert.equal(l.paid_amount, feeOnly ? 0 : 10000);
+    assert.equal(l.fee_remaining, feeOnly ? 30000 : 40000);
+    assert.equal(l.payments.reduce((sum, p) => sum + p.amount + p.late_fee_amount, 0), 10000);
+    for (const status of ['active', 'on-time', 'attention', 'overdue', 'paid']) {
+      const listed = (await api.get('/api/loans').query({ status }).expect(200)).body;
+      assert.equal(listed.total, status === 'paid' ? 1 : 0);
+    }
+    const dashboard = (await api.get('/api/dashboard/summary').expect(200)).body;
+    assert.equal(dashboard.received, 10000);
+    assert.equal(dashboard.portfolio, feeOnly ? 250000 : 240000);
+    assert.equal(dashboard.portfolio_status.total, 0);
+    const report = (await api.get('/api/reports').query({ start: addDays(today(), -20), end: today() }).expect(200)).body;
+    assert.equal(report.summary.received, 10000);
+    assert.equal(report.summary.pending, 280000);
+    const audit = await database().prepare("SELECT details FROM auth_audit_logs WHERE event='payment_created'").all();
+    assert.equal(audit.length, 5);
+    assert.equal(audit.reduce((sum, row) => sum + JSON.parse(row.details).amount, 0), 10000);
+    l = (await api.get('/api/loans/' + l.id).expect(200)).body;
+    assert.equal(l.display_status, 'paid');
+    assert.deepEqual(l.payments, history);
+    l = await receipts(l, [{ amount: 1000 }]);
+    assert.equal(l.status, 'paid');
+    assert.equal(l.paid_installments, 5);
+    assert.deepEqual(l.payments.slice(0, 5), history);
+    assert.equal(l.paid_amount, feeOnly ? 1000 : 11000);
+    assert.equal(l.installments[0].amount - l.installments[0].paid_amount, feeOnly ? 49000 : 47000);
+    l = await receipts(l, [], [history[4].id]);
+    assert.equal(l.paid_installments, 4);
+    assert.equal(l.status, 'overdue');
+    assert.equal(l.installments[4].status, 'overdue');
+  });
+}
+
+test('parcelas futuras sem recebimento impedem quitação até todas receberem', async () => {
+  let l = await loan({ installment_count: 3, first_due_date: addDays(today(), 1) });
+  assert.equal(l.status, 'active');
+  assert.equal(l.paid_installments, 0);
+  assert.ok(l.installments.every(i => i.status === 'pending'));
+  l = await receipts(l, [{ amount: l.installments[0].amount }]);
+  assert.equal(l.status, 'active');
+  assert.equal(l.paid_installments, 1);
+  l = await receipts(l, [{ installment_number: 2, amount: 1 }]);
+  assert.equal(l.status, 'active');
+  assert.equal(l.paid_installments, 2);
+  l = await receipts(l, [{ installment_number: 3, amount: 1 }]);
+  assert.equal(l.status, 'paid');
+  assert.equal(l.paid_installments, 3);
+});
+
+test('confirmação manual preserva parciais omitidos e valida cronologia antes de complementar', async () => {
+  let l = await loan({ installment_count: 2, first_due_date: addDays(today(), -2) });
+  l = await receipts(l, [{ amount: 100 }, { installment_number: 2, amount: 50, fee_only: true }]);
+  const history = l.payments;
+  const before = await snapshot();
+  assert.equal((await confirm(l, [select(1, 0, addDays(today(), -1))], 409)).error.code, 'PAYMENT_DATE_CONFLICT');
+  assert.deepEqual(await snapshot(), before);
+  l = await confirm(l, []);
+  assert.equal(l.status, 'paid');
+  assert.deepEqual(l.payments, history);
+  l = await confirm(l, [select(1), select(2, 50)]);
+  assert.equal(l.status, 'paid');
+  assert.equal(l.paid_amount, 11000);
+  assert.deepEqual(l.payments.slice(0, 2), history);
+  assert.equal(l.payments.length, 4);
+  assert.ok(l.installments.every(i => i.paid_at === today()));
+});
+
+test('abono remanescente sem recebimento válido não classifica parcela como paga', async () => {
+  let l = await loan({ installment_count: 1, first_due_date: addDays(today(), -4) });
+  l = await receipts(l, [{ amount: 100, fee_only: true }]);
+  l = await waive(l);
+  const waivers = l.fee_waivers;
+  l = await receipts(l, [], [l.payments[0].id]);
+  assert.equal(l.status, 'overdue');
+  assert.equal(l.paid_installments, 0);
+  assert.equal(l.installments[0].status, 'overdue');
+  assert.equal(l.installments[0].late_fee_waived_amount, 400);
+  assert.equal(l.installments[0].late_fee_paid_amount, 0);
+  assert.equal(l.installments[0].late_fee_remaining, 100);
+  assert.deepEqual(l.fee_waivers, waivers);
 });

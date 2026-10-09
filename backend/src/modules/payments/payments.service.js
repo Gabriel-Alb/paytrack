@@ -98,7 +98,7 @@ export async function registerPayment(id, data, actor) {
 
 async function reconcileSelection(loan, installment, selection, actor) {
   if (!selection) {
-    if (installment.status === "paid")
+    if (installment.paid_amount >= installment.amount)
       (await repository.voidInstallmentPayments(installment.id,actor));
     return;
   }
@@ -113,7 +113,7 @@ async function reconcileSelection(loan, installment, selection, actor) {
     );
   const previousDate = (await repository.lastPaymentDate(installment.id));
   if (
-    installment.status !== "paid" &&
+    installment.paid_amount < installment.amount &&
     previousDate &&
     selection.payment_date < previousDate
   ) {
@@ -123,7 +123,7 @@ async function reconcileSelection(loan, installment, selection, actor) {
     );
   }
   const corrected =
-    installment.status === "paid" &&
+    installment.paid_amount >= installment.amount &&
     (installment.paid_at !== selection.payment_date ||
       selection.late_fee_received_amount < installment.late_fee_paid_amount);
   if (corrected) (await repository.voidInstallmentPayments(installment.id,actor));

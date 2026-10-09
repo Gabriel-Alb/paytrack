@@ -89,14 +89,28 @@ test('modal: layout original, parciais, somente multa, quitação Sim/Não/Outro
   await page.screenshot({ path: join(artifacts, 'partial-desktop.png'), animations: 'disabled' });
   let state = await confirm(plain.id);
   assert.equal(state.installments[0].paid_amount, 9000);
-  assert.equal(state.installments[0].status, 'partial');
+  assert.equal(state.installments[0].status, 'paid');
   assert.equal(state.installments[0].paid_at, null);
-  await open(plain.id);
+  await page.goto(url + '/loans');
+  await page.getByText('Empréstimo #' + fee.id, { exact: true }).waitFor();
+  assert.equal(await page.getByText('Empréstimo #' + plain.id, { exact: true }).count(), 0);
+  await page.goto(url + '/loans/paid');
+  await page.getByRole('heading', { name: 'Empréstimos quitados', exact: true }).waitFor();
+  const paidCard = page.getByRole('button', { name: 'Abrir parcelas do empréstimo de Cliente Pagamento', exact: true })
+    .filter({ has: page.getByText('Empréstimo #' + plain.id, { exact: true }) });
+  await paidCard.waitFor();
+  assert.equal(await paidCard.getByText('Quitado', { exact: true }).count(), 1);
+  await page.screenshot({ path: join(artifacts, 'classification-paid.png'), animations: 'disabled' });
+  await paidCard.click();
+  await modal.getByRole('button', { name: 'Registrar pagamento da parcela 1', exact: true }).click();
   await total(/90,00/);
+  assert.equal(state.status, 'paid');
+  assert.equal(await modal.getByText('Parcela parcialmente paga', { exact: true }).count(), 1);
   assert.match(await card('Pago em').innerText(), /Não informado/);
+  await page.screenshot({ path: join(artifacts, 'classified-partial-desktop.png'), animations: 'disabled' });
   await value().fill('10');
   state = await confirm(plain.id);
-  assert.equal(state.installments[0].status, 'partial');
+  assert.equal(state.installments[0].status, 'paid');
   await open(plain.id);
   await total(/100,00/);
   await value().fill('10');
@@ -107,7 +121,7 @@ test('modal: layout original, parciais, somente multa, quitação Sim/Não/Outro
   await modal.getByRole('button', { name: 'Estornar pagamento', exact: true }).last().click();
   state = await confirm(plain.id);
   assert.equal(state.installments[0].paid_amount, 10000);
-  assert.equal(state.installments[0].status, 'partial');
+  assert.equal(state.installments[0].status, 'paid');
 
   await open(fee.id);
   await value().fill('10');
@@ -119,9 +133,10 @@ test('modal: layout original, parciais, somente multa, quitação Sim/Não/Outro
   state = await confirm(fee.id);
   assert.equal(state.installments[0].paid_amount, 0);
   assert.equal(state.installments[0].late_fee_paid_amount, 1000);
-  assert.notEqual(state.installments[0].status, 'paid');
+  assert.equal(state.installments[0].status, 'paid');
   await open(fee.id);
   await total(/10,00/);
+  assert.equal(state.status, 'paid');
   assert.match(await card('Multa acumulada').innerText(), /20,00/);
   assert.equal(await modal.getByText('Multa parcial · Parcela pendente', { exact: true }).count(), 1);
   assert.equal(await modal.getByText('Atrasada', { exact: true }).count(), 0);
@@ -159,7 +174,7 @@ test('modal: layout original, parciais, somente multa, quitação Sim/Não/Outro
   state = await confirm(fee.id);
   assert.equal(state.installments[0].paid_amount, 8000);
   assert.equal(state.installments[0].late_fee_paid_amount, 1000);
-  assert.equal(state.installments[0].status, 'partial');
+  assert.equal(state.installments[0].status, 'paid');
   await open(fee.id);
   await value().fill('30');
   assert.match(await fineQuestion().innerText(), /10,00/);

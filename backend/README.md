@@ -81,7 +81,7 @@ Listas aceitam `page`, `limit` (até 100), `search` e `status`. Clientes e empr�
 - Parcelas são diárias, a partir de `first_due_date`. `installments` aceita todos os valores; `installment_overrides` usa índices iniciados em zero e distribui o restante em centavos. A soma deve coincidir com o total, com todas as parcelas positivas.
 - Pagamentos, ajustes e cancelamento exigem a `revision` recebida na consulta do contrato. Revisão desatualizada retorna `409 STALE_LOAN`.
 - O modal envia a seleção completa de parcelas quitadas. Retirar uma parcela quitada estorna seus recebimentos com `voided_at`; nenhum pagamento é apagado. Parcelas parciais não selecionadas permanecem intactas.
-- A multa diária é independente da parcela e para de crescer na data de quitação da parcela. Contrato só fica quitado quando parcela e multa estiverem liquidadas.
+- A multa diária é independente da parcela e para de crescer na data de quitação da parcela. Qualquer recebimento válido de parcela ou multa classifica a parcela como paga; quando todas estão nessa condição, o contrato fica quitado. Essa classificação não liquida saldos nem altera a data de quitação financeira, os cálculos de multa ou a possibilidade de novos recebimentos.
 - O limiar de pequeno atraso é definido somente por `ATTENTION_DAYS` (padrão: 2). Negativação manual usa `status_override`; os demais status derivam dos contratos.
 - Operações financeiras usam unidade de trabalho assíncrona; falhas desfazem pagamentos, parcelas, multas, status e revisão juntos.
 
