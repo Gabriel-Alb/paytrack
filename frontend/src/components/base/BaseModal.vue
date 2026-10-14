@@ -2,21 +2,24 @@
     <Teleport to="body">
         <Transition name="base-modal">
             <div v-if="modelValue"
-                class="fixed inset-0 z-50 flex items-end justify-center backdrop-blur-[2px] transition-[opacity,background-color] duration-200 sm:items-center sm:p-4"
+                class="fixed inset-0 z-50 flex justify-center backdrop-blur-[2px] transition-[opacity,background-color] duration-200 sm:items-center sm:p-4"
                 :class="{
                     'transition-none': dragging,
+                    'items-center p-4': centered,
+                    'items-end': !centered,
                 }" :style="backdropStyle" @click.self="handleBackdropClick">
-                <section role="dialog" aria-modal="true"
-                    class="base-modal-panel flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[20px] bg-white shadow-[0_-10px_35px_rgba(0,0,0,0.12)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] sm:max-h-[88dvh] sm:rounded-2xl sm:shadow-[0_20px_60px_rgba(0,0,0,0.14)]"
+                <section role="dialog" aria-modal="true" :aria-label="title || undefined"
+                    class="base-modal-panel flex max-h-[92dvh] w-full flex-col overflow-hidden bg-white shadow-[0_-10px_35px_rgba(0,0,0,0.12)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] sm:max-h-[88dvh] sm:rounded-2xl sm:shadow-[0_20px_60px_rgba(0,0,0,0.14)]"
                     :class="[
                         panelClass,
+                        centered ? 'rounded-2xl' : 'rounded-t-[20px]',
                         {
                             'transition-none': dragging,
                             'duration-200 ease-[cubic-bezier(0.4,0,1,1)]':
                                 dismissing,
                         },
                     ]" :style="panelStyle">
-                    <div class="flex h-8 shrink-0 touch-none select-none items-center justify-center sm:hidden" :class="dragging
+                    <div v-if="!centered" class="flex h-8 shrink-0 touch-none select-none items-center justify-center sm:hidden" :class="dragging
                             ? 'cursor-grabbing'
                             : 'cursor-grab'
                         " @pointerdown="
@@ -119,6 +122,11 @@ const props = defineProps({
     showClose: {
         type: Boolean,
         default: true,
+    },
+
+    centered: {
+        type: Boolean,
+        default: false,
     },
 
     closeOnBackdrop: {
