@@ -25,6 +25,7 @@
         />
 
         <AppMobileNavigation />
+        <PaymentNoticeModal />
     </div>
 </template>
 
@@ -36,6 +37,7 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import AppMobileNavigation from '@/components/layout/AppMobileNavigation.vue'
 import AppNotificationsSidebar from '@/components/layout/AppNotificationsSidebar.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
+import PaymentNoticeModal from '@/features/auth/components/PaymentNoticeModal.vue'
 
 const isSidebarOpen = ref(false)
 const route = useRoute()
