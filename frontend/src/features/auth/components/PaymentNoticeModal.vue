@@ -30,11 +30,14 @@ import BaseModal from '@/components/base/BaseModal.vue'
 import { useAuth } from '@/composables/useAuth'
 import { currentDate } from '@/services/paytrack'
 
+const PAYMENT_NOTICE_ENABLED = false
+
 const { user } = useAuth()
 const isOpen = ref(false)
 const sessionKey = 'paytrack:payment-notice:2026-10'
 
 onMounted(() => {
+  if (!PAYMENT_NOTICE_ENABLED) return
   if (user.value?.role !== 'admin') return
 
   const today = currentDate()
