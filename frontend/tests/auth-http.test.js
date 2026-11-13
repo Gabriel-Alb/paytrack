@@ -62,7 +62,7 @@ test('frontend não persiste senha/sessão e não contorna escaping Vue',()=>{
     let source=readFileSync(new URL(name.replaceAll('\\','/'),root),'utf8')
     if (name.replaceAll('\\','/') === 'features/auth/components/PaymentNoticeModal.vue') {
       // Only the non-sensitive display flag is allowed in sessionStorage.
-      assert.match(source, /const sessionKey = 'paytrack:payment-notice:2026-10'/)
+      assert.match(source, /const sessionKey = 'paytrack:payment-notice:2026-11'/)
       source = source.replace("sessionStorage.getItem(sessionKey)", '').replace("sessionStorage.setItem(sessionKey, 'shown')", '')
     }
     assert.ok(!/localStorage|sessionStorage|indexedDB|document\.cookie|v-html/.test(source),name)

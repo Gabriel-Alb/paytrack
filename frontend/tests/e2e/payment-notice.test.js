@@ -10,24 +10,39 @@ import { createServer } from 'vite'
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const url = 'http://127.0.0.1:5188'
-const sessionKey = 'paytrack:payment-notice:2026-10'
-const message = 'Solicitamos a regularização do pagamento conforme combinado, com prazo até 20/10/2026. Após essa data, o sistema poderá ser temporariamente desativado até a regularização do pagamento.'
+const sessionKey = 'paytrack:payment-notice:2026-11'
+const message = 'Solicitamos a regularização do pagamento conforme combinado, com prazo até 12/11/2026. Após essa data, o sistema poderá ser temporariamente desativado até a regularização do pagamento.'
 
-test('aviso temporário: administrador global, período, sessão e fechamento exclusivo pelo X', { timeout: 120000 }, async t => {
+test('aviso de cobrança: administrador global, início sem expiração, sessão, fechamento pelo X e controle manual', { timeout: 120000 }, async t => {
   let vite, browser
   t.after(async () => {
     await browser?.close()
     await vite?.close()
   })
-  vite = await createServer({ mode: 'test', root: fileURLToPath(new URL('../..', import.meta.url)),
-    server: { host: '127.0.0.1', port: 5188, strictPort: true } })
-  await vite.listen()
+  async function startVite({ disabled = false } = {}) {
+    vite = await createServer({ mode: 'test', root: fileURLToPath(new URL('../..', import.meta.url)),
+      server: { host: '127.0.0.1', port: 5188, strictPort: true },
+      // Exercise the existing manual switch without changing the source file on disk.
+      plugins: disabled ? [{
+        name: 'disable-payment-notice-for-test',
+        enforce: 'pre',
+        transform(source, id) {
+          if (id.replaceAll('\\', '/').endsWith('/PaymentNoticeModal.vue')) {
+            assert.match(source, /const PAYMENT_NOTICE_ENABLED = true/)
+            return source.replace('const PAYMENT_NOTICE_ENABLED = true', 'const PAYMENT_NOTICE_ENABLED = false')
+          }
+        },
+      }] : [],
+    })
+    await vite.listen()
+  }
+  await startVite()
   browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
     ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) })
   const artifacts = process.env.E2E_ARTIFACT_DIR || mkdtempSync(join(tmpdir(), 'paytrack-payment-notice-'))
   t.diagnostic('Capturas: ' + artifacts)
   const errors = []
-  async function open({ role = 'admin', managedCompanyIds = [], date = '2026-10-20T12:00:00-03:00', width = 1440, blockedStorage = false } = {}) {
+  async function open({ role = 'admin', managedCompanyIds = [], date = '2026-11-12T12:00:00-03:00', width = 1440, blockedStorage = false, previousNoticeShown = false } = {}) {
     // Use a different browser timezone to verify the application's São Paulo dates.
     const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: 'Asia/Tokyo' })
     const page = await context.newPage()
@@ -36,6 +51,9 @@ test('aviso temporário: administrador global, período, sessão e fechamento ex
       if (['error', 'warning'].includes(entry.type()) && !/status of 401/.test(entry.text())) errors.push(entry.text())
     })
     await page.clock.setFixedTime(new Date(date))
+    if (previousNoticeShown) await page.addInitScript(() => {
+      sessionStorage.setItem('paytrack:payment-notice:2026-10', 'shown')
+    })
     if (blockedStorage) await page.addInitScript(() => {
       Object.defineProperty(window, 'sessionStorage', { get() { throw new DOMException('Blocked', 'SecurityError') } })
     })
@@ -55,10 +73,12 @@ test('aviso temporário: administrador global, período, sessão e fechamento ex
   }
 
   for (const [date, visible] of [
-    ['2026-10-12T23:59:59-03:00', false],
-    ['2026-10-13T00:00:00-03:00', true],
-    ['2026-10-30T23:59:59-03:00', true],
-    ['2026-10-31T00:00:00-03:00', false],
+    ['2026-11-11T23:59:59-03:00', false],
+    ['2026-11-12T00:00:00-03:00', true],
+    ['2026-11-13T00:00:00-03:00', true],
+    ['2026-12-01T00:00:00-03:00', true],
+    ['2027-11-12T00:00:00-03:00', true],
+    ['2036-11-12T00:00:00-03:00', true],
   ]) {
     const { page, context, dialog } = await open({ date })
     assert.equal(await dialog.count(), Number(visible), date)
@@ -77,13 +97,14 @@ test('aviso temporário: administrador global, período, sessão e fechamento ex
     { role: null },
     { blockedStorage: true },
   ]) {
-    const { context, dialog } = await open(options)
+    const { page, context, dialog } = await open(options)
     assert.equal(await dialog.count(), 0)
+    if (!options.blockedStorage) assert.equal(await page.evaluate(key => sessionStorage.getItem(key), sessionKey), null)
     await context.close()
   }
 
   for (const width of [1440, 390]) {
-    const { page, context, dialog } = await open({ width })
+    const { page, context, dialog } = await open({ width, previousNoticeShown: true })
     await dialog.waitFor()
     assert.equal(page.url(), url + '/account')
     assert.match(await page.title(), /PayTrack/i)
@@ -111,6 +132,26 @@ test('aviso temporário: administrador global, período, sessão e fechamento ex
     assert.equal(await dialog.count(), 0)
     assert.equal(await page.locator('vite-error-overlay').count(), 0)
     await context.close()
+    const nextSession = await open({ width })
+    await nextSession.dialog.waitFor()
+    assert.equal(await nextSession.dialog.isVisible(), true, 'Uma nova sessão reapresenta o aviso')
+    await nextSession.context.close()
   }
+  await vite.close()
+  await startVite({ disabled: true })
+  for (const role of ['admin', 'user', 'manager', null]) {
+    const { page, context, dialog } = await open({ role })
+    assert.equal(await dialog.count(), 0, 'Desativado: nenhum usuário recebe o aviso')
+    assert.equal(await page.evaluate(key => sessionStorage.getItem(key), sessionKey), null)
+    await context.close()
+  }
+  const reactivated = await open()
+  await reactivated.page.goto('about:blank')
+  await vite.close()
+  await startVite()
+  await reactivated.page.goto(url + '/account')
+  await reactivated.dialog.waitFor()
+  assert.equal(await reactivated.dialog.isVisible(), true, 'Reativar permite exibir o aviso na sessão não marcada')
+  await reactivated.context.close()
   assert.deepEqual(errors, [])
 })
