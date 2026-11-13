@@ -59,12 +59,7 @@ test('401 de sessão expirada é centralizado; erro de credenciais não simula l
 test('frontend não persiste senha/sessão e não contorna escaping Vue',()=>{
   const root=new URL('../src/',import.meta.url)
   for(const name of readdirSync(root,{recursive:true}).filter((name)=>/\.(vue|js)$/.test(name))) {
-    let source=readFileSync(new URL(name.replaceAll('\\','/'),root),'utf8')
-    if (name.replaceAll('\\','/') === 'features/auth/components/PaymentNoticeModal.vue') {
-      // Only the non-sensitive display flag is allowed in sessionStorage.
-      assert.match(source, /const sessionKey = 'paytrack:payment-notice:2026-11'/)
-      source = source.replace("sessionStorage.getItem(sessionKey)", '').replace("sessionStorage.setItem(sessionKey, 'shown')", '')
-    }
+    const source=readFileSync(new URL(name.replaceAll('\\','/'),root),'utf8')
     assert.ok(!/localStorage|sessionStorage|indexedDB|document\.cookie|v-html/.test(source),name)
   }
 })
