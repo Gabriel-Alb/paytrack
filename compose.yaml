@@ -20,6 +20,7 @@ x-api: &api
   logging: *logging
   environment: &api-env
     NODE_ENV: production
+    SERVICE_LOCK_ENABLED: ${SERVICE_LOCK_ENABLED:-true}
     HOST: 0.0.0.0
     PORT: "3000"
     DATABASE_CLIENT: postgres

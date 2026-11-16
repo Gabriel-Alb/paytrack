@@ -3,6 +3,7 @@ import { authConfig } from '../../config/auth.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import * as service from './auth.service.js';
 import { touch } from './auth.repository.js';
+import { lockedSessionUser } from './service-lock.js';
 
 export async function loadSession(req,_res,next) {
   const cookie = req.headers.cookie?.split(';').map((part)=>part.trim()).find((part)=>part.startsWith(`${authConfig.cookieName}=`));
@@ -11,9 +12,17 @@ export async function loadSession(req,_res,next) {
   req.user = resolved?.user;
   next();
 }
+export function assertAuthenticated(user) {
+  if (!user) throw new AppError(401,'UNAUTHENTICATED','Entre para continuar.');
+}
 export async function requireSession(req,_res,next) {
-  if (!req.user) return next(new AppError(401,'UNAUTHENTICATED','Entre para continuar.'));
+  assertAuthenticated(req.user);
   if (Date.now()-req.authSession.last_seen_at>60000) (await touch(req.authSession.id,Date.now()));
+  next();
+}
+export function requireServiceAvailable(req,_res,next) {
+  if (lockedSessionUser(req.user))
+    return next(new AppError(423,'SERVICE_LOCKED','O acesso ao PayTrack está temporariamente bloqueado.'));
   next();
 }
 export function requireFullAccess(req,_res,next) {

@@ -10,10 +10,11 @@ import { lateFeesRoutes } from "./modules/late-fees/late-fees.routes.js";
 import { overviewRoutes } from "./modules/overview/overview.routes.js";
 import { errorHandler } from "./shared/middleware/errors.js";
 import { AppError } from "./shared/errors/AppError.js";
-import { authRoutes, usersRoutes } from "./modules/auth/auth.routes.js";
+import { sessionRoutes, authRoutes, usersRoutes } from "./modules/auth/auth.routes.js";
 import {
   loadSession,
   requireAuth,
+  requireServiceAvailable,
   requireCsrf,
   trustedOrigin,
 } from "./modules/auth/auth.middleware.js";
@@ -73,7 +74,9 @@ app.use(
 );
 app.use(express.json({ limit: "128kb" }));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
-app.use("/api", loadSession, companyAccess);
+app.use("/api", loadSession);
+app.use("/api/auth", sessionRoutes);
+app.use("/api", requireServiceAvailable, companyAccess);
 app.use("/api/auth", authRoutes);
 app.use("/api", requireAuth, trustedOrigin, requireCsrf);
 app.use("/api/users", usersRoutes);

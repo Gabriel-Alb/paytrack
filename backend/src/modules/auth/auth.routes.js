@@ -5,15 +5,19 @@ import { csrfLimit,loginLimits,requestLimits,passwordLimits,recoveryLimits } fro
 import * as recovery from './password-recovery.controller.js';
 import { publicCompanies } from '../companies/companies.repository.js';
 
+// Only session inspection, CSRF renewal and logout precede the global service lock.
+export const sessionRoutes=Router();
+sessionRoutes.get('/csrf',csrfLimit,trustedOrigin,controller.csrf);
+sessionRoutes.get('/status',trustedOrigin,controller.sessionStatus);
+sessionRoutes.get('/me',requireSession,trustedOrigin,controller.me);
+sessionRoutes.post('/logout',requireSession,trustedOrigin,requireCsrf,controller.logout);
+
 export const authRoutes=Router();
-authRoutes.get('/csrf',csrfLimit,trustedOrigin,controller.csrf);
 authRoutes.get('/companies',csrfLimit,trustedOrigin,async (_req,res) => res.json(await publicCompanies()));
 authRoutes.post('/login',...loginLimits,trustedOrigin,requireCsrf,controller.login);
 authRoutes.post('/request-access',...requestLimits,trustedOrigin,requireCsrf,controller.requestAccess);
 authRoutes.post('/forgot-password',...recoveryLimits,trustedOrigin,requireCsrf,recovery.requestRecovery);
 authRoutes.use(requireSession,trustedOrigin,requireCsrf);
-authRoutes.get('/me',controller.me);
-authRoutes.post('/logout',controller.logout);
 authRoutes.post('/logout-all',controller.logout);
 authRoutes.post('/change-required-password',...passwordLimits,recovery.changeRequiredPassword);
 authRoutes.use(requireFullAccess);

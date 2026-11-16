@@ -3,7 +3,8 @@ import * as validator from './auth.validator.js';
 import { idSchema } from '../../shared/utils/validation.js';
 import { authConfig, cookieOptions } from '../../config/auth.js';
 import { accessEvents } from './auth.events.js';
-import { loadSession } from './auth.middleware.js';
+import { assertAuthenticated, loadSession } from './auth.middleware.js';
+import { lockedSessionUser } from './service-lock.js';
 import { administrationScope, decideAccess } from '../companies/companies.service.js';
 import { accessRevision } from './auth.repository.js';
 
@@ -27,7 +28,12 @@ export async function login(req,res) {
   setCookie(res,result.token,true);
   res.json({user:result.user,csrfToken:result.csrfToken});
 }
-export const me = async (req,res) => res.json({user:(await service.profileUser(req.user))});
+export const me = async (req,res) => res.json({user:lockedSessionUser(req.user) ?? await service.profileUser(req.user)});
+export function sessionStatus(req,res) {
+  // A passive tab must not extend the session's inactivity deadline.
+  assertAuthenticated(req.user);
+  res.json({id:req.user.id, serviceLock:lockedSessionUser(req.user)?.serviceLock ?? null});
+}
 export const updateProfile = async (req,res) => res.json({user:(await service.updateProfile(req.user,req.body))});
 export async function logout(req,res) {
   (await service.logout(req.authSession,req.user,req.path==='/logout-all'));
@@ -54,6 +60,7 @@ export async function watchUsers(req,res) {
     checking = checking.then(async () => {
       if (res.destroyed || res.writableEnded) return;
       await loadSession(req,res,() => {});
+      if (lockedSessionUser(req.user)) return res.end();
       const current = await state();
       if (res.destroyed || res.writableEnded) return;
       // Keep the connection alive without asking the browser to reload unchanged lists.
