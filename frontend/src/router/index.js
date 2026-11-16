@@ -1,12 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { canAdminister } from '@/features/auth/companyAccess.js'
 import { restoreAuth,onSessionExpired } from '@/composables/useAuth'
+import { setServiceLockedHandler } from '@/services/api'
+import ServiceLockView from '@/features/auth/views/ServiceLockView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 
   routes: [
     { path:'/login',name:'login',meta:{public:true},component:()=>import('@/features/auth/views/LoginView.vue') },
+    { path:'/bloqueio',name:'service-lock',component:ServiceLockView },
     { path:'/forgot-password',name:'forgot-password',meta:{public:true},component:()=>import('@/features/auth/views/ForgotPasswordView.vue') },
     { path:'/change-required-password',name:'required-password',component:()=>import('@/features/auth/views/RequiredPasswordView.vue') },
     { path:'/request-access',name:'request-access',meta:{public:true},component:()=>import('@/features/auth/views/RequestAccessView.vue') },
@@ -68,10 +71,18 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const user = await restoreAuth()
   if (!user && !to.meta.public) return {name:'login'}
+  if (user?.serviceLock) {
+    if (to.name !== 'service-lock') return {name:'service-lock', replace:true}
+    return true
+  }
+  if (to.name === 'service-lock') return {name:'dashboard', replace:true}
   if (user?.mustChangePassword && to.name!=='required-password') return {name:'required-password'}
   if (user && !user.mustChangePassword && to.name==='required-password') return {name:'dashboard'}
   if (user && to.meta.public) return {name:'dashboard'}
   if (to.meta.admin && !canAdminister(user)) return {name:'dashboard'}
+})
+setServiceLockedHandler(() => {
+  if (router.currentRoute.value.name !== 'service-lock') router.replace({name:'service-lock'})
 })
 onSessionExpired(() => {
   if (router.currentRoute.value.matched.length && !router.currentRoute.value.meta.public)

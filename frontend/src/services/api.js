@@ -23,8 +23,10 @@ export const watchAccessChanges = (refresh, recheck = refresh) => {
 let csrfToken = ''
 let csrfPromise
 let onUnauthorized = () => {}
+let onServiceLocked = () => {}
 export const setCsrfToken = (value) => { csrfToken = value || '' }
 export const setUnauthorizedHandler = (handler) => { onUnauthorized = handler }
+export const setServiceLockedHandler = (handler) => { onServiceLocked = handler }
 async function getCsrf() {
   if (csrfToken) return csrfToken
   if (!csrfPromise) csrfPromise = request('/auth/csrf').then((result) => {
@@ -54,6 +56,7 @@ export async function request(path,{ method='GET',body,signal }={}, retry=true) 
     throw new Error('O servidor retornou uma resposta inesperada. Tente novamente.')
   }
   if (!response.ok) {
+    if (response.status === 423 && result?.error?.code === 'SERVICE_LOCKED') onServiceLocked()
     if (result?.error?.code === 'CSRF_INVALID' && retry) {
       setCsrfToken('')
       return request(path,{method,body,signal},false)

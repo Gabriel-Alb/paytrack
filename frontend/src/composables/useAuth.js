@@ -26,6 +26,14 @@ export async function restoreAuth() {
 export function useAuth() {
   return {
     user: readonly(user),
+    async checkServiceStatus() {
+      const previous = user.value
+      if (!previous) return
+      const status = await request('/auth/status')
+      if (previous !== user.value) return
+      if (status.serviceLock) user.value = status
+      return status
+    },
     async updateProfile(body) {
       const result = await request('/auth/me',{method:'PATCH',body})
       user.value = result.user

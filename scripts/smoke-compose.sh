@@ -13,6 +13,7 @@ export IMAGE_TAG=smoke BACKEND_IMAGE=paytrack-backend FRONTEND_IMAGE=paytrack-fr
 export SMOKE_PASSWORD="$(openssl rand -hex 10)"
 export SMOKE_URL="$FRONTEND_ORIGIN" SMOKE_CA="$scratch/root.crt"
 export DATABASE_SSL=disable COOKIE_SAME_SITE=strict VITE_API_URL=/api
+export SERVICE_LOCK_ENABLED=false
 if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
   echo "::add-mask::$POSTGRES_PASSWORD"
   echo "::add-mask::$SMOKE_PASSWORD"
