@@ -31,8 +31,8 @@ import BaseModal from '@/components/base/BaseModal.vue'
 import { useAuth } from '@/composables/useAuth'
 import { currentDate } from '@/services/paytrack'
 
-// Controle manual: permanece ativo, sem data de encerramento, até ser definido como false.
-const PAYMENT_NOTICE_ENABLED = true
+// Controle manual do lembrete de cobrança para administradores.
+const PAYMENT_NOTICE_ENABLED = false
 const PAYMENT_NOTICE_START_DATE = '2026-11-12'
 // Início da repetição no horário de São Paulo, mesmo com a página já aberta.
 const PAYMENT_NOTICE_REPEAT_START = new Date('2026-11-14T00:00:00-03:00').getTime()

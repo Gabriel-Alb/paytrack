@@ -19,24 +19,24 @@ test('aviso de cobrança: navegação, autenticação, repetição e controle ma
     await browser?.close()
     await vite?.close()
   })
-  async function startVite({ disabled = false } = {}) {
+  async function startVite({ enableNotice = false } = {}) {
     vite = await createServer({ mode: 'test', root: fileURLToPath(new URL('../..', import.meta.url)),
       server: { host: '127.0.0.1', port: 5188, strictPort: true },
       // Exercise the existing manual switch without changing the source file on disk.
-      plugins: disabled ? [{
-        name: 'disable-payment-notice-for-test',
+      plugins: enableNotice ? [{
+        name: 'enable-payment-notice-for-test',
         enforce: 'pre',
         transform(source, id) {
           if (id.replaceAll('\\', '/').endsWith('/PaymentNoticeModal.vue')) {
-            assert.match(source, /const PAYMENT_NOTICE_ENABLED = true/)
-            return source.replace('const PAYMENT_NOTICE_ENABLED = true', 'const PAYMENT_NOTICE_ENABLED = false')
+            assert.match(source, /const PAYMENT_NOTICE_ENABLED = false/)
+            return source.replace('const PAYMENT_NOTICE_ENABLED = false', 'const PAYMENT_NOTICE_ENABLED = true')
           }
         },
       }] : [],
     })
     await vite.listen()
   }
-  await startVite()
+  await startVite({ enableNotice: true })
   browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
     ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) })
   const artifacts = process.env.E2E_ARTIFACT_DIR || mkdtempSync(join(tmpdir(), 'paytrack-payment-notice-'))
@@ -285,7 +285,7 @@ test('aviso de cobrança: navegação, autenticação, repetição e controle ma
   })
 
   await vite.close()
-  await startVite({ disabled: true })
+  await startVite()
   await t.test('desativado: nenhum aviso no acesso, navegação, reload, login ou após dois minutos', async () => {
     for (const role of ['admin', 'user', 'manager', null]) {
       const fixture = await open({ role, date: '2026-11-14T12:00:00-03:00', controlledClock: true })
@@ -308,7 +308,7 @@ test('aviso de cobrança: navegação, autenticação, repetição e controle ma
     }
   })
   await vite.close()
-  await startVite()
+  await startVite({ enableNotice: true })
   await t.test('reativar restaura o aviso e a repetição', async () => {
     const fixture = await open({ date: '2026-11-14T12:00:00-03:00', controlledClock: true })
     await fixture.dialog.waitFor()

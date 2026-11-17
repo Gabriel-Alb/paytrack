@@ -13,11 +13,17 @@ const password = 'TestePayTrack123'
 const generalTitle = 'Sistema temporariamente indisponível'
 const adminTitle = 'Pagamento não efetuado'
 
+async function login(page, name) {
+  await page.getByLabel('E-mail', { exact:true }).fill(name + '@qa.test')
+  await page.locator('#password').fill(password)
+  await page.getByRole('button', { name:'Entrar', exact:true }).click()
+}
+
 test('bloqueio após autenticação, sessão aberta, URLs e retorno ao serviço', { timeout: 120000 }, async t => {
   process.env.FRONTEND_ORIGIN = url
-  process.env.SERVICE_LOCK_ENABLED = 'true'
   process.env.VITE_API_URL = '/api'
   const { env } = await import('../../../backend/src/config/env.js')
+  assert.equal(env.SERVICE_LOCK_ENABLED, false)
   const { app } = await import('../../../backend/src/app.js')
   const { openDatabase, closeDatabase } = await import('../../../backend/src/config/database.js')
   const { insertUser } = await import('../../../backend/src/modules/auth/auth.repository.js')
@@ -49,6 +55,7 @@ test('bloqueio após autenticação, sessão aberta, URLs e retorno ao serviço'
   browser = await chromium.launch({ headless:true, executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE })
   const errors = []
   for (const [name, width, height] of [['admin', 1440, 900], ['gerente', 768, 1024], ['usuario', 390, 844]]) {
+    env.SERVICE_LOCK_ENABLED = true
     const title = name === 'admin' ? adminTitle : generalTitle
     const context = await browser.newContext({ viewport:{ width, height }, reducedMotion:'reduce' })
     const page = await context.newPage()
@@ -66,9 +73,7 @@ test('bloqueio após autenticação, sessão aberta, URLs e retorno ao serviço'
       const path = new URL(req.url()).pathname
       if (path.startsWith('/api/') && !path.startsWith('/api/auth/')) businessRequests.push(path)
     })
-    await page.getByLabel('E-mail', { exact:true }).fill(name + '@qa.test')
-    await page.locator('#password').fill(password)
-    await page.getByRole('button', { name:'Entrar', exact:true }).click()
+    await login(page, name)
     const heading = page.getByRole('heading', { name:title, exact:true })
     await heading.waitFor()
     await page.waitForURL(url + '/bloqueio')
@@ -90,12 +95,14 @@ test('bloqueio após autenticação, sessão aberta, URLs e retorno ao serviço'
       await page.waitForURL(url + '/bloqueio')
     }
     assert.deepEqual(businessRequests, [])
+    const dashboard = page.getByRole('heading', { name:'Recebimentos', exact:true })
+    const notice = page.getByRole('dialog', { name:'Atenção', exact:true })
     if (name === 'admin') {
-      // Same cookie throughout, including a lock activated while the notice is already open.
+      // An already open session follows both changes through the status poll.
       env.SERVICE_LOCK_ENABLED = false
       await page.clock.fastForward(31000)
-      const notice = page.getByRole('dialog', { name:'Atenção', exact:true })
-      await notice.waitFor()
+      await dashboard.waitFor()
+      assert.equal(await notice.count(), 0)
       assert.equal(page.url(), url + '/')
       env.SERVICE_LOCK_ENABLED = true
       await page.clock.fastForward(31000)
@@ -117,6 +124,37 @@ test('bloqueio após autenticação, sessão aberta, URLs e retorno ao serviço'
     await page.getByRole('heading', { name:'Entrar', exact:true }).waitFor()
     await page.goto(url + '/account')
     await page.getByRole('heading', { name:'Entrar', exact:true }).waitFor()
+
+    env.SERVICE_LOCK_ENABLED = false
+    await login(page, name)
+    await dashboard.waitFor()
+    assert.equal(page.url(), url + '/')
+    assert.equal(await notice.count(), 0)
+    const navigation = width < 1024
+      ? page.getByRole('navigation', { name:'Navegação principal', exact:true })
+      : page.locator('aside')
+    await navigation.locator('a[href="/clients"]').click()
+    const clients = page.getByRole('heading', { name:'Gestão de clientes', exact:true })
+    await clients.waitFor()
+    await page.reload()
+    await clients.waitFor()
+    assert.equal(page.url(), url + '/clients')
+    assert.equal(await notice.count(), 0)
+    assert.equal(await page.locator('vite-error-overlay').count(), 0)
+    if (process.env.E2E_ARTIFACT_DIR)
+      await page.screenshot({ path:join(process.env.E2E_ARTIFACT_DIR, 'acesso-' + name + '.png') })
+
+    await page.goto(url + '/bloqueio')
+    await dashboard.waitFor()
+    assert.equal(page.url(), url + '/')
+    await page.goto(url + '/users')
+    if (name === 'usuario') {
+      await dashboard.waitFor()
+      assert.equal(page.url(), url + '/')
+    } else {
+      await page.getByRole('heading', { name:'Usuários e solicitações', exact:true }).waitFor()
+      assert.equal(page.url(), url + '/users')
+    }
     await context.close()
   }
   assert.deepEqual(errors, [])

@@ -30,7 +30,7 @@ Produção: copie `.env.example` da raiz, configure as credenciais, domínio e T
 
 ## Bloqueio temporário de acesso
 
-O bloqueio vem ativo por padrão. O operador controla a suspensão pela variável
+O bloqueio vem desativado por padrão. O operador controla a suspensão pela variável
 `SERVICE_LOCK_ENABLED` do backend. Use `true` para suspender o acesso ou
 `false` para restabelecê-lo. A configuração persiste até a próxima alteração manual.
 
@@ -39,3 +39,7 @@ Em desenvolvimento, edite `backend/.env` e reinicie a API. No Compose, edite o
 o serviço com a nova configuração. Em outras hospedagens, atualize a variável
 de ambiente e reaplique a configuração em todas as instâncias da API.
 Sessões ainda válidas retomam o acesso com suas permissões habituais.
+
+O lembrete de cobrança para administradores também está desativado. Para voltar
+a exibi-lo antes de uma suspensão, altere `PAYMENT_NOTICE_ENABLED` em
+`frontend/src/features/auth/components/PaymentNoticeModal.vue` e publique o frontend.
